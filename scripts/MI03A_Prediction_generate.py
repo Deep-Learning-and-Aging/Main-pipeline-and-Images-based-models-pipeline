@@ -26,7 +26,7 @@ if len(sys.argv) != 9:
     sys.argv.append('PhysicalActivity_90001_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
     sys.argv.append('Age') #target
-    sys.argv.append('VGG19') #architecture
+    sys.argv.append('Xception') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
     sys.argv.append('0.0') #weight decay

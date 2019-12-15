@@ -21,9 +21,9 @@ display_full_metrics = False
 if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
+    sys.argv.append('Sex') #target
     sys.argv.append('PhysicalActivity_90001_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
-    sys.argv.append('Sex') #target
     sys.argv.append('NASNetMobile') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
@@ -32,7 +32,13 @@ if len(sys.argv) != 10:
     sys.argv.append('1') #outer_fold
 
 #read parameters from command
-image_type, organ, field_id, view, transformation, target, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
+target, image_type, organ, field_id, view, transformation, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
+
+print(sys.argv)
+print(target)
+print(image_type)
+print(organ)
+print(field_id)
 
 #set other parameters accordingly
 functions_version = 'Keras' #use 'Keras' for functions during training, and 'sklearn' for functions during testing

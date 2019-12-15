@@ -1,7 +1,7 @@
 #!/bin/bash
 targets=( "Age" )
 image_fields=( "PhysicalActivity_90001" "Liver_20204" "Heart_20208" )
-image_fields=( "Heart_20208" )
+image_fields=( "PhysicalActivity_90001" )
 memory=8G
 n_cpu_cores=1
 time=60

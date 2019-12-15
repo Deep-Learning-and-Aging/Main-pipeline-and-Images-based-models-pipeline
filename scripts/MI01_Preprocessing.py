@@ -13,12 +13,12 @@ from MI_helpers import *
 if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
-    sys.argv.append('Heart_20208') #image_field, e.g 'PhysicalActivity_90001'
     sys.argv.append('Age') #target
+    sys.argv.append('Heart_20208') #image_field, e.g 'PhysicalActivity_90001'
 
 #read parameters from command
-image_field = sys.argv[1]
-target = sys.argv[2]
+target = sys.argv[1]
+image_field = sys.argv[2]
 organ, field_id = image_field.split('_')
 
 #configure cpus

@@ -120,7 +120,7 @@ else:
 
 #preprocessing
 n_CV_outer_folds = 10
-outer_folds = [str(x) for x in list(range(1,n_CV_outer_folds+1))]
+outer_folds = [str(x) for x in list(range(n_CV_outer_folds))]
 
 #compiler
 n_epochs_max = 1000
@@ -141,17 +141,16 @@ gc.enable()
 ### HELPER FUNCTIONS
 
 def read_parameters_from_command(args):
-    print(len(args))
     parameters={}
-    parameters['image_type'] = args[1]
-    parameters['transformation'] = args[2]
-    parameters['target'] = args[3]
+    parameters['target'] = args[1]
+    parameters['image_type'] = args[2]
+    parameters['transformation'] = args[3]
     parameters['architecture'] = args[4]
     parameters['optimizer'] = args[5]
     parameters['learning_rate'] = args[6]
     parameters['weight_decay'] = args[7]
     parameters['dropout_rate'] = args[8]
-    if len(args) > 9:
+    if len(args) < 10:
         parameters['outer_fold'] = args[9]
     else:
         parameters['outer_fold'] = None
@@ -160,7 +159,7 @@ def read_parameters_from_command(args):
     for parameter_name in ['learning_rate', 'weight_decay', 'dropout_rate']:
         if(parameters[parameter_name] != '*'):
             parameters[parameter_name] = float(parameters[parameter_name])
-    return parameters['image_type'], parameters['organ'], parameters['field_id'], parameters['view'], parameters['transformation'], parameters['target'], parameters['architecture'], parameters['optimizer'], parameters['learning_rate'], parameters['weight_decay'], parameters['dropout_rate'], parameters['outer_fold']
+    return parameters['target'], parameters['image_type'], parameters['organ'], parameters['field_id'], parameters['view'], parameters['transformation'], parameters['architecture'], parameters['optimizer'], parameters['learning_rate'], parameters['weight_decay'], parameters['dropout_rate'], parameters['outer_fold']
 
 def configure_gpus():
    print('tensorflow version : ', tf.__version__)
@@ -201,6 +200,7 @@ def generate_data_features(image_field, organ, target, dir_images, image_quality
         # load the selected features
         if organ in ["PhysicalActivity"]: #different set of eids
             print("TODO")
+            sys.exit()
         else:
             data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0', image_quality_id])
         data_features.columns = ['eid', 'Sex', 'Age', 'Data_quality']
