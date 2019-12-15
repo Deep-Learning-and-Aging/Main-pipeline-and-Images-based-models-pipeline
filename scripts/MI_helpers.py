@@ -150,7 +150,7 @@ def read_parameters_from_command(args):
     parameters['learning_rate'] = args[6]
     parameters['weight_decay'] = args[7]
     parameters['dropout_rate'] = args[8]
-    if len(args) < 10:
+    if len(args) > 9:
         parameters['outer_fold'] = args[9]
     else:
         parameters['outer_fold'] = None
@@ -288,8 +288,7 @@ def generate_generators(DATA_FEATURES, target, dir_images, image_size, batch_siz
             shuffle = False
         
         #define batch size for testing: data is split between a part that fits in batches, and leftovers
-        if mode == 'model_testing':
-            batch_size_fold = min(batch_size, len(DATA_FEATURES[fold].index))
+        batch_size_fold = batch_size if mode == 'model_testing' else min(batch_size, len(DATA_FEATURES[fold].index))
         
         # define data generator
         generator_fold = datagen.flow_from_dataframe(

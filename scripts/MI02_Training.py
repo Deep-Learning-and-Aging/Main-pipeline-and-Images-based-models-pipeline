@@ -34,12 +34,6 @@ if len(sys.argv) != 10:
 #read parameters from command
 target, image_type, organ, field_id, view, transformation, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
 
-print(sys.argv)
-print(target)
-print(image_type)
-print(organ)
-print(field_id)
-
 #set other parameters accordingly
 functions_version = 'Keras' #use 'Keras' for functions during training, and 'sklearn' for functions during testing
 version = target + '_' + image_type + '_' + transformation + '_' + architecture + '_' + optimizer + '_' + str(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate) + '_' + str(outer_fold)
