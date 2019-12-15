@@ -19,6 +19,7 @@ memory=8G
 n_cpu_cores=1
 n_gpus=1
 time=700
+time=100
 for target in "${targets[@]}"; do
 	for image_type in "${image_types[@]}"; do
 		for preprocessing in "${preprocessings[@]}"; do
