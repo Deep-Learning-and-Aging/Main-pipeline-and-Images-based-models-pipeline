@@ -14,7 +14,7 @@ if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age') #target
-    sys.argv.append('Heart_20208') #image_field, e.g 'PhysicalActivity_90001'
+    sys.argv.append('PhysicalActivity_90001') #image_field, e.g 'PhysicalActivity_90001'
 
 #read parameters from command
 target = sys.argv[1]

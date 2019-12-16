@@ -23,7 +23,7 @@ save_predictions = True
 if len(sys.argv) != 9:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
-    sys.argv.append('Age') #target
+    sys.argv.append('Sex') #target
     sys.argv.append('PhysicalActivity_90001_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
     sys.argv.append('Xception') #architecture
@@ -98,7 +98,10 @@ for outer_fold in outer_folds[2:5]:
     for fold in folds:
         pred_batch = model.predict_generator(GENERATORS_BATCH[fold], steps=STEP_SIZES_BATCH[fold], verbose=1).squeeze()
         pred_leftovers = model.predict_generator(GENERATORS_LEFTOVERS[fold], steps=STEP_SIZES_LEFTOVERS[fold], verbose=1).squeeze()
-        DATA_FEATURES[fold]['Pred_' + version] = np.concatenate((pred_batch,  pred_leftovers))*std_train + mean_train
+        pred_full = np.concatenate((pred_batch,  pred_leftovers))
+        if target in targets_regression:
+            pred_full = pred_full*std_train + mean_train
+        DATA_FEATURES[fold]['Pred_' + version] = pred_full
         if fold in PREDICTIONS.keys():
             PREDICTIONS[fold] = pd.concat([PREDICTIONS[fold], DATA_FEATURES[fold]])
         else:

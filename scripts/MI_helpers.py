@@ -74,6 +74,8 @@ images_sizes = ['224', '299', '331']
 targets_regression = ['Age']
 targets_binary = ['Sex']
 image_quality_ids = {'Liver':'22414-2.0', 'Heart':None, 'PhysicalActivity':None}
+id_sets = ['A', 'B']
+dict_organ_to_idset={'PhysicalActivity':'A', 'Liver':'B', 'Heart':'B'}
 
 #define dictionary of batch sizes to fit as many samples as the model's architecture allows
 dict_batch_sizes = dict.fromkeys(['NASNetMobile'], 128)
