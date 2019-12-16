@@ -288,7 +288,7 @@ def generate_generators(DATA_FEATURES, target, dir_images, image_size, batch_siz
             shuffle = False
         
         #define batch size for testing: data is split between a part that fits in batches, and leftovers
-        batch_size_fold = batch_size if mode == 'model_testing' else min(batch_size, len(DATA_FEATURES[fold].index))
+        batch_size_fold = min(batch_size, len(DATA_FEATURES[fold].index)) if mode == 'model_testing' else batch_size
         
         # define data generator
         generator_fold = datagen.flow_from_dataframe(

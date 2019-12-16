@@ -23,9 +23,9 @@ save_predictions = True
 if len(sys.argv) != 9:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
+    sys.argv.append('Age') #target
     sys.argv.append('PhysicalActivity_90001_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
-    sys.argv.append('Age') #target
     sys.argv.append('Xception') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
@@ -33,7 +33,7 @@ if len(sys.argv) != 9:
     sys.argv.append('0.0') #dropout
 
 #read parameters from command
-image_type, organ, field_id, view, preprocessing, target, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
+target, image_type, organ, field_id, view, preprocessing, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
 
 #set other parameters accordingly
 version = target + '_' + image_type + '_' + preprocessing + '_' + architecture + '_' + optimizer + '_' + str(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate)
@@ -57,14 +57,18 @@ configure_gpus()
 x, base_model_input = generate_base_model(architecture=architecture, weight_decay=0, dropout_rate=0, keras_weights=None)
 model = complete_architecture(x=x, input_shape=base_model_input, activation=dict_activations[prediction_type], weight_decay=weight_decay, dropout_rate=dropout_rate)
 
-print('Starting models\' evaluation for version ' + version + '...')
+print('Starting model evaluation for version ' + version + '...')
 
 # Define Predictions dataframe dictionary
 PREDICTIONS={}
-for outer_fold in outer_folds[0:8]:
-    print('Outer_fold = ' + outer_fold)
+for outer_fold in outer_folds[2:5]:
+    print('outer_fold = ' + outer_fold)
     # load data_features, 
-    DATA_FEATURES = load_data_features(path_store=path_store, image_field=dict_image_field_to_ids[organ + '_' + field_id], target=dict_target_to_ids[target], folds=folds, outer_fold=outer_fold)
+    DATA_FEATURES = load_data_features(path_store=path_store, image_field=dict_image_field_to_ids[organ + '_' + field_id], target=dict_target_to_ids[target], folds=['train', 'val', 'test'], outer_fold=outer_fold)
+    # If regression target: calculate the mean and std of the target
+    if target in targets_regression:
+        mean_train = DATA_FEATURES['train'][target+'_raw'].mean()
+        std_train = DATA_FEATURES['train'][target+'_raw'].std()
     # split the samples into two groups: what can fit into the batch size, and the leftovers.
     DATA_FEATURES_BATCH = {}
     DATA_FEATURES_LEFTOVERS = {}
@@ -94,7 +98,7 @@ for outer_fold in outer_folds[0:8]:
     for fold in folds:
         pred_batch = model.predict_generator(GENERATORS_BATCH[fold], steps=STEP_SIZES_BATCH[fold], verbose=1).squeeze()
         pred_leftovers = model.predict_generator(GENERATORS_LEFTOVERS[fold], steps=STEP_SIZES_LEFTOVERS[fold], verbose=1).squeeze()
-        DATA_FEATURES[fold]['Pred_' + version] = np.concatenate((pred_batch,  pred_leftovers))
+        DATA_FEATURES[fold]['Pred_' + version] = np.concatenate((pred_batch,  pred_leftovers))*std_train + mean_train
         if fold in PREDICTIONS.keys():
             PREDICTIONS[fold] = pd.concat([PREDICTIONS[fold], DATA_FEATURES[fold]])
         else:
@@ -104,9 +108,8 @@ for outer_fold in outer_folds[0:8]:
     if generate_training_plots:
         plot_training(path_store=path_store, version=model_version, display_learning_rate=True)
 
-
 # save predictions
 if save_predictions:
     for fold in folds:
-        PREDICTIONS[fold][['eid', 'outer_fold']].to_csv(path_store + 'Predictions_' + version + '_' + fold + '.csv', index=False)
+        PREDICTIONS[fold][['eid', 'outer_fold', 'Pred_' + version]].to_csv(path_store + 'Predictions_' + version + '_' + fold + '.csv', index=False)
 
