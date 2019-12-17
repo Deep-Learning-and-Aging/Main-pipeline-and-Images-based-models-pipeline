@@ -29,7 +29,6 @@ if debug_mode:
     outer_folds = ['2', '3', '4']
     id_sets = ['A']
 
-
 #Define the columns of the Performances dataframe
 #columns for sample sizes
 names_sample_sizes = ['N']
@@ -91,11 +90,12 @@ for id_set in id_sets:
         #Fill the columns for this model, outer_fold by outer_fold
         for outer_fold in ['all'] + outer_folds:
             #Generate a subdataframe from the Predictions table using only the rows 
-            if fold == 'all':
+            if outer_fold == 'all':
                 predictions_fold = predictions_model.copy()
             else:
                 predictions_fold = predictions_model[predictions_model['outer_fold'] == outer_fold]
             #if no samples are available for this fold, fill columns with nans
+            print(predictions_fold.head)
             sample_sizes_fold = []
             if(len(predictions_fold.index) == 0):
                 print('NO SAMPLES AVAILABLE FOR MODEL ' + model + ' IN OUTER_FOLD ' + outer_fold)                    
@@ -117,10 +117,10 @@ for id_set in id_sets:
                     Performances[name_metric + '_sd_' + outer_fold][i] = bootstrap(predictions_metric, n_bootstrap, metric_function)[1]
     #Calculate folds_sd: standard deviation in the metrics between the different folds
     for name_metric in names_metrics:
-        name_cols =[]
+        names_cols =[]
         for outer_fold in outer_folds:
-            name_cols.append(name_metric + '_' + outer_fold)
-        Performances[name_metric + '_folds_sd_all'] = Performances[name_cols].std(axis=1, skipna=True)
+            names_cols.append(name_metric + '_' + outer_fold)
+        Performances[name_metric + '_folds_sd_all'] = Performances[names_cols].std(axis=1, skipna=True)
     #Convert float to int for sample sizes and some metrics
     for name_col in Performances.columns.values:
         if name_col.startswith('N_') | any(metric in name_col for metric in metrics_displayed_in_int) & (not '_sd' in name_col):
@@ -134,12 +134,4 @@ for id_set in id_sets:
     if save_performances:
         Performances.to_csv(path_store + 'Performances_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
         Performances_sorted.to_csv(path_store + 'Performances_ranked_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
-
-
-
-
-
-
-
-
 
