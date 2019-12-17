@@ -8,120 +8,138 @@ Created on Fri Dec  6 11:29:53 2019
 
 #load libraries, import functions and import parameters (nested import in the line below)
 from MI_helpers import *
-
-#options
-#debunk mode: exclude train set
-debunk_mode = True
-#generate training plots
-generate_training_plots = True
-#regenerate predictions if already exist TODO
-regenerate_predictions = True
+    
+#default parameters
+if len(sys.argv) != 3:
+    print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
+    sys.argv = ['']
+    sys.argv.append('Sex') #target
+    sys.argv.append('val') #inner fold
 
 #read parameters from command
-image_type, organ, field_id, view, preprocessing, target, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
+target = sys.argv[1]
+fold = sys.argv[2]
 
-#set other parameters accordingly
-version = target + '_' + image_type + '_' + preprocessing + '_' + architecture + '_' + optimizer + '_' + str(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate)
-dir_images = dir_images = path_store + '../images/' + organ + '/' + field_id + '/' + view + '/' + preprocessing + '/'
-prediction_type = dict_prediction_types[target]
+#options
+debug_mode = True
+save_performances = True
 
-#debunk mode: exclude train set
-if debunk_mode:
-    folds = ['val', 'test']
+if debug_mode:
+    n_bootstrap = 10
+    outer_folds = ['2', '3', '4']
+    id_sets = ['A']
 
-#double the batch size for the teslaM40 cores that have bigger memory
-GPUs = GPUtil.getGPUs()
-double_batch_size = True if GPUs[0].memoryTotal > 20000 else False
 
-#configure gpus
-configure_gpus()
+#Define the columns of the Performances dataframe
+#columns for sample sizes
+names_sample_sizes = ['N']
+if target in targets_binary:
+    names_sample_sizes.extend(['N_0', 'N_1'])
 
-#load data_features
-DATA_FEATURES = load_data_features(folds=folds, path_store=path_store, image_type=image_type, target=target)
+#columns for metrics
+names_metrics = dict_metrics_names[dict_prediction_types[target]]
+#for normal folds, keep track of metric and bootstrapped metric's sd
+names_metrics_with_sd = []
+for name_metric in names_metrics:
+    names_metrics_with_sd.extend([name_metric, name_metric + '_sd'])
 
-#Define Predictions dataframe
-PREDICTIONS={}
-for fold in folds:
-    PREDICTIONS[fold] = pd.DataFrame(index=[os.path.splitext(id)[0] for id in DATA_FEATURES[fold]['eid']], columns=list_versions)
+#for the 'all' fold, also keep track of the 'folds_sd', the metric's sd calculated using the folds' metrics results
+names_metrics_with_folds_sd_and_sd = []
+for name_metric in names_metrics:
+    names_metrics_with_folds_sd_and_sd.extend([name_metric, name_metric + '_folds_sd', name_metric + '_sd'])
 
-#Define Performances dataframe
-Performances = pd.DataFrame.from_records(list_models_available)
-Performances.columns = ['target', 'organ', 'field_id', 'view', 'preprocessing', 'architecture', 'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate']
-Performances[['learning_rate', 'weight_decay', 'dropout_rate']] = Performances[['learning_rate', 'weight_decay', 'dropout_rate']].apply(pd.to_numeric)
-Performances['backup_used'] = False
+#merge all the columns together. First description of the model, then sample sizes and metrics for each fold
+names_col_Performances = names_model_parameters.copy()
+#special outer fold 'all'
+names_col_Performances.extend(['_'.join([name,'all']) for name in names_sample_sizes + names_metrics_with_folds_sd_and_sd])
+#other outer_folds
+for outer_fold in outer_folds:
+    names_col_Performances.extend(['_'.join([name,outer_fold]) for name in names_sample_sizes + names_metrics_with_sd])
 
-#add columns for metrics
-for metric_name in metrics_names:
-    for fold in folds:
-        Performances[metric_name + '_' + fold] = np.nan
 
-#take subset of models to explore based on conditions in the input
-for parameter in ['architecture', 'learning_rate', 'weight_decay', 'dropout_rate']:
-    parameter_value = globals()[parameter]
-    if parameter_value != '*':
-        Performances = Performances[Performances[parameter] == parameter_value]
+#Fill the Performances tables (one for each id_set)
+for id_set in id_sets:
+    #Generate the Performance table from the rows and columns
+    Predictions_table = pd.read_csv(path_store + 'Predictions_' + target + '_' + fold + '_' + id_set + '.csv')
+    PERFORMANCES = []
+    list_models = [col for col in Predictions_table.columns if 'Pred' in col]
+    Performances = np.empty((len(list_models),len(names_col_Performances),))
+    Performances.fill(np.nan)
+    Performances = pd.DataFrame(Performances)
+    Performances.columns = names_col_Performances
+    for colname in Performances.columns.values:
+        if colname in names_model_parameters:
+            col_type = str
+        #elif colname.startswith('N_'):
+        #    col_type = int
+        else:
+            col_type = float
+        Performances[colname] = Performances[colname].astype(col_type)
+    #Fill the Performance table row by row
+    for i, model in enumerate(list_models):
+        #Fill the columns corresponding to the model's parameters
+        model = '_'.join(model.split('_')[1:])
+        model_parameters = split_model_name_to_parameters(model, names_model_parameters)
+        #fill the columns for model parameters
+        for parameter_name in names_model_parameters:
+            Performances[parameter_name][i] = model_parameters[parameter_name]
+        #generate a subdataframe from the main predictions table, specific to this model
+        predictions_model = Predictions_table[['eid', target, 'outer_fold_' + model, 'Pred_' + model]].dropna(how='any')
+        predictions_model.columns = ['eid', 'y', 'outer_fold', 'pred']
+        predictions_model['outer_fold'] = predictions_model['outer_fold'].apply(int).apply(str)
+        performances_model = model.split('_')
+        #Fill the columns for this model, outer_fold by outer_fold
+        for outer_fold in ['all'] + outer_folds:
+            #Generate a subdataframe from the Predictions table using only the rows 
+            if fold == 'all':
+                predictions_fold = predictions_model.copy()
+            else:
+                predictions_fold = predictions_model[predictions_model['outer_fold'] == outer_fold]
+            #if no samples are available for this fold, fill columns with nans
+            sample_sizes_fold = []
+            if(len(predictions_fold.index) == 0):
+                print('NO SAMPLES AVAILABLE FOR MODEL ' + model + ' IN OUTER_FOLD ' + outer_fold)                    
+            else:
+                #Fill sample size columns
+                Performances['N_' + outer_fold][i] = len(predictions_fold.index)
+                #For binary classification, calculate sample sizes for each class and generate class prediction
+                if target in targets_binary:
+                    Performances['N_0_' + outer_fold][i] = len(predictions_model[predictions_model['y']==0].index)
+                    Performances['N_1_' + outer_fold][i] = len(predictions_model[predictions_model['y']==1].index)
+                    predictions_fold_class = predictions_fold.copy()
+                    predictions_fold_class['pred'] = predictions_fold_class['pred'].round()
+                #Fill the Performances dataframe metric by metric
+                y = predictions_model['y']
+                for name_metric in names_metrics:
+                    predictions_metric = predictions_fold_class if name_metric in metrics_needing_classpred else predictions_fold
+                    metric_function = dict_metrics[name_metric]['sklearn']
+                    Performances[name_metric + '_' + outer_fold][i] = metric_function(predictions_metric['y'], predictions_metric['pred'])
+                    Performances[name_metric + '_sd_' + outer_fold][i] = bootstrap(predictions_metric, n_bootstrap, metric_function)[1]
+    #Calculate folds_sd: standard deviation in the metrics between the different folds
+    for name_metric in names_metrics:
+        name_cols =[]
+        for outer_fold in outer_folds:
+            name_cols.append(name_metric + '_' + outer_fold)
+        Performances[name_metric + '_folds_sd_all'] = Performances[name_cols].std(axis=1, skipna=True)
+    #Convert float to int for sample sizes and some metrics
+    for name_col in Performances.columns.values:
+        if name_col.startswith('N_') | any(metric in name_col for metric in metrics_displayed_in_int) & (not '_sd' in name_col):
+            Performances[name_col] = Performances[name_col].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int
+    #Ranking, printing and saving
+    print('Performances of the models ranked by models\'names:')
+    print(Performances)
+    Performances_sorted = Performances.sort_values(by=dict_main_metrics_names[target] + '_all', ascending=main_metrics_modes[dict_main_metrics_names[target]] == 'min')
+    print('Performances of the models ranked by validation score on the main metric:')
+    print(Performances_sorted)
+    if save_performances:
+        Performances.to_csv(path_store + 'Performances_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
+        Performances_sorted.to_csv(path_store + 'Performances_ranked_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
 
-#load the architecture
-list_architectures = Performances['architecture'].unique()
 
-#Evaluate the performances of each model, architecture by architecture
-for architecture in list_architectures:
-    print('Starting models\' evaluation for architecture ' + architecture + '...')
-    image_size = input_size_models[architecture]
-    batch_size = 2*dict_batch_sizes[architecture] if double_batch_size else dict_batch_sizes[architecture]
-    Performances_architecture = Performances[Performances['architecture'] == architecture]
-    GENERATORS, STEP_SIZES = generate_generators(DATA_FEATURES=DATA_FEATURES, target=target, dir_images=dir_images, image_size=image_size, batch_size=batch_size, folds=folds, seed=seed, mode='model_testing')
-    
-    #for each architecture, test the different weights
-    for i, model_row in Performances_architecture.iterrows():
-        x, base_model_input = generate_base_model(architecture=architecture, weight_decay=0, dropout_rate=0, import_weights=None)
-        model = complete_architecture(x=x, input_shape=base_model_input, activation=dict_activations[prediction_type], weight_decay=model_row['weight_decay'], dropout_rate=model_row['dropout_rate'])
-        model_version = model_row['target'] + '_' + model_row['organ'] + '_' + model_row['field_id'] + '_' + model_row['view'] + '_' + model_row['preprocessing'] + '_' + model_row['architecture'] + '_' + model_row['optimizer'] + '_' + str(model_row['learning_rate']) + '_' + str(model_row['weight_decay']) + '_' + str(model_row['dropout_rate'])
-        try:
-            model.load_weights(path_store + 'model-weights_' + model_version + '.h5')
-        except:
-            #if the weights are corrupted, load the backup weights.
-            try:
-                model.load_weights(path_store + 'backup-model-weights_' + model_version + '.h5')
-                Performances_architecture.loc[i, 'backup_used'] = True
-                print('THE FILE FOR THE WEIGHTS ' + model_version + ' COULD NOT BE OPENED. USING THE BACKUP INSTEAD.')
-            except:
-                print('NEITHER THE NORMAL NOR THE BACKUP FILE FOR THE WEIGHTS ' + model_version + ' COULD BE OPENED. MOVING ON TO THE NEXT MODEL.')
-                break
-        
-        #plot the training from the logger
-        if generate_training_plots:
-            plot_training(path_store=path_store, version=model_version, display_learning_rate=True)
-        
-        #for each fold and for each metric, compute the model's performance
-        for fold in folds:
-            pred=model.predict_generator(GENERATORS[fold], steps=STEP_SIZES[fold], verbose=1).squeeze()
-            try:
-                PREDICTIONS[fold][model_version] = pred
-                #convert to pred class?
-                for metric_name in metrics_names:
-                    Performances_architecture.loc[i, metric_name + '_' + fold] = dict_metrics[metric_name][functions_version](Ys[fold], pred)
-            except:
-                print("Mismatch between length of pred and y")
 
-    
-    #Record architecture's results in general dataframe before printing them
-    Performances[Performances['architecture'] == architecture] = Performances_architecture
-    print('Completed evaluation for architecture ' + architecture + ". Results below:")
-    print(Performances_architecture)
 
-#Ranking, printing and saving
-print('Performances of the models ranked by models\'names:')
-print(Performances)
-Performances_sorted = Performances.sort_values(by=main_metric_name + '_val', ascending=main_metrics_modes[main_metric_name] == 'min')
-print('Performances of the models ranked by validation score on the main metric:')
-print(Performances_sorted)
-if save_performances:
-    Performances.to_csv(path_store + 'Performances_alphabetical_' + version + '.csv', index=False)
-    Performances_sorted.to_csv(path_store + 'Performances_ranked_' + version + '.csv', index=False)
-#TODO save predictions
-if save_predictions:
-    
+
+
 
 
 

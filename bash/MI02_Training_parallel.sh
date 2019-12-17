@@ -29,7 +29,7 @@ for target in "${targets[@]}"; do
 						for lambda in "${lambdas[@]}"; do
 							for dropout_rate in "${dropout_rates[@]}"; do
 								for outer_fold in "${outer_folds[@]}"; do
-								version=M02-$target-$image_type-$preprocessing-$architecture-$optimizer-$learning_rate-$lambda-$dropout_rate-$outer_fold
+								version=M02_${target}_${image_type}_${preprocessing}_${architecture}_${optimizer}_${learning_rate}_${lambda}_${dropout_rate}_${outer_fold}
 								job_name="$version.job"
 								out_file="../eo/$version.out"
 								err_file="../eo/$version.err"

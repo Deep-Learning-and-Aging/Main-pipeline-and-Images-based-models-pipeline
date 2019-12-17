@@ -8,8 +8,6 @@ Created on Thu Dec 12 18:16:14 2019
 
 #load libraries, import functions and import parameters (nested import in the line below)
 from MI_helpers import *
-
-id_sets = ['A']
     
 #default parameters
 if len(sys.argv) != 3:
@@ -24,7 +22,7 @@ fold = sys.argv[2]
 
 # load the selected features
 #Define dictionary of Predictions_tables, one for each id_set
-PTs={}
+PREDICTIONS_TABLES={}
 #ID set A (if organ in ["PhysicalActivity"]: #different set of eids)
 #id set specific lines
 data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
@@ -34,23 +32,23 @@ data_features.columns = ['eid', 'Sex', 'Age']
 data_features['eid'] = data_features['eid'].astype(str)
 data_features['eid'] = data_features['eid'].apply(append_ext)
 data_features = data_features.set_index('eid', drop=False)
-PTs['A'] = data_features 
+PREDICTIONS_TABLES['A'] = data_features
 # ID set B
 data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0'])
 data_features.columns = ['eid', 'Sex', 'Age']
 data_features['eid'] = data_features['eid'].astype(str)
 data_features['eid'] = data_features['eid'].apply(append_ext)
 data_features = data_features.set_index('eid', drop=False)
-PTs['B'] = data_features
+PREDICTIONS_TABLES['B'] = data_features
 
 #For the training set, each sample is predicted n_CV_outer_folds times, so prepare a larger dataframe to receive the predictions
 if fold == 'train':
     for id_set in id_sets:
         for outer_fold in outer_folds:
-            df_fold = PTs[id_set].copy()
+            df_fold = PREDICTIONS_TABLES[id_set].copy()
             df_fold['outer_fold'] = outer_fold
             df_total = df_fold if outer_fold == outer_folds[0] else df_total.append(df_fold)
-        PTs[id_set] = df_total
+        PREDICTIONS_TABLES[id_set] = df_total
 
 #generate list of predictions that will be integrated in the Predictions dataframe
 list_models = glob.glob(path_store + 'Predictions_' + target + '_*_' + fold + '.csv')
@@ -64,12 +62,14 @@ for file_name in list_models:
     prediction['outer_fold_' + '_'.join(file_name.split('_')[1:-1])] = prediction['outer_fold']
     #merge csv
     if fold == 'train':
-        PTs[id_set] = PTs[id_set].merge(prediction, how='outer', on=['eid', 'outer_fold'])
+        PREDICTIONS_TABLES[id_set] = PREDICTIONS_TABLES[id_set].merge(prediction, how='outer', on=['eid', 'outer_fold'])
     else:
         prediction = prediction.drop(['outer_fold'], axis=1)
-        PTs[id_set] = PTs[id_set].merge(prediction, how='outer', on=['eid'])
+        PREDICTIONS_TABLES[id_set] = PREDICTIONS_TABLES[id_set].merge(prediction, how='outer', on=['eid'])
 
 #remove columns for which no prediction is available, before saving the Prediction tables
 for id_set in id_sets:
-    PTs[id_set].dropna(subset=[col for col in PTs[id_set].columns if 'Pred' in col], how='all', inplace=True)
-    PTs[id_set].to_csv(path_store + 'Predictions_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
+    PREDICTIONS_TABLES[id_set].dropna(subset=[col for col in PREDICTIONS_TABLES[id_set].columns if 'Pred' in col], how='all', inplace=True)
+    PREDICTIONS_TABLES[id_set].to_csv(path_store + 'Predictions_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
+
+print("Done")

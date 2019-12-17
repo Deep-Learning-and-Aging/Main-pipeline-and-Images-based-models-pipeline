@@ -43,7 +43,8 @@ import GPUtil
 #sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, precision_score, recall_score, confusion_matrix, precision_recall_curve, average_precision_score
-from sklearn.utils import class_weight
+from sklearn.utils import class_weight, resample
+
 
 #tensorflow
 import tensorflow as tf
@@ -61,6 +62,7 @@ from keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelChe
 
 
 ### PARAMETERS
+names_model_parameters = ['target', 'organ', 'field_id', 'view', 'transformation', 'architecture', 'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate']
 dict_prediction_types={'Age':'regression', 'Sex':'binary'}
 dict_losses_names={'regression':'MSE', 'binary':'Binary-Crossentropy', 'multiclass':'categorical_crossentropy'}
 dict_main_metrics_names={'Age':'R-Squared', 'Sex':'ROC-AUC', 'imbalanced_binary_placeholder':'F1-Score'}
@@ -76,6 +78,8 @@ targets_binary = ['Sex']
 image_quality_ids = {'Liver':'22414-2.0', 'Heart':None, 'PhysicalActivity':None}
 id_sets = ['A', 'B']
 dict_organ_to_idset={'PhysicalActivity':'A', 'Liver':'B', 'Heart':'B'}
+metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
+metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
 
 #define dictionary of batch sizes to fit as many samples as the model's architecture allows
 dict_batch_sizes = dict.fromkeys(['NASNetMobile'], 128)
@@ -135,6 +139,8 @@ seed=0
 random.seed(seed)
 set_random_seed(seed)
 
+#postprocessing
+n_bootstrap = 1000
 
 #garbage collector
 gc.enable()
@@ -162,6 +168,13 @@ def read_parameters_from_command(args):
         if(parameters[parameter_name] != '*'):
             parameters[parameter_name] = float(parameters[parameter_name])
     return parameters['target'], parameters['image_type'], parameters['organ'], parameters['field_id'], parameters['view'], parameters['transformation'], parameters['architecture'], parameters['optimizer'], parameters['learning_rate'], parameters['weight_decay'], parameters['dropout_rate'], parameters['outer_fold']
+
+def split_model_name_to_parameters(model_name, names_model_parameters):
+    parameters={}
+    parameters_list = model_name.split('_')
+    for i, parameter in enumerate(names_model_parameters):
+        parameters[parameter] = parameters_list[i]
+    return parameters
 
 def configure_gpus():
    print('tensorflow version : ', tf.__version__)
@@ -438,7 +451,6 @@ def define_callbacks(path_store, version, baseline, continue_training, main_metr
     early_stopping = EarlyStopping(monitor= 'val_' + main_metric.__name__, min_delta=0, patience=10, verbose=0, mode=main_metric_mode, baseline=None, restore_best_weights=False)
     return [csv_logger, model_checkpoint, model_checkpoint_backup, reduce_lr_on_plateau, early_stopping]
 
-
 def R2_K(y_true, y_pred):
     SS_res =  K.sum(K.square( y_true-y_pred )) 
     SS_tot = K.sum(K.square( y_true - K.mean(y_true) ) ) 
@@ -500,28 +512,35 @@ def rmse(y_true, y_pred):
     return sqrt(mean_squared_error(y_true, y_pred))
 
 def sensitivity_score(y, pred):
-    _, _, fn, tp = confusion_matrix(y, int(pred+0.5)).ravel() #int(pred+0.5) converts prediction to class
+    _, _, fn, tp = confusion_matrix(y, pred.round()).ravel()
     return tp/(tp+fn)
 
 def specificity_score(y, pred):
-    tn, fp, _, _ = confusion_matrix(y, int(pred+0.5)).ravel() #int(pred+0.5) converts prediction to class
+    tn, fp, _, _ = confusion_matrix(y, pred.round()).ravel()
     return tn/(tn+fp)
 
 def true_positives_score(y, pred):
-    _, _, _, tp = confusion_matrix(y, int(pred+0.5)).ravel() #int(pred+0.5) converts prediction to class
+    _, _, _, tp = confusion_matrix(y, pred.round()).ravel()
     return tp
 
 def false_positives_score(y, pred):
-    _, fp, _, _ = confusion_matrix(y, int(pred+0.5)).ravel() #int(pred+0.5) converts prediction to class
+    _, fp, _, _ = confusion_matrix(y, pred.round()).ravel()
     return fp
 
 def false_negatives_score(y, pred):
-    _, _, fn, _ = confusion_matrix(y, int(pred+0.5)).ravel() #int(pred+0.5) converts prediction to class
+    _, _, fn, _ = confusion_matrix(y, pred.round()).ravel()
     return fn
 
 def true_negatives_score(y, pred):
-    tn, _, _, _ = confusion_matrix(y, int(pred+0.5)).ravel() #int(pred+0.5) converts prediction to class
+    tn, _, _, _ = confusion_matrix(y, pred.round()).ravel()
     return tn
+
+def bootstrap(data, n_bootstrap, function):
+    results = []
+    for i in range(n_bootstrap):
+        data_i = resample(data, replace=True, n_samples=len(data.index))
+        results.append(function(data_i['y'], data_i['pred']))
+    return np.mean(results), np.std(results)
 
 def set_learning_rate(model, optimizer, learning_rate, loss, metrics):
     opt = globals()[optimizer](lr=learning_rate, clipnorm=1.0)

@@ -7,7 +7,7 @@ n_cpu_cores=1
 time=60
 for target in "${targets[@]}"; do
 	for image_field in "${image_fields[@]}"; do
-		version=MI01-$target-$image_field
+		version=MI01_${target}_${image_field}
 		job_name="$version.job"
 		out_file="../eo/$version.out"
 		err_file="../eo/$version.err"

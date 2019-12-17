@@ -116,3 +116,4 @@ if save_predictions:
     for fold in folds:
         PREDICTIONS[fold][['eid', 'outer_fold', 'Pred_' + version]].to_csv(path_store + 'Predictions_' + version + '_' + fold + '.csv', index=False)
 
+print("Done")

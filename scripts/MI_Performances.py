@@ -6,6 +6,13 @@ Created on Sun Nov 10 20:31:21 2019
 @author: Alan
 """
 
+def split_model_name_to_parameters(model_name):
+    parameters={}
+    parameters_list = model_name.split('_')
+    parameters['target'] = parameters_list[0]
+    parameters['']
+    return parameters
+
 #load libraries, import functions and import parameters (nested import in the line below)
 from MI_helpers import *
 
@@ -21,9 +28,9 @@ save_performances = True
 if len(sys.argv) != 11:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
+    sys.argv.append('Age') #target
     sys.argv.append('Heart_20208_4chambers') #image_type
     sys.argv.append('raw') #preprocessing
-    sys.argv.append('Age') #target
     sys.argv.append('*') #architecture
     sys.argv.append('*') #optimizer
     sys.argv.append('*') #learning_rate
