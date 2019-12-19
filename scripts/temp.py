@@ -91,18 +91,19 @@ def weights_for_transferlearning(continue_training, max_transfer_learning, path_
     
     
     
+version = 'Sex_Heart_20208_4chambers_raw_Xception_Adam_0.0001_0.0_0.0'
 
 
 
-    
+dict_alternative_targets_for_transfer_learning={'Age':['Age', 'Sex'], 'Sex':['Sex', 'Age']}
+
+continue_training = True
+max_transfer_learning = True
+path_weights = '../data/model-weights_Sex_Heart_20208_4chambers_raw_Xception_Adam_0.0001_0.0_0.0_0.h5'
+path_load_weights, keras_weights= weights_for_transfer_learning(continue_training=continue_training, max_transfer_learning=max_transfer_learning, path_weights=path_weights, list_parameters_to_match = ['organ', 'transformation', 'field_id', 'view'])
 
 #WORK HERE
-#need to get Performances table right first. use it to find the best performing model and load the relevant weights.
-def weights_for_transferlearning(continue_training, max_transfer_learning, path_weights, path_weights_nonreg, regularized_model, names_model_parameters):
-    version = path_weights.replace('../data/model-weights_', '').replace('.h5', '')
-    parameters = split_model_name_to_parameters(model_name, names_model_parameters)
-    parameters_other_
-    
+
     
     
     
@@ -118,18 +119,30 @@ def weights_for_transferlearning(continue_training, max_transfer_learning, path_
         if os.path.exists(path_weights):
             return None, path_weights
         
-        #1-if same architecture non-regularized exists
-        parameters_nonreg = parameters.copy()
-        parameters_nonreg['weight_decay'] = '0.0'
-        parameters_nonreg['dropout_rate'] = '0.0'
-        path_weights_nonreg = '../data/model-weights_' + parameters_to_version(parameters_nonreg) + '.h5'
-        if os.path.exists(path_weights_nonreg):
-            return None, path_weights
-        
+#1-if same architecture with different regularization exists
+        Performances = pd.read_csv(path_store + 'Performances_ranked_' + parameters['target'] + '_' + 'val' + '_' + dict_eids_version[parameters['organ']] + '.csv')
+        Performances['field_id'] = Performances['field_id'].astype(str)
+        for parameter in ['target', 'organ', 'field_id', 'view', 'transformation', 'architecture']:
+            print(parameter)
+            Performances = Performances[Performances[parameter] == parameters[parameter]]
+            print(Performances)
+        if(len(Performances.index) != 0):
+            path_weights_to_load = path_store + 'model-weights_' + Performances['version'][0] + '.h5'
+            return None, path_weights_to_load
+
         #2-if same model used to predict other phenotype exists
-        parameters_other_target = parameters.copy()
-        parameters_other_target[target] = 
-        if os.path.exists()
+dict_alternative_targets_for_transfer_learning={'Age':['Age', 'Sex'], 'Sex':['Sex', 'Age']}
+parameters_to_match = parameters.copy()
+parameters_to_match['target'] = dict_alternative_target_for_transfer_learning[parameters['target']]
+Performances = pd.read_csv(path_store + 'Performances_ranked_' + parameters_to_match['target'] + '_' + 'val' + '_' + dict_eids_version[parameters['organ']] + '.csv')
+Performances['field_id'] = Performances['field_id'].astype(str)
+for parameter in ['target', 'organ', 'field_id', 'view', 'transformation', 'architecture']:
+    print(parameter)
+    Performances = Performances[Performances[parameter] == parameters_to_mach[parameter]]
+    print(Performances)
+if(len(Performances.index) != 0):
+    path_weights_to_load = path_store + 'model-weights_' + Performances['version'][0] + '.h5'
+    return None, path_weights_to_load
         
         #3-same model built on different transformation exists (e.g raw vs contrast)
         if 

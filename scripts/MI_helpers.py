@@ -114,6 +114,10 @@ dict_image_field_to_ids.update(dict.fromkeys(['Heart_20208'], 'Heart_20208'))
 #dict to decide which field is used to generate the ids when several targets share the same ids (e.g Age and Sex)
 dict_target_to_ids = dict.fromkeys(['Age', 'Sex'], 'Age')
 
+#dict to decide in which order targets should be used when trying to transfer weight from a similar model
+dict_alternative_targets_for_transfer_learning={'Age':['Age', 'Sex'], 'Sex':['Sex', 'Age']}
+
+
 #define paths
 if '/Users/Alan/' in os.getcwd():
     os.chdir('/Users/Alan/Desktop/Aging/Medical_Images/scripts/')
@@ -404,6 +408,56 @@ def complete_architecture(x, input_shape, activation, weight_decay, dropout_rate
     predictions = Dense(1, activation=activation)(x)
     model = Model(inputs=input_shape, outputs=predictions)
     return model
+
+"""Find the most similar model for transfer learning.
+The function returns path_load_weights, keras_weights """
+def weights_for_transfer_learning(continue_training, max_transfer_learning, path_weights, list_parameters_to_match):
+    
+    print('Looking for models to transfer weights from...')
+    
+    #define parameters
+    version = path_weights.replace('../data/model-weights_', '').replace('.h5', '')
+    parameters = version_to_parameters(version, names_model_parameters)
+    
+    #continue training if possible
+    if continue_training and os.path.exists(path_weights):
+        return None, path_weights
+    
+    #Look for similar models, starting from very similar to less similar
+    if max_transfer_learning:
+        while(True):  
+            #print('Matching models for the following criterias:'); print(['architecture', 'target'] + list_parameters_to_match)
+            #start by looking for models trained on the same target, then move to other targets
+            for target_to_load in dict_alternative_targets_for_transfer_learning[parameters['target']]:
+                #print('Target used: ' + target_to_load)
+                parameters_to_match = parameters.copy()
+                parameters_to_match['target'] = target_to_load
+                #load the ranked performances table to select the best performing model among the similar models available
+                path_performances_to_load = path_store + 'Performances_ranked_' + parameters_to_match['target'] + '_' + 'val' + '_' + dict_eids_version[parameters['organ']] + '.csv'
+                try:
+                    Performances = pd.read_csv(path_performances_to_load)
+                    Performances['field_id'] = Performances['field_id'].astype(str)
+                except:
+                    #print("Could not load the file: " + path_performances_to_load)
+                    break
+                #iteratively get rid of models that are not similar enough, based on the list
+                for parameter in ['architecture', 'target'] + list_parameters_to_match:
+                    Performances = Performances[Performances[parameter] == parameters_to_match[parameter]]
+                #if at least one model is similar enough, load weights from the best of them
+                if(len(Performances.index) != 0):
+                    path_weights_to_load = path_store + 'model-weights_' + Performances['version'][0] + '.h5'
+                    print('transfering the weights from: ' + path_weights_to_load)
+                    return path_weights_to_load, None
+            
+            #if no similar model was found, try again after getting rid of the last selection criteria
+            if(len(list_parameters_to_match) == 0):
+                break
+            list_parameters_to_match.pop()
+    
+    #Otherwise use imagenet weights to initialize
+    print('NO MODEL FOUND FOR TRANSFER LEARNING. USING IMAGENET WEIGHTS')
+    return 'load_path_weights_should_not_be_used', 'imagenet'
+
 
 #model_checkpoint_backup is used in case the weights file gets corrupted because the job gets killed during its writing
 #def define_callbacks(path_store, version, initial_val_metric, continue_training, main_metric, main_metric_mode):

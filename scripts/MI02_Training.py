@@ -12,6 +12,8 @@ from MI_helpers import *
 #options
 #load weights from previous best training results, VS. start from scratch
 continue_training = True
+#try to find a similar model among those already trained and evaluated to perform transfer learning
+max_transfer_learning = True
 #use a small subset of the data VS. run the actual full data pipeline to get accurate results
 debunk_mode = False
 #compute the metrics during training on the train and val sets VS. only compute loss (faster)
@@ -22,7 +24,7 @@ if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Sex') #target
-    sys.argv.append('Heart_20208_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
+    sys.argv.append('Heart_20208_3chambers') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
     sys.argv.append('VGG16') #architecture
     sys.argv.append('Adam') #optimizer
@@ -53,25 +55,8 @@ metrics = [dict_metrics[metric_name][functions_version] for metric_name in metri
 The tricky part is that for regularized models, we can initialize the weights 
 with the values of the nonregularized model if the actual weights are not 
 available."""
-path_weights = path_store + 'model_weights_' + version + '.h5'
-regularized_model = False if ((weight_decay == 0) & (dropout_rate == 0)) else True
-path_weights_nonreg = path_store + 'model_weights_' + target + '_' + image_type + '_' + transformation + '_' + architecture + '_' + optimizer + '_' + str(learning_rate) + '_' + str(0.0) + '_' + str(0.0) + str(outer_fold) + '.h5' if regularized_model else ""
-if continue_training:
-    if os.path.exists(path_weights):
-        keras_weights = None
-        path_load_weights = path_weights
-    else:
-        if regularized_model & os.path.exists(path_weights_nonreg):
-            keras_weights = None
-            path_load_weights = path_weights_nonreg
-        else:
-            keras_weights = 'imagenet'
-else:
-    if regularized_model & os.path.exists(path_weights_nonreg):
-        keras_weights = None
-        path_load_weights = path_weights_nonreg
-    else:
-        keras_weights = 'imagenet'
+path_weights = path_store + 'model-weights_' + version + '.h5'
+path_load_weights, keras_weights= weights_for_transfer_learning(continue_training=continue_training, max_transfer_learning=max_transfer_learning, path_weights=path_weights, list_parameters_to_match = ['organ', 'transformation', 'field_id', 'view'])
 
 #double the batch size for the teslaM40 cores that have bigger memory
 GPUs = GPUtil.getGPUs()
