@@ -169,12 +169,18 @@ def read_parameters_from_command(args):
             parameters[parameter_name] = float(parameters[parameter_name])
     return parameters['target'], parameters['image_type'], parameters['organ'], parameters['field_id'], parameters['view'], parameters['transformation'], parameters['architecture'], parameters['optimizer'], parameters['learning_rate'], parameters['weight_decay'], parameters['dropout_rate'], parameters['outer_fold']
 
-def split_model_name_to_parameters(model_name, names_model_parameters):
+def version_to_parameters(model_name, names_model_parameters):
     parameters={}
     parameters_list = model_name.split('_')
     for i, parameter in enumerate(names_model_parameters):
         parameters[parameter] = parameters_list[i]
+    if len(parameters_list) > 10:
+        parameters['outer_fold'] = parameters_list[10]
     return parameters
+
+def parameters_to_version(parameters):
+    return '_'.join(parameters.values())
+
 
 def configure_gpus():
    print('tensorflow version : ', tf.__version__)
@@ -238,7 +244,7 @@ def generate_data_features(image_field, organ, target, dir_images, image_quality
     n_samples_by_fold = n_samples/n_CV_outer_folds
     FOLDS_IDS = {}
     for outer_fold in outer_folds:
-        FOLDS_IDS[outer_fold] = np.ndarray.tolist(ids[int((int(outer_fold)-1)*n_samples_by_fold):int(int(outer_fold)*n_samples_by_fold)])
+        FOLDS_IDS[outer_fold] = np.ndarray.tolist(ids[int((int(outer_fold))*n_samples_by_fold):int((int(outer_fold)+1)*n_samples_by_fold)])
     TRAINING_IDS={}
     VALIDATION_IDS={}
     TEST_IDS={}

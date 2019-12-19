@@ -13,7 +13,7 @@ from MI_helpers import *
 if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
-    sys.argv.append('Age') #target
+    sys.argv.append('Sex') #target
     sys.argv.append('val') #inner fold
 
 #read parameters from command
@@ -26,8 +26,8 @@ save_performances = True
 
 if debug_mode:
     n_bootstrap = 10
-    outer_folds = ['2', '3', '4']
-    id_sets = ['A']
+    outer_folds = ['2', '3']
+    #id_sets = ['A']
 
 #Define the columns of the Performances dataframe
 #columns for sample sizes
@@ -48,7 +48,7 @@ for name_metric in names_metrics:
     names_metrics_with_folds_sd_and_sd.extend([name_metric, name_metric + '_folds_sd', name_metric + '_sd'])
 
 #merge all the columns together. First description of the model, then sample sizes and metrics for each fold
-names_col_Performances = names_model_parameters.copy()
+names_col_Performances = ['version'] + names_model_parameters #.copy()
 #special outer fold 'all'
 names_col_Performances.extend(['_'.join([name,'all']) for name in names_sample_sizes + names_metrics_with_folds_sd_and_sd])
 #other outer_folds
@@ -78,8 +78,9 @@ for id_set in id_sets:
     for i, model in enumerate(list_models):
         #Fill the columns corresponding to the model's parameters
         model = '_'.join(model.split('_')[1:])
-        model_parameters = split_model_name_to_parameters(model, names_model_parameters)
+        model_parameters = version_to_parameters(model, names_model_parameters)
         #fill the columns for model parameters
+        Performances['version'][i] = model
         for parameter_name in names_model_parameters:
             Performances[parameter_name][i] = model_parameters[parameter_name]
         #generate a subdataframe from the main predictions table, specific to this model
@@ -95,7 +96,6 @@ for id_set in id_sets:
             else:
                 predictions_fold = predictions_model[predictions_model['outer_fold'] == outer_fold]
             #if no samples are available for this fold, fill columns with nans
-            print(predictions_fold.head)
             sample_sizes_fold = []
             if(len(predictions_fold.index) == 0):
                 print('NO SAMPLES AVAILABLE FOR MODEL ' + model + ' IN OUTER_FOLD ' + outer_fold)                    
@@ -121,7 +121,7 @@ for id_set in id_sets:
         for outer_fold in outer_folds:
             names_cols.append(name_metric + '_' + outer_fold)
         Performances[name_metric + '_folds_sd_all'] = Performances[names_cols].std(axis=1, skipna=True)
-    #Convert float to int for sample sizes and some metrics
+    #Convert float to int for sample sizes and some metrics.
     for name_col in Performances.columns.values:
         if name_col.startswith('N_') | any(metric in name_col for metric in metrics_displayed_in_int) & (not '_sd' in name_col):
             Performances[name_col] = Performances[name_col].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int

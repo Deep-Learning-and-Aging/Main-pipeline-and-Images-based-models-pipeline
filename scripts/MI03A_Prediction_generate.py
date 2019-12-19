@@ -11,9 +11,9 @@ from MI_helpers import *
 
 #options
 #debunk mode: exclude train set
-debunk_mode = True
+debunk_mode = False
 #generate training plots
-generate_training_plots = True
+generate_training_plots = False
 #regenerate predictions if already exist TODO
 regenerate_predictions = True
 #save_predictions
@@ -23,10 +23,10 @@ save_predictions = True
 if len(sys.argv) != 9:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
-    sys.argv.append('Sex') #target
-    sys.argv.append('PhysicalActivity_90001_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
+    sys.argv.append('Age') #target
+    sys.argv.append('Heart_20208_2chambers') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
-    sys.argv.append('Xception') #architecture
+    sys.argv.append('DenseNet121') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
     sys.argv.append('0.0') #weight decay
@@ -96,9 +96,9 @@ for outer_fold in outer_folds[2:5]:
     
     # Generate predictions
     for fold in folds:
-        pred_batch = model.predict_generator(GENERATORS_BATCH[fold], steps=STEP_SIZES_BATCH[fold], verbose=1).squeeze()
-        pred_leftovers = model.predict_generator(GENERATORS_LEFTOVERS[fold], steps=STEP_SIZES_LEFTOVERS[fold], verbose=1).squeeze()
-        pred_full = np.concatenate((pred_batch,  pred_leftovers))
+        pred_batch = model.predict_generator(GENERATORS_BATCH[fold], steps=STEP_SIZES_BATCH[fold], verbose=1)
+        pred_leftovers = model.predict_generator(GENERATORS_LEFTOVERS[fold], steps=STEP_SIZES_LEFTOVERS[fold], verbose=1)
+        pred_full = np.concatenate((pred_batch,  pred_leftovers)).squeeze()
         if target in targets_regression:
             pred_full = pred_full*std_train + mean_train
         DATA_FEATURES[fold]['Pred_' + version] = pred_full

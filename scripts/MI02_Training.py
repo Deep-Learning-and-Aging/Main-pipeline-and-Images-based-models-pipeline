@@ -22,14 +22,14 @@ if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Sex') #target
-    sys.argv.append('PhysicalActivity_90001_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
+    sys.argv.append('Heart_20208_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
-    sys.argv.append('NASNetMobile') #architecture
+    sys.argv.append('VGG16') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
     sys.argv.append('0.0') #weight decay
     sys.argv.append('0.0') #dropout
-    sys.argv.append('1') #outer_fold
+    sys.argv.append('0') #outer_fold
 
 #read parameters from command
 target, image_type, organ, field_id, view, transformation, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
@@ -48,12 +48,12 @@ main_metric_mode = main_metrics_modes[main_metric_name]
 main_metric = dict_metrics[main_metric_name][functions_version]
 metrics_names = dict_metrics_names[prediction_type] if display_full_metrics else [main_metric_name]
 metrics = [dict_metrics[metric_name][functions_version] for metric_name in metrics_names]
-path_weights = path_store + 'model_weights_' + version + '.h5'
 
 """Determine which weights to load, if any.
 The tricky part is that for regularized models, we can initialize the weights 
 with the values of the nonregularized model if the actual weights are not 
 available."""
+path_weights = path_store + 'model_weights_' + version + '.h5'
 regularized_model = False if ((weight_decay == 0) & (dropout_rate == 0)) else True
 path_weights_nonreg = path_store + 'model_weights_' + target + '_' + image_type + '_' + transformation + '_' + architecture + '_' + optimizer + '_' + str(learning_rate) + '_' + str(0.0) + '_' + str(0.0) + str(outer_fold) + '.h5' if regularized_model else ""
 if continue_training:

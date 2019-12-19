@@ -2,13 +2,13 @@
 #set -u
 regenerate_predictions=false
 targets=( "Age" "Sex" )
-targets=( "Age" )
+#targets=( "Age" )
 image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
-image_types=( "PhysicalActivity_90001_main" )
+image_types=( "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
 preprocessings=( "raw" "contrast" )
-preprocessings=( "raw" )
+#preprocessings=( "raw" )
 architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
-architectures=( "VGG16" )
+architectures=( "VGG16" "DenseNet121" "Xception" )
 optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.0001" )
@@ -16,13 +16,13 @@ lambdas=( "0.0" )
 dropout_rates=( "0.1" "0.3" "0.5" "0.8" )
 dropout_rates=( "0.0" )
 folds=( "train" "val" "test" )
-folds=( "val" "test" )
+#folds=( "val" "test" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
-#outer_folds=( "1" )
+outer_folds=( "2" "3" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
-time=100
+time=45
 for target in "${targets[@]}"; do
 	for image_type in "${image_types[@]}"; do
 		for preprocessing in "${preprocessings[@]}"; do
@@ -62,7 +62,7 @@ for target in "${targets[@]}"; do
 								fi
 								if $to_run; then
 									echo Submitting job for $version
-									#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Prediction_generate.sh $target $image_type $preprocessing $architecture $optimizer $learning_rate $lambda $dropout_rate
+									sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time --x11=batch MI03A_Prediction_generate.sh $target $image_type $preprocessing $architecture $optimizer $learning_rate $lambda $dropout_rate
 								else
 									echo Predictions for $version have already been generated.
 								fi

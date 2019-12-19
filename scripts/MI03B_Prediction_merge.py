@@ -20,26 +20,24 @@ if len(sys.argv) != 3:
 target = sys.argv[1]
 fold = sys.argv[2]
 
-# load the selected features
+#load the selected features
 #Define dictionary of Predictions_tables, one for each id_set
 PREDICTIONS_TABLES={}
-#ID set A (if organ in ["PhysicalActivity"]: #different set of eids)
-#id set specific lines
-data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
-data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
-#non specific lines
-data_features.columns = ['eid', 'Sex', 'Age']
-data_features['eid'] = data_features['eid'].astype(str)
-data_features['eid'] = data_features['eid'].apply(append_ext)
-data_features = data_features.set_index('eid', drop=False)
-PREDICTIONS_TABLES['A'] = data_features
-# ID set B
-data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0'])
-data_features.columns = ['eid', 'Sex', 'Age']
-data_features['eid'] = data_features['eid'].astype(str)
-data_features['eid'] = data_features['eid'].apply(append_ext)
-data_features = data_features.set_index('eid', drop=False)
-PREDICTIONS_TABLES['B'] = data_features
+for id_set in id_sets:
+    if id_set == 'A':
+        data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
+        data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
+    elif id_set == 'B':
+        data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0'])
+    else:
+        print('ERROR: id_set must be either A or B')
+        sys.exit()
+    data_features.columns = ['eid', 'Sex', 'Age']
+    data_features['eid'] = data_features['eid'].astype(str)
+    data_features['eid'] = data_features['eid'].apply(append_ext)
+    data_features = data_features.set_index('eid', drop=False)
+    data_features.index.name = 'column_names'
+    PREDICTIONS_TABLES[id_set] = data_features
 
 #For the training set, each sample is predicted n_CV_outer_folds times, so prepare a larger dataframe to receive the predictions
 if fold == 'train':
@@ -65,7 +63,7 @@ for file_name in list_models:
         PREDICTIONS_TABLES[id_set] = PREDICTIONS_TABLES[id_set].merge(prediction, how='outer', on=['eid', 'outer_fold'])
     else:
         prediction = prediction.drop(['outer_fold'], axis=1)
-        PREDICTIONS_TABLES[id_set] = PREDICTIONS_TABLES[id_set].merge(prediction, how='outer', on=['eid'])
+        PREDICTIONS_TABLES[id_set] = PREDICTIONS_TABLES[id_set].merge(prediction, how='outer', on=['eid']) #not supported for panda version > 0.23.4 for now
 
 #remove columns for which no prediction is available, before saving the Prediction tables
 for id_set in id_sets:
