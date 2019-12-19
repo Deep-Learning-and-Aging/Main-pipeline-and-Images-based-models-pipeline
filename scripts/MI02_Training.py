@@ -13,7 +13,7 @@ from MI_helpers import *
 #load weights from previous best training results, VS. start from scratch
 continue_training = True
 #try to find a similar model among those already trained and evaluated to perform transfer learning
-max_transfer_learning = True
+max_transfer_learning = False
 #use a small subset of the data VS. run the actual full data pipeline to get accurate results
 debunk_mode = False
 #compute the metrics during training on the train and val sets VS. only compute loss (faster)
@@ -51,10 +51,7 @@ main_metric = dict_metrics[main_metric_name][functions_version]
 metrics_names = dict_metrics_names[prediction_type] if display_full_metrics else [main_metric_name]
 metrics = [dict_metrics[metric_name][functions_version] for metric_name in metrics_names]
 
-"""Determine which weights to load, if any.
-The tricky part is that for regularized models, we can initialize the weights 
-with the values of the nonregularized model if the actual weights are not 
-available."""
+#Determine which weights to load, if any.
 path_weights = path_store + 'model-weights_' + version + '.h5'
 path_load_weights, keras_weights= weights_for_transfer_learning(continue_training=continue_training, max_transfer_learning=max_transfer_learning, path_weights=path_weights, list_parameters_to_match = ['organ', 'transformation', 'field_id', 'view'])
 
@@ -97,6 +94,7 @@ elif main_metric_mode == 'min':
     baseline = np.Inf
 elif main_metric_mode == 'max':
     baseline = -np.Inf
+print('Baseline validation performance is: ' + str(baseline))
 
 #define callbacks
 callbacks = define_callbacks(path_store=path_store, version=version, baseline=baseline, continue_training=continue_training, main_metric=main_metric, main_metric_mode=main_metric_mode)

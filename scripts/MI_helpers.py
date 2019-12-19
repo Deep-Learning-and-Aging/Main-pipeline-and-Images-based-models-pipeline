@@ -39,6 +39,7 @@ import multiprocessing as mp
 from tqdm import tqdm_notebook as tqdm
 import gc
 import GPUtil
+from datetime import datetime
 
 #sklearn
 from sklearn.model_selection import train_test_split
@@ -421,7 +422,8 @@ def weights_for_transfer_learning(continue_training, max_transfer_learning, path
     
     #continue training if possible
     if continue_training and os.path.exists(path_weights):
-        return None, path_weights
+        print('Loading the weights from the model\'s previous training iteration.')
+        return path_weights, None
     
     #Look for similar models, starting from very similar to less similar
     if max_transfer_learning:
@@ -451,11 +453,12 @@ def weights_for_transfer_learning(continue_training, max_transfer_learning, path
             
             #if no similar model was found, try again after getting rid of the last selection criteria
             if(len(list_parameters_to_match) == 0):
+                print('No model found for transfer learning.')
                 break
             list_parameters_to_match.pop()
     
     #Otherwise use imagenet weights to initialize
-    print('NO MODEL FOUND FOR TRANSFER LEARNING. USING IMAGENET WEIGHTS')
+    print('Using imagenet weights.')
     return 'load_path_weights_should_not_be_used', 'imagenet'
 
 
@@ -483,6 +486,9 @@ class myModelCheckpoint(ModelCheckpoint):
         self.period = period
         self.epochs_since_last_save = 0
         
+        #custom: record the length of each epoch
+        print(datetime.now())
+        
         if mode not in ['auto', 'min', 'max']:
             warnings.warn('ModelCheckpoint mode %s is unknown, '
                           'fallback to auto mode.' % (mode),
@@ -491,10 +497,10 @@ class myModelCheckpoint(ModelCheckpoint):
         
         if mode == 'min':
             self.monitor_op = np.less
-            self.best = np.Inf
+            self.best = baseline
         elif mode == 'max':
             self.monitor_op = np.greater
-            self.best = -np.Inf
+            self.best = baseline
         else:
             if 'acc' in self.monitor or self.monitor.startswith('fmeasure'):
                 self.monitor_op = np.greater
