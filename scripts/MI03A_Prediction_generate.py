@@ -61,8 +61,8 @@ print('Starting model evaluation for version ' + version + '...')
 
 # Define Predictions dataframe dictionary
 PREDICTIONS={}
-for outer_fold in outer_folds[2:5]:
-    print('outer_fold = ' + outer_fold)
+for outer_fold in outer_folds:
+    print('Predicting samples for the outer_fold = ' + outer_fold)
     # load data_features, 
     DATA_FEATURES = load_data_features(path_store=path_store, image_field=dict_image_field_to_ids[organ + '_' + field_id], target=dict_target_to_ids[target], folds=['train', 'val', 'test'], outer_fold=outer_fold)
     # If regression target: calculate the mean and std of the target
@@ -96,8 +96,9 @@ for outer_fold in outer_folds[2:5]:
     
     # Generate predictions
     for fold in folds:
+        print('Predicting the samples in the fold: ' + fold)
         pred_batch = model.predict_generator(GENERATORS_BATCH[fold], steps=STEP_SIZES_BATCH[fold], verbose=1)
-        pred_leftovers = model.predict_generator(GENERATORS_LEFTOVERS[fold], steps=STEP_SIZES_LEFTOVERS[fold], verbose=1)
+        pred_leftovers = model.predict_generator(GENERATORS_LEFTOVERS[fold], steps=STEP_SIZES_LEFTOVERS[fold], verbose=2)
         pred_full = np.concatenate((pred_batch,  pred_leftovers)).squeeze()
         if target in targets_regression:
             pred_full = pred_full*std_train + mean_train
