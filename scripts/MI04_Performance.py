@@ -44,12 +44,12 @@ names_metrics = dict_metrics_names[dict_prediction_types[target]]
 #for normal folds, keep track of metric and bootstrapped metric's sd
 names_metrics_with_sd = []
 for name_metric in names_metrics:
-    names_metrics_with_sd.extend([name_metric, name_metric + '_sd'])
+    names_metrics_with_sd.extend([name_metric, name_metric + '_sd', name_metric + '_str'])
 
 #for the 'all' fold, also keep track of the 'folds_sd', the metric's sd calculated using the folds' metrics results
 names_metrics_with_folds_sd_and_sd = []
 for name_metric in names_metrics:
-    names_metrics_with_folds_sd_and_sd.extend([name_metric, name_metric + '_folds_sd', name_metric + '_sd'])
+    names_metrics_with_folds_sd_and_sd.extend([name_metric, name_metric + '_folds_sd', name_metric + '_sd', name_metric + '_str'])
 
 #merge all the columns together. First description of the model, then sample sizes and metrics for each fold
 names_col_Performances = ['version'] + names_model_parameters #.copy()
@@ -84,7 +84,8 @@ for id_set in id_sets:
     Performances = pd.DataFrame(Performances)
     Performances.columns = names_col_Performances
     for colname in Performances.columns.values:
-        if colname in names_model_parameters:
+        if (colname in names_model_parameters) | ('_str' in colname):
+            print(colname)
             col_type = str
         #elif colname.startswith('N_'):
         #    col_type = int
@@ -132,6 +133,7 @@ for id_set in id_sets:
                     metric_function = dict_metrics[name_metric]['sklearn']
                     Performances[name_metric + '_' + outer_fold][i] = metric_function(predictions_metric['y'], predictions_metric['pred'])
                     Performances[name_metric + '_sd_' + outer_fold][i] = bootstrap(predictions_metric, n_bootstrap, metric_function)[1]
+                    Performances[name_metric + '_str_' + outer_fold][i] = str(round(Performances[name_metric + '_' + outer_fold][i],3)) + '+-' + str(round(Performances[name_metric + '_sd_' + outer_fold][i],3))
     
     #Calculate folds_sd: standard deviation in the metrics between the different folds
     for name_metric in names_metrics:
@@ -139,10 +141,12 @@ for id_set in id_sets:
         for outer_fold in outer_folds:
             names_cols.append(name_metric + '_' + outer_fold)
         Performances[name_metric + '_folds_sd_all'] = Performances[names_cols].std(axis=1, skipna=True)
+        for i in range(len(Performances.index)):
+            Performances[name_metric + '_str_all'][i] = str(round(Performances[name_metric + '_all'][i],3)) + '+-' + str(round(Performances[name_metric + '_folds_sd_all'][i],3)) + '+-' + str(round(Performances[name_metric + '_sd_all'][i],3))
     
     #Convert float to int for sample sizes and some metrics.
     for name_col in Performances.columns.values:
-        if name_col.startswith('N_') | any(metric in name_col for metric in metrics_displayed_in_int) & (not '_sd' in name_col):
+        if name_col.startswith('N_') | any(metric in name_col for metric in metrics_displayed_in_int) & (not '_sd' in name_col) & (not '_str' in name_col):
             Performances[name_col] = Performances[name_col].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int
     
     #Merging the results of the previous Performances table with the new one
