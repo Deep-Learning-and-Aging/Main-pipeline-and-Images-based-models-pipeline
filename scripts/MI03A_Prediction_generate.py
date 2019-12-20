@@ -13,7 +13,7 @@ from MI_helpers import *
 #debunk mode: exclude train set
 debunk_mode = False
 #generate training plots
-generate_training_plots = False
+generate_training_plots = True
 #regenerate predictions if already exist TODO
 regenerate_predictions = True
 #save_predictions
@@ -54,7 +54,7 @@ batch_size = 2*dict_batch_sizes[architecture] if double_batch_size else dict_bat
 configure_gpus()
 
 #load model's architecture
-x, base_model_input = generate_base_model(architecture=architecture, weight_decay=0, dropout_rate=0, keras_weights=None)
+x, base_model_input = generate_base_model(architecture=architecture, weight_decay=weight_decay, dropout_rate=dropout_rate, keras_weights=None)
 model = complete_architecture(x=x, input_shape=base_model_input, activation=dict_activations[prediction_type], weight_decay=weight_decay, dropout_rate=dropout_rate)
 
 print('Starting model evaluation for version ' + version + '...')

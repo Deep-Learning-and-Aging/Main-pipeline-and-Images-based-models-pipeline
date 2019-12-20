@@ -486,9 +486,6 @@ class myModelCheckpoint(ModelCheckpoint):
         self.period = period
         self.epochs_since_last_save = 0
         
-        #custom: record the length of each epoch
-        print(datetime.now())
-        
         if mode not in ['auto', 'min', 'max']:
             warnings.warn('ModelCheckpoint mode %s is unknown, '
                           'fallback to auto mode.' % (mode),
@@ -626,6 +623,8 @@ def plot_training(path_store, version, display_learning_rate):
     logger.columns = [name[:-2] if name.endswith('_K') else name for name in logger.columns]
     metrics_names = [metric[4:] for metric in logger.columns.values if metric.startswith('val_')]
     logger.columns = ['train_' + name if name in metrics_names else name for name in logger.columns]
+    #rewrite epochs numbers based on nrows, because several loggers might have been appended if the model has been retrained.
+    logger['epoch'] = [i+1 for i in range(len(logger.index))]
     #multiplot layout
     n_rows=3
     n_metrics = len(metrics_names)

@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p short
+#SBATCH -p priority
 #SBATCH --open-mode=truncate
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=alanlegoallec@g.harvard.edu

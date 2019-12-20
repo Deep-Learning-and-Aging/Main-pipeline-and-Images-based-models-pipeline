@@ -20,9 +20,13 @@ if len(sys.argv) != 3:
 target = sys.argv[1]
 fold = sys.argv[2]
 
+#TODO get rid of line below. temporary debug only
+path_store = '../data5/'
+
 #options
 debug_mode = True
-save_performances = True
+regenerate_performances = False
+save_performances = False
 
 if debug_mode:
     n_bootstrap = 10
@@ -58,10 +62,23 @@ for outer_fold in outer_folds:
 
 #Fill the Performances tables (one for each id_set)
 for id_set in id_sets:
-    #Generate the Performance table from the rows and columns
-    Predictions_table = pd.read_csv(path_store + 'Predictions_' + target + '_' + fold + '_' + id_set + '.csv')
-    PERFORMANCES = []
+    #Move on to next id set if no predictions table is available
+    try:
+        Predictions_table = pd.read_csv(path_store + 'Predictions_' + target + '_' + fold + '_' + id_set + '.csv')
+    except:
+        break
+    #Generate the Performance table from the rows and columns.
     list_models = [col for col in Predictions_table.columns if 'Pred' in col]
+    #load the previously calculated Performances table and only compute performance for new models
+    if (not regenerate_performances) & os.path.exists(path_store + 'Performances_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv'):
+        Performances_previous = pd.read_csv(path_store + 'Performances_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv')
+        #TODO delete line below, debug only
+        Performances_previous = Performances_previous.iloc[[-1],:]
+        list_models = [model for model in list_models if model.replace('Pred_', '') not in Performances_previous['version'].values]
+        if(len(list_models) == 0):
+            print('No new models need to be evaluated in the prediction table ' + 'Predictions_' + target + '_' + fold + '_' + id_set + '.csv')
+            break
+    print(str(len(list_models)) + ' new models need to be evaluated.')
     Performances = np.empty((len(list_models),len(names_col_Performances),))
     Performances.fill(np.nan)
     Performances = pd.DataFrame(Performances)
@@ -115,23 +132,33 @@ for id_set in id_sets:
                     metric_function = dict_metrics[name_metric]['sklearn']
                     Performances[name_metric + '_' + outer_fold][i] = metric_function(predictions_metric['y'], predictions_metric['pred'])
                     Performances[name_metric + '_sd_' + outer_fold][i] = bootstrap(predictions_metric, n_bootstrap, metric_function)[1]
+    
     #Calculate folds_sd: standard deviation in the metrics between the different folds
     for name_metric in names_metrics:
         names_cols =[]
         for outer_fold in outer_folds:
             names_cols.append(name_metric + '_' + outer_fold)
         Performances[name_metric + '_folds_sd_all'] = Performances[names_cols].std(axis=1, skipna=True)
+    
     #Convert float to int for sample sizes and some metrics.
     for name_col in Performances.columns.values:
         if name_col.startswith('N_') | any(metric in name_col for metric in metrics_displayed_in_int) & (not '_sd' in name_col):
             Performances[name_col] = Performances[name_col].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int
+    
+    #Merging the results of the previous Performances table with the new one
+    try:
+        Performances = pd.concat([Performances_previous,Performances], axis=0)
+    except:
+        print('No previous Performances table to to merge with.')
+    
     #Ranking, printing and saving
+    Performances_alphabetical = Performances.sort_values(by='version')
     print('Performances of the models ranked by models\'names:')
-    print(Performances)
+    print(Performances_alphabetical)
     Performances_sorted = Performances.sort_values(by=dict_main_metrics_names[target] + '_all', ascending=main_metrics_modes[dict_main_metrics_names[target]] == 'min')
     print('Performances of the models ranked by validation score on the main metric:')
     print(Performances_sorted)
     if save_performances:
-        Performances.to_csv(path_store + 'Performances_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
+        Performances_alphabetical.to_csv(path_store + 'Performances_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
         Performances_sorted.to_csv(path_store + 'Performances_ranked_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
 

@@ -1,8 +1,9 @@
 #!/bin/bash
 transformations=( "raw" "contrast" )
-memory=8G
+#transformations=( "raw" )
+memory=4G
 n_cpu_cores=1
-time=150
+time=120
 for transformation in "${transformations[@]}"; do
 	version=MI00_${transformation}
 	job_name="$version.job"

@@ -1,7 +1,7 @@
 #!/bin/bash
 targets=( "Age" "Sex" )
 #targets=( "Age" )
-image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
+image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allchambersRGB" )
 image_types=( "Liver_20204_main" )
 preprocessings=( "raw" "contrast" )
 #preprocessings=( "raw" )
@@ -29,7 +29,7 @@ for target in "${targets[@]}"; do
 						for lambda in "${lambdas[@]}"; do
 							for dropout_rate in "${dropout_rates[@]}"; do
 								for outer_fold in "${outer_folds[@]}"; do
-								version=M02_${target}_${image_type}_${preprocessing}_${architecture}_${optimizer}_${learning_rate}_${lambda}_${dropout_rate}_${outer_fold}
+								version=MI02_${target}_${image_type}_${preprocessing}_${architecture}_${optimizer}_${learning_rate}_${lambda}_${dropout_rate}_${outer_fold}
 								job_name="$version.job"
 								out_file="../eo/$version.out"
 								err_file="../eo/$version.err"
