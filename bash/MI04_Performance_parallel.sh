@@ -3,9 +3,12 @@ targets=( "Age" "Sex" )
 folds=( "train" "val" "test" )
 memory=8G
 n_cpu_cores=1
-time=60
+time=5
 for target in "${targets[@]}"; do
 	for fold in "${folds[@]}"; do
+		if [ $fold = "train" ]; then
+			time=$(( 8*$time ))
+		fi
 		version=MI04_${target}_${fold}
 		job_name="$version.job"
 		out_file="../eo/$version.out"

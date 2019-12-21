@@ -510,8 +510,8 @@ def define_callbacks(path_store, version, baseline, continue_training, main_metr
     csv_logger = CSVLogger(path_store + 'logger_' + version + '.csv', separator=',', append=continue_training)
     model_checkpoint = myModelCheckpoint(path_store + 'model-weights_' + version + '.h5', monitor='val_' + main_metric.__name__, baseline=baseline, verbose=1, save_best_only=True, save_weights_only=True, mode=main_metric_mode, period=1)
     model_checkpoint_backup = myModelCheckpoint(path_store + 'backup-model-weights_' + version + '.h5', monitor='val_' + main_metric.__name__, baseline=baseline, verbose=1, save_best_only=True, save_weights_only=True, mode=main_metric_mode, period=1)
-    reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=2, verbose=1, mode='min', min_delta=0.0001, cooldown=0, min_lr=0)
-    early_stopping = EarlyStopping(monitor= 'val_' + main_metric.__name__, min_delta=0, patience=10, verbose=0, mode=main_metric_mode, baseline=None, restore_best_weights=False)
+    reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=2, verbose=1, mode='min', min_delta=0, cooldown=0, min_lr=0)
+    early_stopping = EarlyStopping(monitor= 'val_' + main_metric.__name__, min_delta=0, patience=5, verbose=0, mode=main_metric_mode, baseline=None, restore_best_weights=False)
     return [csv_logger, model_checkpoint, model_checkpoint_backup, reduce_lr_on_plateau, early_stopping]
 
 def R2_K(y_true, y_pred):

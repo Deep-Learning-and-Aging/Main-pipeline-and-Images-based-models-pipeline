@@ -1,8 +1,8 @@
 #!/bin/bash
 #set -u
-regenerate_predictions=false
+regenerate_predictions=true
 targets=( "Age" "Sex" )
-targets=( "Age" )
+#targets=( "Age" )
 image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
 image_types=( "Liver_20204_main" )
 preprocessings=( "raw" "contrast" )

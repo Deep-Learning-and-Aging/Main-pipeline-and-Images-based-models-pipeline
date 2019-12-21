@@ -13,8 +13,9 @@ from MI_helpers import *
 if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
-    sys.argv.append('Sex') #target
+    sys.argv.append('Age') #target
     sys.argv.append('val') #inner fold
+    
 
 for id_set in id_sets:
     Predictions = pd.read_csv(path_store + 'Predictions_' + target + '_' + fold + '_' + id_set + '.csv')
