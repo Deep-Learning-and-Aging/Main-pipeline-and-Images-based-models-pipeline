@@ -2,9 +2,10 @@
 targets=( "Age" "Sex" )
 targets=( "Age" )
 image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
-image_types=( "Liver_20204_main" )
+image_types=( "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
+#image_types=( "Liver_20204_main" )
 preprocessings=( "raw" "contrast" )
-#preprocessings=( "raw" )
+preprocessings=( "raw" )
 architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "VGG19" "MobileNet" "MobileNetV2" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "VGG16" "DenseNet121" "Xception" )
@@ -15,12 +16,12 @@ lambdas=( "0.0" )
 dropout_rates=( "0.0" )
 #dropout_rates=( "0.1" "0.3" "0.5" "0.8" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
-outer_folds=( "1" "2" "3" "4" "5" "6" "7" "8" "9" )
+#outer_folds=( "1" "2" "3" "4" "5" "6" "7" "8" "9" )
 #outer_folds=( "0" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
-time=300
+time=500
 #time=150
 for target in "${targets[@]}"; do
 	for image_type in "${image_types[@]}"; do
