@@ -81,6 +81,7 @@ id_sets = ['A', 'B']
 dict_organ_to_idset={'PhysicalActivity':'A', 'Liver':'B', 'Heart':'B'}
 metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
 metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
+modes = ['', '_sd', '_str']
 
 #define dictionary of batch sizes to fit as many samples as the model's architecture allows
 dict_batch_sizes = dict.fromkeys(['NASNetMobile'], 128)
@@ -435,7 +436,7 @@ def weights_for_transfer_learning(continue_training, max_transfer_learning, path
                 parameters_to_match = parameters.copy()
                 parameters_to_match['target'] = target_to_load
                 #load the ranked performances table to select the best performing model among the similar models available
-                path_performances_to_load = path_store + 'Performances_ranked_' + parameters_to_match['target'] + '_' + 'val' + '_' + dict_eids_version[parameters['organ']] + '.csv'
+                path_performances_to_load = path_store + 'PERFORMANCES_ranked_' + parameters_to_match['target'] + '_' + 'val' + '_' + dict_eids_version[parameters['organ']] + '.csv'
                 try:
                     Performances = pd.read_csv(path_performances_to_load)
                     Performances['field_id'] = Performances['field_id'].astype(str)

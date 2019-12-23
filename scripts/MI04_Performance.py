@@ -117,7 +117,6 @@ for id_set in id_sets:
                 predictions_fold = predictions_model[predictions_model['outer_fold'] == outer_fold]
             
             #if no samples are available for this fold, fill columns with nans
-            sample_sizes_fold = []
             if(len(predictions_fold.index) == 0):
                 print('NO SAMPLES AVAILABLE FOR MODEL ' + model + ' IN OUTER_FOLD ' + outer_fold)                    
             else:
