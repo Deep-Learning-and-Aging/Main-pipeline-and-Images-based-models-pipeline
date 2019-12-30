@@ -1,7 +1,7 @@
 #!/bin/bash
 targets=( "Age" "Sex" )
 folds=( "train" "val" "test" )
-memory=8G
+memory=16G
 n_cpu_cores=1
 time=60
 for target in "${targets[@]}"; do

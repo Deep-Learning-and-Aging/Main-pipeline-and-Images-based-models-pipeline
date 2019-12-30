@@ -10,8 +10,8 @@ Created on Fri Dec  6 11:29:53 2019
 from MI_helpers import *
 
 #options
-#debunk mode: exclude train set
-debunk_mode = False
+#debug mode: exclude train set
+debug_mode = True
 #generate training plots
 generate_training_plots = False
 #regenerate predictions if already exist TODO
@@ -24,9 +24,9 @@ if len(sys.argv) != 9:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age') #target
-    sys.argv.append('Heart_20208_2chambers') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
-    sys.argv.append('raw') #transformation
-    sys.argv.append('DenseNet121') #architecture
+    sys.argv.append('Liver_20204_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
+    sys.argv.append('contrast') #transformation
+    sys.argv.append('NASNetLarge') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
     sys.argv.append('0.0') #weight decay
@@ -41,8 +41,8 @@ dir_images = dir_images = path_store + '../images/' + organ + '/' + field_id + '
 prediction_type = dict_prediction_types[target]
 image_size = input_size_models[architecture]
 
-#debunk mode: exclude train set
-if debunk_mode:
+#debug mode: exclude train set
+if debug_mode:
     folds = ['val', 'test']
 
 #double the batch size for the teslaM40 cores that have bigger memory
@@ -99,7 +99,7 @@ for outer_fold in outer_folds:
         print('Predicting the samples in the fold: ' + fold)
         pred_batch = model.predict_generator(GENERATORS_BATCH[fold], steps=STEP_SIZES_BATCH[fold], verbose=0)
         pred_leftovers = model.predict_generator(GENERATORS_LEFTOVERS[fold], steps=STEP_SIZES_LEFTOVERS[fold], verbose=0)
-        pred_full = np.concatenate((pred_batch,  pred_leftovers)).squeeze()
+        pred_full = np.concatenate((pred_batch, pred_leftovers)).squeeze()
         if target in targets_regression:
             pred_full = pred_full*std_train + mean_train
         DATA_FEATURES[fold]['Pred_' + version] = pred_full
