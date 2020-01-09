@@ -9,4 +9,5 @@ module load python/3.6.0
 module load cuda/10.0
 source ~/python_3.6.0/bin/activate
 python -u ../scripts/MI00_Images_formatting.py $1
+echo "PYTHON SCRIPT COMPLETED"
 

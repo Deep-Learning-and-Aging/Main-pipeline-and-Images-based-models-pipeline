@@ -27,3 +27,6 @@ n_cpus = len(os.sched_getaffinity(0))
 #generate data_features
 DATA_FEATURES = generate_data_features(image_field=image_field, organ=organ, target=target, dir_images=dict_default_dir_images[image_field], image_quality_id=image_quality_ids[organ])
 
+#exit
+print('Done.')
+sys.exit(0)

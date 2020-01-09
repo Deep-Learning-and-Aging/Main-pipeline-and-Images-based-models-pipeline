@@ -2,11 +2,13 @@
 targets=( "Age" "Sex" )
 targets=( "Age" )
 image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
-image_types=( "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
-#image_types=( "Liver_20204_main" )
+image_types=( "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
+#image_types=( "Heart_20208_allviewsRGB" )
 transformations=( "raw" "contrast" )
 transformations=( "raw" )
+transformations=( "contrast" )
 architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
+architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "VGG19" "MobileNet" "MobileNetV2" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "VGG16" "DenseNet121" "Xception" )
 optimizers=( "Adam" "RMSprop" "Adadelta" )
@@ -32,7 +34,7 @@ for target in "${targets[@]}"; do
 						for weight_decay in "${weight_decays[@]}"; do
 							for dropout_rate in "${dropout_rates[@]}"; do
 								for outer_fold in "${outer_folds[@]}"; do
-								version=MI02_${target}_${image_type}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${lambda}_${dropout_rate}_${outer_fold}
+								version=MI02_${target}_${image_type}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${outer_fold}
 								job_name="$version.job"
 								out_file="../eo/$version.out"
 								err_file="../eo/$version.err"

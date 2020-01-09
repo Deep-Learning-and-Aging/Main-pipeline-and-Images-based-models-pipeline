@@ -104,4 +104,7 @@ gc.collect()
 
 #train the model
 model.fit_generator(generator=GENERATORS['train'], steps_per_epoch=STEP_SIZES['train'], validation_data=GENERATORS['val'], validation_steps=STEP_SIZES['val'], use_multiprocessing = True, workers=n_cpus, epochs=n_epochs_max, class_weight=class_weights, callbacks=callbacks, verbose=2)
+
+#exit
 print('\nTHE MODEL CONVERGED!\n')
+sys.exit(0)

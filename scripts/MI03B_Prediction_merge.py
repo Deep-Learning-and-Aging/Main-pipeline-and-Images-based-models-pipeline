@@ -70,4 +70,6 @@ for id_set in id_sets:
     PREDICTIONS_TABLES[id_set].dropna(subset=[col for col in PREDICTIONS_TABLES[id_set].columns if 'Pred' in col], how='all', inplace=True)
     PREDICTIONS_TABLES[id_set].to_csv(path_store + 'PREDICTIONS_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
 
-print("Done")
+#exit
+print('Done.')
+sys.exit(0)
