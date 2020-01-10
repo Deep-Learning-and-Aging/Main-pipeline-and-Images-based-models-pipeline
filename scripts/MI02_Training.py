@@ -23,15 +23,15 @@ display_full_metrics = False
 if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
-    sys.argv.append('Sex') #target
-    sys.argv.append('Heart_20208_3chambers') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
+    sys.argv.append('Age') #target
+    sys.argv.append('Liver_20204_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
-    sys.argv.append('VGG16') #architecture
+    sys.argv.append('InceptionResNetV2') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
     sys.argv.append('0.0') #weight decay
     sys.argv.append('0.0') #dropout
-    sys.argv.append('0') #outer_fold
+    sys.argv.append('4') #outer_fold
 
 #read parameters from command
 target, image_type, organ, field_id, view, transformation, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
@@ -85,7 +85,11 @@ set_learning_rate(model=model, optimizer=optimizer, learning_rate=learning_rate,
 
 #load weights to continue training
 if keras_weights == None:
-    model.load_weights(path_load_weights)
+    try:
+        model.load_weights(path_load_weights)
+    except:
+        #load backup weights if the main weights are corrupted
+        model.load_weights(path_load_weights.replace('model-weights', 'backup-model-weights'))
 
 #calculate initial val_loss value
 if continue_training:
