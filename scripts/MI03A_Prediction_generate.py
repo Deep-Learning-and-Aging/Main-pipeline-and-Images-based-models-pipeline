@@ -14,9 +14,9 @@ from MI_helpers import *
 debug_mode = True
 #generate training plots
 generate_training_plots = False
-#regenerate predictions if already exist TODO
+#regenerate predictions even if already exists
 regenerate_predictions = True
-#save_predictions
+#save predictions
 save_predictions = True
 
 #default parameters
@@ -91,11 +91,14 @@ for outer_fold in outer_folds:
             model.load_weights(path_store + 'backup-model-weights_' + model_version + '.h5')
             print('THE FILE FOR THE WEIGHTS ' + model_version + ' COULD NOT BE OPENED. USING THE BACKUP INSTEAD.')
         except:
-            print('NEITHER THE NORMAL NOR THE BACKUP FILE FOR THE WEIGHTS ' + model_version + ' COULD BE OPENED. MOVING ON TO THE NEXT MODEL.')
+            print('NEITHER THE NORMAL NOR THE BACKUP FILES FOR THE WEIGHTS ' + model_version + ' COULD BE OPENED. MOVING ON TO THE NEXT MODEL.')
             break
     
     # Generate predictions
     for fold in folds:
+        #only generate if predictions do not exist yet or if regenerate_predictions is true
+        if os.path.exists(path_store + 'Predictions_' + version + '_' + fold + '.csv') and (not regenerate_predictions):
+            break
         print('Predicting the samples in the fold: ' + fold)
         pred_batch = model.predict_generator(GENERATORS_BATCH[fold], steps=STEP_SIZES_BATCH[fold], verbose=0)
         pred_leftovers = model.predict_generator(GENERATORS_LEFTOVERS[fold], steps=STEP_SIZES_LEFTOVERS[fold], verbose=0)

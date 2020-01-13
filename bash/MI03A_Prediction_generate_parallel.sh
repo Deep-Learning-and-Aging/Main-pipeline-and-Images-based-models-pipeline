@@ -1,5 +1,4 @@
 #!/bin/bash
-#set -u
 regenerate_predictions=true
 targets=( "Age" "Sex" )
 #targets=( "Age" )
