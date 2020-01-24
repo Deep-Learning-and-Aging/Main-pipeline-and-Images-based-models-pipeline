@@ -1,13 +1,16 @@
 #!/bin/bash
 regenerate_predictions=true
 targets=( "Age" "Sex" )
-#targets=( "Age" )
+targets=( "Age" )
 image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
 image_types=( "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
+#image_types=( "Heart_20208_2chambers" )
+image_types=( "PhysicalActivity_90001_main" )
 transformations=( "raw" "contrast" )
-#transformations=( "raw" )
+transformations=( "raw" )
 architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "VGG16" "DenseNet121" "Xception" )
+#architectures=( "VGG19" )
 optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.0001" )
@@ -42,6 +45,10 @@ for target in "${targets[@]}"; do
 									if ! test -f $path_weights; then
 										missing_weights=true
 										echo The weights at $path_weights cannot be found. The job cannot be run.
+										#some weights are missing despite having an associated .out file with "THE MODEL CONVERGED!"
+										#delete these files to allow the model to be run during phase MI02.
+										rm "../eo/MI02_${version}_${outer_fold}.out"
+										rm "../eo/MI02_${version}_${outer_fold}.err"
 										break
 									fi
 								done
@@ -61,7 +68,7 @@ for target in "${targets[@]}"; do
 								fi
 								if $to_run; then
 									echo Submitting job for $version
-									sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time --x11=batch MI03A_Prediction_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
+									#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time --x11=batch MI03A_Prediction_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
 								else
 									echo Predictions for $version have already been generated.
 								fi

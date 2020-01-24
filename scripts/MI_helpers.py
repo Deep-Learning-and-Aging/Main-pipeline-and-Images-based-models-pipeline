@@ -18,6 +18,7 @@ import pickle
 import tarfile
 import shutil
 import pyreadr
+import fnmatch
 
 #maths
 import numpy as np
@@ -46,7 +47,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, precision_score, recall_score, confusion_matrix, precision_recall_curve, average_precision_score
 from sklearn.utils import class_weight, resample
 
-
 #tensorflow
 import tensorflow as tf
 from tensorflow import set_random_seed
@@ -67,7 +67,7 @@ names_model_parameters = ['target', 'organ', 'field_id', 'view', 'transformation
 dict_prediction_types={'Age':'regression', 'Sex':'binary'}
 dict_losses_names={'regression':'MSE', 'binary':'Binary-Crossentropy', 'multiclass':'categorical_crossentropy'}
 dict_main_metrics_names={'Age':'R-Squared', 'Sex':'ROC-AUC', 'imbalanced_binary_placeholder':'F1-Score'}
-main_metrics_modes={'loss':'min', 'R-Squared':'max', 'ROC-AUC':'max', 'imbalanced_binary_placeholder':'F1-Score'}
+main_metrics_modes={'loss':'min', 'R-Squared':'max', 'ROC-AUC':'max'}
 dict_metrics_names={'regression':['RMSE', 'R-Squared'], 'binary':['ROC-AUC', 'F1-Score', 'PR-AUC', 'Binary-Accuracy', 'Sensitivity', 'Specificity', 'Precision', 'Recall', 'True-Positives', 'False-Positives', 'False-Negatives', 'True-Negatives'], 'multiclass':['Categorical-Accuracy']}
 dict_activations={'regression':'linear', 'binary':'sigmoid', 'multiclass':'softmax', 'saliency':'linear'}
 folds = ['train', 'val', 'test']
@@ -646,6 +646,56 @@ def plot_training(path_store, version, display_learning_rate):
     #save figure as pdf before closing
     fig.savefig("../figures/Training_" + version + '.pdf', bbox_inches='tight')
     plt.close('all')
+
+def build_ensemble_model(Performances_subset, Predictions, y, main_metric_function, main_metric_mode):
+    best_perf = -np.Inf if main_metric_mode == 'max' else np.Inf
+    ENSEMBLE_COLS={'select':[], 'all':[]}
+    #iteratively add models to the ensemble
+    for i, version in enumerate(Performances_subset['version']):
+        #added_pred_name = 'Pred_' + version
+        #TODO remove below keep above
+        added_pred_name = 'Pred_' + version.replace('_str.csv','')
+        for ensemble_type in ENSEMBLE_COLS.keys():
+            #print(ensemble_type)
+            ENSEMBLE_COLS[ensemble_type].append(added_pred_name)
+            Ensemble_predictions = Predictions[ENSEMBLE_COLS[ensemble_type]].mean(axis=1)
+            df_ensemble = pd.concat([y, Ensemble_predictions], axis=1).dropna()
+            df_ensemble.columns = ['y', 'pred']
+            #evaluate the ensemble predictions
+            new_perf = main_metric_function(df_ensemble['y'],df_ensemble['pred'])
+            if new_perf > best_perf:
+                #print('BETTER! ')
+                best_perf = new_perf
+                best_pred = df_ensemble['pred']
+                best_ensemble_namecols = ENSEMBLE_COLS[ensemble_type].copy()
+                #print('New best performance = ' + str(round(best_perf, 4)) + ', using the ensemble type: ' + ensemble_type)
+            elif ensemble_type == 'select':
+                #print('The new ensemble did not perform as well: ' + str(round(new_perf, 4)))
+                ENSEMBLE_COLS[ensemble_type].pop()
+    return best_ensemble_namecols
+
+#returns True if the dataframe is a single column duplicated. Used to check if the folds are the same for the entire ensemble model
+def is_rank_one(df):
+    for i in range(len(df.columns)):
+        for j in range(i+1,len(df.columns)):
+            if not df.iloc[:,i].equals(df.iloc[:,j]):
+                return False
+    return True 
+
+def update_predictions_with_ensemble(PREDICTIONS, version, id_set, folds, Performances_subset, Predictions, y, main_metric_function, main_metric_mode):
+    best_ensemble_namecols = build_ensemble_model(Performances_subset, Predictions, y, main_metric_function, main_metric_mode)
+    best_ensemble_outerfolds = [model_name.replace('Pred_', 'outer_fold_') for model_name in best_ensemble_namecols]
+    Ensemble_predictions = Predictions[best_ensemble_namecols].mean(axis=1)
+    Ensemble_outerfolds = Predictions[best_ensemble_outerfolds]
+    for fold in folds:
+        PREDICTIONS[id_set][fold]['Ensemble_Pred_' + version] = Ensemble_predictions
+        if is_rank_one(Ensemble_outerfolds):
+            print('The folds were shared by all the models in the ensemble models. Saving the folds too.')
+            PREDICTIONS[id_set][fold]['Ensemble_outer_fold_' + version] = Ensemble_outerfolds.mean(axis=1)
+            print(PREDICTIONS[id_set][fold]['Ensemble_outer_fold_' + version])
+        else:
+            PREDICTIONS[id_set][fold]['Ensemble_outer_fold_' + version] = np.nan    
+
 
 ### PARAMETERS THAT DEPEND ON FUNCTIONS
 
