@@ -3,14 +3,17 @@ regenerate_predictions=true
 targets=( "Age" "Sex" )
 targets=( "Age" )
 image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
-image_types=( "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
+#image_types=( "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
 #image_types=( "Heart_20208_2chambers" )
-image_types=( "PhysicalActivity_90001_main" )
-transformations=( "raw" "contrast" )
-transformations=( "raw" )
+#image_types=( "PhysicalActivity_90001_main" )
+image_types=( "Liver_20204_main" )
+transformations_images=( "raw" "contrast" )
+#transformations_images=( "raw" )
+transformations_images=( "contrast" )
+transformations_PA=( "raw" )
 architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
-#architectures=( "VGG16" "DenseNet121" "Xception" )
-#architectures=( "VGG19" )
+architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
+architectures=( "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.0001" )
@@ -27,6 +30,11 @@ n_gpus=1
 time=300
 for target in "${targets[@]}"; do
 	for image_type in "${image_types[@]}"; do
+		if [ $image_type == "PhysicalActivity_90001_main" ]; then
+			transformations=("${transformations_PA[@]}")
+		else
+			transformations=("${transformations_images[@]}")
+		fi
 		for transformation in "${transformations[@]}"; do
 			for architecture in "${architectures[@]}"; do
 				for optimizer in "${optimizers[@]}"; do
@@ -47,9 +55,9 @@ for target in "${targets[@]}"; do
 										echo The weights at $path_weights cannot be found. The job cannot be run.
 										#some weights are missing despite having an associated .out file with "THE MODEL CONVERGED!"
 										#delete these files to allow the model to be run during phase MI02.
-										rm "../eo/MI02_${version}_${outer_fold}.out"
-										rm "../eo/MI02_${version}_${outer_fold}.err"
-										break
+										#rm "../eo/MI02_${version}_${outer_fold}.out"
+										#rm "../eo/MI02_${version}_${outer_fold}.err"
+										#break
 									fi
 								done
 								if $missing_weights; then
@@ -68,7 +76,7 @@ for target in "${targets[@]}"; do
 								fi
 								if $to_run; then
 									echo Submitting job for $version
-									#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time --x11=batch MI03A_Prediction_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
+									sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time --x11=batch MI03A_Prediction_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
 								else
 									echo Predictions for $version have already been generated.
 								fi

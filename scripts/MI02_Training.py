@@ -24,14 +24,14 @@ if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age') #target
-    sys.argv.append('Liver_20204_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
+    sys.argv.append('Heart_20208_2chambers') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
-    sys.argv.append('InceptionResNetV2') #architecture
+    sys.argv.append('DenseNet169') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
     sys.argv.append('0.0') #weight decay
     sys.argv.append('0.0') #dropout
-    sys.argv.append('4') #outer_fold
+    sys.argv.append('0') #outer_fold
 
 #read parameters from command
 target, image_type, organ, field_id, view, transformation, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
@@ -90,6 +90,10 @@ if keras_weights == None:
     except:
         #load backup weights if the main weights are corrupted
         model.load_weights(path_load_weights.replace('model-weights', 'backup-model-weights'))
+else:
+    #save imagenet weights as baseline in case no better weights can be found before convergence
+    model.save_weights(path_weights.replace('model-weights', 'backup-model-weights'))
+    model.save_weights(path_weights)
 
 #calculate initial val_loss value
 if continue_training:

@@ -18,6 +18,11 @@ if len(sys.argv) != 2:
 #read parameters from command
 target = sys.argv[1]
 
+#TODO TEMP DEBUG
+
+folds = folds[1:]
+id_sets=['B']
+
 #set other parameters
 parameters = {'target':target, 'organ':'*', 'field_id':'*', 'view':'*', 'transformation':'*', 'architecture':'*', 'optimizer':'*', 'learning_rate':'*', 'weight_decay':'*', 'dropout_rate':'*'}
 version = parameters_to_version(parameters)
@@ -25,17 +30,18 @@ main_metric_name = dict_main_metrics_names[target]
 main_metric_function = dict_metrics[main_metric_name]['sklearn']
 main_metric_mode = main_metrics_modes[main_metric_name]
 init_perf = -np.Inf if main_metrics_modes[main_metric_name] == 'max' else np.Inf
-Performances = pd.read_csv(path_store + 'PERFORMANCES_ranked_' + target + '_val.csv')
+Performances = pd.read_csv(path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + target + '_val.csv')
 
 #compute the new prediction for each inner fold, and save them in the Predictions dataframes
 PREDICTIONS={}
 for id_set in id_sets:
     PREDICTIONS[id_set] = {}
     for fold in folds:
-        PREDICTIONS[id_set][fold] = pd.read_csv(path_store + 'PREDICTIONS_' + target + '_' + fold + '_' + id_set + '.csv')
+        PREDICTIONS[id_set][fold] = pd.read_csv(path_store + 'PREDICTIONS_withoutEnsembles_' + target + '_' + fold + '_' + id_set + '.csv')
+    
     Predictions = PREDICTIONS[id_set]['val']
     y = Predictions[target]
-
+    print(id_set)
     #Compute the most general Ensemble model
     Performances_subset = Performances[Performances['version'].isin(fnmatch.filter(Performances['version'], version))]
     update_predictions_with_ensemble(PREDICTIONS, version, id_set, folds, Performances_subset, Predictions, y, main_metric_function, main_metric_mode)

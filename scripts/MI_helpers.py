@@ -647,6 +647,112 @@ def plot_training(path_store, version, display_learning_rate):
     fig.savefig("../figures/Training_" + version + '.pdf', bbox_inches='tight')
     plt.close('all')
 
+def preprocess_data_features_predictions_for_performances(path_store, id_set, target):
+    #load dataset
+    if id_set == 'A':
+        data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
+        data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
+    elif id_set == 'B':
+        data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0'])
+    else:
+        print('ERROR: id_set must be either A or B')
+        sys.exit(0)
+    #format data_features to extract y
+    data_features.columns = ['eid', 'Sex', 'Age']
+    data_features.rename(columns={target:'y'}, inplace=True)
+    data_features = data_features[['eid', 'y']]
+    data_features['eid'] = data_features['eid'].astype(str)
+    data_features['eid'] = data_features['eid'].apply(append_ext)
+    data_features = data_features.set_index('eid', drop=False)
+    data_features.index.name = 'column_names'
+    return data_features
+
+def preprocess_predictions_for_performances(data_features, path_store, version, fold):
+    #load Predictions the initial dataframe to extract 'y'
+    Predictions = pd.read_csv(path_store + 'Predictions_' + version + '_' + fold + '.csv')
+    Predictions.rename(columns={'Pred_' + version:'pred'}, inplace=True)
+    Predictions = Predictions.merge(data_features, how='inner', on=['eid'])
+    return Predictions
+
+#Initialize performances dataframes and compute sample sizes
+def initiate_empty_performances_df(Predictions, target, names_metrics):
+    #Define an empty performances dataframe to store the performances computed
+    row_names = ['all'] + outer_folds
+    col_names_sample_sizes = ['N']
+    if target in targets_binary:
+        col_names_sample_sizes.extend(['N_0', 'N_1'])
+    col_names = col_names_sample_sizes.copy()
+    col_names.extend(names_metrics)
+    performances = np.empty((len(row_names),len(col_names),))
+    performances.fill(np.nan)
+    performances = pd.DataFrame(performances)
+    performances.index = row_names
+    performances.columns = col_names
+    #Convert float to int for sample sizes and some metrics.
+    for col_name in col_names_sample_sizes:
+        performances[col_name] = performances[col_name].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int
+    
+    #compute sample sizes for the data frame
+    performances.loc['all', 'N'] = len(Predictions.index)
+    if target in targets_binary:
+        performances.loc['all', 'N_0'] = len(Predictions.loc[Predictions['y']==0].index)
+        performances.loc['all', 'N_1'] = len(Predictions.loc[Predictions['y']==1].index)
+    for outer_fold in outer_folds:
+        performances.loc[outer_fold, 'N'] = len(Predictions.loc[Predictions['outer_fold']==int(outer_fold)].index)
+        if target in targets_binary:
+            performances.loc[outer_fold, 'N_0'] = len(Predictions.loc[(Predictions['outer_fold']==int(outer_fold)) & (Predictions['y']==0)].index)
+            performances.loc[outer_fold, 'N_1'] = len(Predictions.loc[(Predictions['outer_fold']==int(outer_fold)) & (Predictions['y']==1)].index)
+            
+    #initialize the dataframes
+    PERFORMANCES={}
+    for mode in modes:
+        PERFORMANCES[mode] = performances.copy()
+    
+    #Convert float to int for sample sizes and some metrics.
+    for col_name in PERFORMANCES[''].columns.values:
+        if any(metric in col_name for metric in metrics_displayed_in_int):
+            PERFORMANCES[''][col_name] = PERFORMANCES[''][col_name].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int
+    
+    return PERFORMANCES
+
+#Fill the columns for this model, outer_fold by outer_fold
+def fill_performances_matrix_for_single_model(PERFORMANCES, Predictions, target, version, names_metrics, save_performances):
+    for outer_fold in ['all'] + outer_folds:
+        print('Calculating the performances for the outer fold ' + outer_fold)
+        #Generate a subdataframe from the predictions table for each outerfold
+        if outer_fold == 'all':
+            predictions_fold = Predictions.copy()
+        else:
+            predictions_fold = Predictions.loc[Predictions['outer_fold'] == int(outer_fold),:]
+        
+        #if no samples are available for this fold, fill columns with nans
+        if(len(predictions_fold.index) == 0):
+            print('NO SAMPLES AVAILABLE FOR MODEL ' + version + ' IN OUTER_FOLD ' + outer_fold)                    
+        else:
+            #For binary classification, generate class prediction
+            if target in targets_binary:
+                predictions_fold_class = predictions_fold.copy()
+                predictions_fold_class['pred'] = predictions_fold_class['pred'].round()
+            
+            #Fill the Performances dataframe metric by metric
+            for name_metric in names_metrics:
+                #print('Calculating the performance using the metric ' + name_metric)
+                predictions_metric = predictions_fold_class if name_metric in metrics_needing_classpred else predictions_fold
+                metric_function = dict_metrics[name_metric]['sklearn']
+                PERFORMANCES[''].loc[outer_fold, name_metric] = metric_function(predictions_metric['y'], predictions_metric['pred'])
+                PERFORMANCES['_sd'].loc[outer_fold, name_metric] = bootstrap(predictions_metric, n_bootstrap, metric_function)[1]
+                PERFORMANCES['_str'].loc[outer_fold, name_metric] = "{:.3f}".format(PERFORMANCES[''].loc[outer_fold, name_metric]) + '+-' + "{:.3f}".format(PERFORMANCES['_sd'].loc[outer_fold, name_metric])
+    
+    #calculate the fold sd (variance between the metrics values obtained on the different folds)
+    folds_sd = PERFORMANCES[''].iloc[1:,:].std(axis=0)
+    for name_metric in names_metrics:
+        PERFORMANCES['_str'].loc['all', name_metric] = "{:.3f}".format(PERFORMANCES[''].loc[outer_fold, name_metric]) + '+-' + "{:.3f}".format(folds_sd[name_metric]) + '+-' + "{:.3f}".format(PERFORMANCES['_sd'].loc[outer_fold, name_metric])
+    
+    # save performances
+    if save_performances:
+        for mode in modes:
+            PERFORMANCES[mode].to_csv(path_store + 'Performances_' + version + mode + '.csv', index=True)
+
 def build_ensemble_model(Performances_subset, Predictions, y, main_metric_function, main_metric_mode):
     best_perf = -np.Inf if main_metric_mode == 'max' else np.Inf
     ENSEMBLE_COLS={'select':[], 'all':[]}
@@ -664,13 +770,10 @@ def build_ensemble_model(Performances_subset, Predictions, y, main_metric_functi
             #evaluate the ensemble predictions
             new_perf = main_metric_function(df_ensemble['y'],df_ensemble['pred'])
             if new_perf > best_perf:
-                #print('BETTER! ')
                 best_perf = new_perf
                 best_pred = df_ensemble['pred']
                 best_ensemble_namecols = ENSEMBLE_COLS[ensemble_type].copy()
-                #print('New best performance = ' + str(round(best_perf, 4)) + ', using the ensemble type: ' + ensemble_type)
             elif ensemble_type == 'select':
-                #print('The new ensemble did not perform as well: ' + str(round(new_perf, 4)))
                 ENSEMBLE_COLS[ensemble_type].pop()
     return best_ensemble_namecols
 
@@ -688,13 +791,13 @@ def update_predictions_with_ensemble(PREDICTIONS, version, id_set, folds, Perfor
     Ensemble_predictions = Predictions[best_ensemble_namecols].mean(axis=1)
     Ensemble_outerfolds = Predictions[best_ensemble_outerfolds]
     for fold in folds:
-        PREDICTIONS[id_set][fold]['Ensemble_Pred_' + version] = Ensemble_predictions
+        PREDICTIONS[id_set][fold]['Pred_' + version] = Ensemble_predictions
         if is_rank_one(Ensemble_outerfolds):
             print('The folds were shared by all the models in the ensemble models. Saving the folds too.')
-            PREDICTIONS[id_set][fold]['Ensemble_outer_fold_' + version] = Ensemble_outerfolds.mean(axis=1)
-            print(PREDICTIONS[id_set][fold]['Ensemble_outer_fold_' + version])
+            PREDICTIONS[id_set][fold]['outer_fold_' + version] = Ensemble_outerfolds.mean(axis=1)
+            print(PREDICTIONS[id_set][fold]['outer_fold_' + version])
         else:
-            PREDICTIONS[id_set][fold]['Ensemble_outer_fold_' + version] = np.nan    
+            PREDICTIONS[id_set][fold]['outer_fold_' + version] = np.nan    
 
 
 ### PARAMETERS THAT DEPEND ON FUNCTIONS

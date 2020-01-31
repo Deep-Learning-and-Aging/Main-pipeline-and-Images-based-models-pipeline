@@ -50,6 +50,8 @@ if fold == 'train':
 
 #generate list of predictions that will be integrated in the Predictions dataframe
 list_models = glob.glob(path_store + 'Predictions_' + target + '_*_' + fold + '.csv')
+#get rid of ensemble models
+list_models = [ model for model in list_models if '*' not in model ]
 list_models.sort()
 #merge the predictions
 for file_name in list_models:
@@ -67,8 +69,8 @@ for file_name in list_models:
 
 #remove rows for which no prediction is available, before saving the Prediction tables
 for id_set in id_sets:
-    PREDICTIONS_TABLES[id_set].dropna(subset=[col for col in PREDICTIONS_TABLES[id_set].columns if 'Pred' in col], how='all', inplace=True)
-    PREDICTIONS_TABLES[id_set].to_csv(path_store + 'PREDICTIONS_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
+    PREDICTIONS_TABLES[id_set].dropna(subset=[col for col in PREDICTIONS_TABLES[id_set].columns if 'Pred_' in col], how='all', inplace=True)
+    PREDICTIONS_TABLES[id_set].to_csv(path_store + 'PREDICTIONS_withoutEnsembles_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
 
 #exit
 print('Done.')
