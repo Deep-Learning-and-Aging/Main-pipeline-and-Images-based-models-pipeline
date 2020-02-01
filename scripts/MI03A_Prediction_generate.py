@@ -105,11 +105,16 @@ for outer_fold in outer_folds:
         pred_full = np.concatenate((pred_batch, pred_leftovers)).squeeze()
         if target in targets_regression:
             pred_full = pred_full*std_train + mean_train
-        DATA_FEATURES[fold]['Pred_' + version] = pred_full
+        DATA_FEATURES[fold]['pred'] = pred_full
         if fold in PREDICTIONS.keys():
             PREDICTIONS[fold] = pd.concat([PREDICTIONS[fold], DATA_FEATURES[fold]])
         else:
             PREDICTIONS[fold] = DATA_FEATURES[fold]
+        
+        #format the dataframe
+        #PREDICTIONS[fold].rename(columns={'outer_fold': 'outer_fold_' + version}) TODO delete, false good idea
+        PREDICTIONS[fold]['eid'] = [eid.replace('.jpg','') for eid in PREDICTIONS[fold]['eid']]
+        
     
     # plot the training from the logger
     if generate_training_plots:
@@ -118,7 +123,7 @@ for outer_fold in outer_folds:
 # save predictions
 if save_predictions:
     for fold in folds:
-        PREDICTIONS[fold][['eid', 'outer_fold', 'Pred_' + version]].to_csv(path_store + 'Predictions_' + version + '_' + fold + '.csv', index=False)
+        PREDICTIONS[fold][['eid', 'outer_fold_' + version, 'Pred_' + version]].to_csv(path_store + 'Predictions_' + version + '_' + fold + '.csv', index=False)
 
 #exit
 print('Done.')

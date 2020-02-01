@@ -79,6 +79,7 @@ targets_binary = ['Sex']
 image_quality_ids = {'Liver':'22414-2.0', 'Heart':None, 'PhysicalActivity':None}
 id_sets = ['A', 'B']
 dict_organ_to_idset={'PhysicalActivity':'A', 'Liver':'B', 'Heart':'B'}
+dict_idset_to_organ={'A':['PhysicalActivity'], 'B':['Liver', 'Heart']}
 metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
 metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
 modes = ['', '_sd', '_str']
@@ -187,6 +188,15 @@ def version_to_parameters(model_name, names_model_parameters):
 def parameters_to_version(parameters):
     return '_'.join(parameters.values())
 
+def convert_string_to_boolean(string):
+    if string == 'True':
+        boolean = True
+    elif string == 'False':
+        boolean = False
+    else:
+        print('ERROR: string must be either \'True\' or \'False\'')
+        sys.exit(0)
+    return boolean
 
 def configure_gpus():
    print('tensorflow version : ', tf.__version__)
@@ -716,7 +726,7 @@ def initiate_empty_performances_df(Predictions, target, names_metrics):
     return PERFORMANCES
 
 #Fill the columns for this model, outer_fold by outer_fold
-def fill_performances_matrix_for_single_model(PERFORMANCES, Predictions, target, version, names_metrics, save_performances):
+def fill_performances_matrix_for_single_model(PERFORMANCES, Predictions, target, version, fold, names_metrics, save_performances):
     for outer_fold in ['all'] + outer_folds:
         print('Calculating the performances for the outer fold ' + outer_fold)
         #Generate a subdataframe from the predictions table for each outerfold
@@ -751,31 +761,152 @@ def fill_performances_matrix_for_single_model(PERFORMANCES, Predictions, target,
     # save performances
     if save_performances:
         for mode in modes:
-            PERFORMANCES[mode].to_csv(path_store + 'Performances_' + version + mode + '.csv', index=True)
+            PERFORMANCES[mode].to_csv(path_store + 'Performances_' + version + '_' + fold + mode + '.csv', index=True)
 
-def build_ensemble_model(Performances_subset, Predictions, y, main_metric_function, main_metric_mode):
+def initiate_empty_performances_summary_df(target, list_models):
+    #Define the columns of the Performances dataframe
+    #columns for sample sizes
+    names_sample_sizes = ['N']
+    if target in targets_binary:
+        names_sample_sizes.extend(['N_0', 'N_1'])
+    
+    #columns for metrics
+    names_metrics = dict_metrics_names[dict_prediction_types[target]]
+    #for normal folds, keep track of metric and bootstrapped metric's sd
+    names_metrics_with_sd = []
+    for name_metric in names_metrics:
+        names_metrics_with_sd.extend([name_metric, name_metric + '_sd', name_metric + '_str'])
+    
+    #for the 'all' fold, also keep track of the 'folds_sd', the metric's sd calculated using the folds' metrics results
+    names_metrics_with_folds_sd_and_sd = []
+    for name_metric in names_metrics:
+        names_metrics_with_folds_sd_and_sd.extend([name_metric, name_metric + '_folds_sd', name_metric + '_sd', name_metric + '_str'])
+    
+    #merge all the columns together. First description of the model, then sample sizes and metrics for each fold
+    names_col_Performances = ['version'] + names_model_parameters #.copy()
+    #special outer fold 'all'
+    names_col_Performances.extend(['_'.join([name,'all']) for name in names_sample_sizes + names_metrics_with_folds_sd_and_sd])
+    #other outer_folds
+    for outer_fold in outer_folds:
+        names_col_Performances.extend(['_'.join([name,outer_fold]) for name in names_sample_sizes + names_metrics_with_sd])
+    
+    #Generate the empty Performance table from the rows and columns.
+    Performances = np.empty((len(list_models),len(names_col_Performances),))
+    Performances.fill(np.nan)
+    Performances = pd.DataFrame(Performances)
+    Performances.columns = names_col_Performances
+    #Format the types of the columns
+    for colname in Performances.columns.values:
+        if (colname in names_model_parameters) | ('_str' in colname):
+            col_type = str
+        else:
+            col_type = float
+        Performances[colname] = Performances[colname].astype(col_type)
+    return Performances
+
+def fill_summary_performances_matrix(list_models, target, fold, id_set, ensemble_models, save_performances):
+    #define parameters
+    names_metrics = dict_metrics_names[dict_prediction_types[target]]
+    
+    #initiate dataframe
+    Performances = initiate_empty_performances_summary_df(target, list_models)
+    
+    #Fill the Performance table row by row
+    for i, model in enumerate(list_models):
+        #load the performances subdataframe
+        PERFORMANCES={}
+        for mode in modes:
+            PERFORMANCES[mode] = pd.read_csv(model.replace('_str',mode), index_col=0)
+            
+        #Fill the columns corresponding to the model's parameters
+        version = '_'.join(model.split('_')[1:-1])
+        parameters = version_to_parameters(version, names_model_parameters)
+        
+        #fill the columns for model parameters
+        Performances['version'][i] = version
+        for parameter_name in names_model_parameters:
+            Performances[parameter_name][i] = parameters[parameter_name]
+        
+        #Fill the columns for this model, outer_fold by outer_fold
+        for outer_fold in ['all'] + outer_folds:
+            #Generate a subdataframe from the predictions table for each outerfold
+            
+            #Fill sample size columns
+            Performances['N_' + outer_fold][i] = PERFORMANCES[''].loc[outer_fold,'N']
+            
+            #For binary classification, calculate sample sizes for each class and generate class prediction
+            if target in targets_binary:
+                Performances['N_0_' + outer_fold][i] = PERFORMANCES[''].loc[outer_fold,'N_0']
+                Performances['N_1_' + outer_fold][i] = PERFORMANCES[''].loc[outer_fold,'N_1']
+            
+            #Fill the Performances dataframe metric by metric
+            for name_metric in names_metrics:
+                for mode in modes:
+                    Performances[name_metric + mode + '_' + outer_fold][i] = PERFORMANCES[mode].loc[outer_fold,name_metric]
+            
+            #calculate the fold sd (variance between the metrics values obtained on the different folds)
+            folds_sd = PERFORMANCES[''].iloc[1:,:].std(axis=0)
+            for name_metric in names_metrics:
+                Performances[name_metric + '_folds_sd_all'] = folds_sd[name_metric]
+    
+    #Convert float to int for sample sizes and some metrics.
+    for name_col in Performances.columns.values:
+        if name_col.startswith('N_') | any(metric in name_col for metric in metrics_displayed_in_int) & (not '_sd' in name_col) & (not '_str' in name_col):
+            Performances[name_col] = Performances[name_col].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int
+    
+    #For ensemble models, merge the new performances with the previously computed performances
+    if ensemble_models:
+        Performances_withoutEnsembles = pd.read_csv(path_store + 'PERFORMANCES_withoutEnsembles_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv')
+        Performances = Performances_withoutEnsembles.append(Performances)
+    
+    #Ranking, printing and saving
+    Performances_alphabetical = Performances.sort_values(by='version')
+    print('Performances of the models ranked by models\'names:')
+    print(Performances_alphabetical)
+    Performances_ranked = Performances.sort_values(by=dict_main_metrics_names[target] + '_all', ascending=main_metrics_modes[dict_main_metrics_names[target]] == 'min')
+    print('Performances of the models ranked by the performance on the main metric on all the samples:')
+    print(Performances_ranked)
+    if save_performances:
+        name_extension = 'withEnsembles' if ensemble_models else 'withoutEnsembles'
+        Performances_alphabetical.to_csv(path_store + 'PERFORMANCES_' + name_extension + '_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
+        Performances_ranked.to_csv(path_store + 'PERFORMANCES_' + name_extension + '_ranked_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
+    return Performances_ranked
+
+#Build the best ensemble model. To do so, consider a 2x2 matrix of strategies.
+#1-Iteratively include all the models, or only the ones that improve the performance?
+#2-Weight the models by the validation performance, or give the same weight to every model?
+def build_ensemble_model(Performances_subset, Predictions, y, main_metric_name):
+    main_metric_function = dict_metrics[main_metric_name]['sklearn']
+    main_metric_mode = main_metrics_modes[main_metric_name]
     best_perf = -np.Inf if main_metric_mode == 'max' else np.Inf
-    ENSEMBLE_COLS={'select':[], 'all':[]}
+    ENSEMBLE_COLS={'select':{'noweights':[], 'weighted':[]}, 'all':{'noweights':[], 'weighted':[]}}
     #iteratively add models to the ensemble
     for i, version in enumerate(Performances_subset['version']):
-        #added_pred_name = 'Pred_' + version
-        #TODO remove below keep above
-        added_pred_name = 'Pred_' + version.replace('_str.csv','')
+        added_pred_name = 'Pred_' + version
+        #added_pred_name = 'Pred_' + version.replace('_str.csv','') CAN I DELETE? is line above working? TODO
         for ensemble_type in ENSEMBLE_COLS.keys():
-            #print(ensemble_type)
-            ENSEMBLE_COLS[ensemble_type].append(added_pred_name)
-            Ensemble_predictions = Predictions[ENSEMBLE_COLS[ensemble_type]].mean(axis=1)
+            for weighting_type in ENSEMBLE_COLS[ensemble_type].keys():
+                #print(ensemble_type)
+                ENSEMBLE_COLS[ensemble_type].append(added_pred_name)
+                if weighting_type == 'weighted':
+                    weights = Performances_subset.loc[ENSEMBLE_COLS[ensemble_type], main_metric_name + '_val']
+                else:
+                    weights = np.ones(len(ENSEMBLE_COLS[ensemble_type]))
+                Ensemble_predictions = Predictions[ENSEMBLE_COLS[ensemble_type]]*weights
+                Ensemble_predictions = Ensemble_predictions.mean(axis=1)/np.sum(weights)
             df_ensemble = pd.concat([y, Ensemble_predictions], axis=1).dropna()
             df_ensemble.columns = ['y', 'pred']
             #evaluate the ensemble predictions
             new_perf = main_metric_function(df_ensemble['y'],df_ensemble['pred'])
+            new_perf_weighted = main_metric_function(df_ensemble['y'],df_ensemble_weighted['pred'])
             if new_perf > best_perf:
                 best_perf = new_perf
                 best_pred = df_ensemble['pred']
                 best_ensemble_namecols = ENSEMBLE_COLS[ensemble_type].copy()
+                best_weights = weights
             elif ensemble_type == 'select':
                 ENSEMBLE_COLS[ensemble_type].pop()
-    return best_ensemble_namecols
+    return best_ensemble_namecols, weights
 
 #returns True if the dataframe is a single column duplicated. Used to check if the folds are the same for the entire ensemble model
 def is_rank_one(df):
@@ -785,19 +916,20 @@ def is_rank_one(df):
                 return False
     return True 
 
-def update_predictions_with_ensemble(PREDICTIONS, version, id_set, folds, Performances_subset, Predictions, y, main_metric_function, main_metric_mode):
-    best_ensemble_namecols = build_ensemble_model(Performances_subset, Predictions, y, main_metric_function, main_metric_mode)
+def update_predictions_with_ensemble(PREDICTIONS, version_ensemble, folds, Performances_subset, Predictions, y, main_metric_name):
+    best_ensemble_namecols, weights = build_ensemble_model(Performances_subset, Predictions, y, main_metric_name)
     best_ensemble_outerfolds = [model_name.replace('Pred_', 'outer_fold_') for model_name in best_ensemble_namecols]
-    Ensemble_predictions = Predictions[best_ensemble_namecols].mean(axis=1)
+    Ensemble_predictions = Predictions[best_ensemble_namecols]*weights
+    Ensemble_predictions = Ensemble_predictions.mean(axis=1)/np.sum(weights)
     Ensemble_outerfolds = Predictions[best_ensemble_outerfolds]
     for fold in folds:
-        PREDICTIONS[id_set][fold]['Pred_' + version] = Ensemble_predictions
+        PREDICTIONS[fold]['Pred_' + version_ensemble] = Ensemble_predictions
         if is_rank_one(Ensemble_outerfolds):
             print('The folds were shared by all the models in the ensemble models. Saving the folds too.')
-            PREDICTIONS[id_set][fold]['outer_fold_' + version] = Ensemble_outerfolds.mean(axis=1)
-            print(PREDICTIONS[id_set][fold]['outer_fold_' + version])
+            PREDICTIONS[fold]['outer_fold_' + version_ensemble] = Ensemble_outerfolds.mean(axis=1)
+            print(PREDICTIONS[fold]['outer_fold_' + version_ensemble])
         else:
-            PREDICTIONS[id_set][fold]['outer_fold_' + version] = np.nan    
+            PREDICTIONS[fold]['outer_fold_' + version_ensemble] = np.nan
 
 
 ### PARAMETERS THAT DEPEND ON FUNCTIONS
