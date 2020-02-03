@@ -320,6 +320,10 @@ def generate_generators(DATA_FEATURES, target, dir_images, image_size, batch_siz
     GENERATORS = {}
     STEP_SIZES = {}
     for fold in folds:
+        #Do not generate a generator if there are no samples (can happen for leftovers generators)
+        if len(DATA_FEATURES[fold].index) == 0:
+            continue
+        
         if fold == 'train':
             datagen = ImageDataGenerator(rescale=1./255., rotation_range=20, width_shift_range=0.2, height_shift_range=0.2)
             shuffle = True if mode == 'model_training' else False
