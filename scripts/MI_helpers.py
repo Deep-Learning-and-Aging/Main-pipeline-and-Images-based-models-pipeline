@@ -142,10 +142,7 @@ n_epochs_max = 1000
 ensembles_performance_cutoff_percent = 0
 
 #postprocessing
-boot_iterations=10000 #TODO does this variable appear anywhere else? the one below does.
-#postprocessing
-n_bootstrap = 1000
-#TODO delete one of the above or clarify the names
+n_bootstrap_iterations = 1000
 
 #set parameters
 seed=0
@@ -168,16 +165,22 @@ def read_parameters_from_command(args):
     parameters['learning_rate'] = args[6]
     parameters['weight_decay'] = args[7]
     parameters['dropout_rate'] = args[8]
-    if len(args) > 9:
+    if len(args) > 10:
         parameters['outer_fold'] = args[9]
+        parameters['id_set'] = args[10]
+    elif len(args) > 9:
+        parameters['outer_fold'] = args[9]
+        parameters['id_set'] = None
     else:
         parameters['outer_fold'] = None
+        parameters['id_set'] = None
+    
     parameters['organ'], parameters['field_id'], parameters['view'] = parameters['image_type'].split('_')
     #convert parameters to float if a specific value other than 'all' was selected
     for parameter_name in ['learning_rate', 'weight_decay', 'dropout_rate']:
         if(parameters[parameter_name] != '*'):
             parameters[parameter_name] = float(parameters[parameter_name])
-    return parameters['target'], parameters['image_type'], parameters['organ'], parameters['field_id'], parameters['view'], parameters['transformation'], parameters['architecture'], parameters['optimizer'], parameters['learning_rate'], parameters['weight_decay'], parameters['dropout_rate'], parameters['outer_fold']
+    return parameters['target'], parameters['image_type'], parameters['organ'], parameters['field_id'], parameters['view'], parameters['transformation'], parameters['architecture'], parameters['optimizer'], parameters['learning_rate'], parameters['weight_decay'], parameters['dropout_rate'], parameters['outer_fold'], parameters['id_set']
 
 def version_to_parameters(model_name, names_model_parameters):
     parameters={}
@@ -239,7 +242,7 @@ def generate_data_features(image_field, organ, target, dir_images, image_quality
     else:
         # load the selected features
         if organ in ["PhysicalActivity"]: #different set of eids
-            print("TODO")
+            print("This has not been implemented (yet?). No image_quality_id is present in UKB for this field (?).")
             sys.exit(1)
         else:
             data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0', image_quality_id])
@@ -607,9 +610,9 @@ def true_negatives_score(y, pred):
     tn, _, _, _ = confusion_matrix(y, pred.round()).ravel()
     return tn
 
-def bootstrap(data, n_bootstrap, function):
+def bootstrap(data, n_bootstrap_iterations, function):
     results = []
-    for i in range(n_bootstrap):
+    for i in range(n_bootstrap_iterations):
         data_i = resample(data, replace=True, n_samples=len(data.index))
         results.append(function(data_i['y'], data_i['pred']))
     return np.mean(results), np.std(results)
@@ -679,7 +682,7 @@ def preprocess_data_features_predictions_for_performances(path_store, id_set, ta
     data_features.rename(columns={target:'y'}, inplace=True)
     data_features = data_features[['eid', 'y']]
     data_features['eid'] = data_features['eid'].astype(str)
-    data_features['eid'] = data_features['eid'].apply(append_ext)
+    data_features['eid'] = data_features['eid']
     data_features = data_features.set_index('eid', drop=False)
     data_features.index.name = 'column_names'
     return data_features
@@ -687,6 +690,7 @@ def preprocess_data_features_predictions_for_performances(path_store, id_set, ta
 def preprocess_predictions_for_performances(data_features, path_store, version, fold, id_set):
     #load Predictions the initial dataframe to extract 'y'
     Predictions = pd.read_csv(path_store + 'Predictions_' + version + '_' + fold + '_' + id_set + '.csv')
+    Predictions['eid'] = Predictions['eid'].astype(str)
     Predictions.rename(columns={'Pred_' + version:'pred'}, inplace=True)
     Predictions = Predictions.merge(data_features, how='inner', on=['eid'])
     return Predictions
@@ -698,13 +702,14 @@ def initiate_empty_performances_df(Predictions, target, names_metrics):
     col_names_sample_sizes = ['N']
     if target in targets_binary:
         col_names_sample_sizes.extend(['N_0', 'N_1'])
-    col_names = col_names_sample_sizes.copy()
+    col_names = ['outer_fold'] + col_names_sample_sizes
     col_names.extend(names_metrics)
     performances = np.empty((len(row_names),len(col_names),))
     performances.fill(np.nan)
     performances = pd.DataFrame(performances)
     performances.index = row_names
     performances.columns = col_names
+    performances['outer_fold'] = row_names
     #Convert float to int for sample sizes and some metrics.
     for col_name in col_names_sample_sizes:
         performances[col_name] = performances[col_name].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int
@@ -733,7 +738,11 @@ def initiate_empty_performances_df(Predictions, target, names_metrics):
     return PERFORMANCES
 
 #Fill the columns for this model, outer_fold by outer_fold
-def fill_performances_matrix_for_single_model(PERFORMANCES, Predictions, target, version, fold, names_metrics, save_performances):
+def fill_performances_matrix_for_single_model(Predictions, target, version, fold, id_set, names_metrics, n_bootstrap_iterations, save_performances):
+    #initialize dictionary of empty dataframes to save the performances
+    PERFORMANCES = initiate_empty_performances_df(Predictions, target, names_metrics)
+    
+    #fill it outer_fold by outer_fold
     for outer_fold in ['all'] + outer_folds:
         print('Calculating the performances for the outer fold ' + outer_fold)
         #Generate a subdataframe from the predictions table for each outerfold
@@ -757,7 +766,7 @@ def fill_performances_matrix_for_single_model(PERFORMANCES, Predictions, target,
                 predictions_metric = predictions_fold_class if name_metric in metrics_needing_classpred else predictions_fold
                 metric_function = dict_metrics[name_metric]['sklearn']
                 PERFORMANCES[''].loc[outer_fold, name_metric] = metric_function(predictions_metric['y'], predictions_metric['pred'])
-                PERFORMANCES['_sd'].loc[outer_fold, name_metric] = bootstrap(predictions_metric, n_bootstrap, metric_function)[1]
+                PERFORMANCES['_sd'].loc[outer_fold, name_metric] = bootstrap(predictions_metric, n_bootstrap_iterations, metric_function)[1]
                 PERFORMANCES['_str'].loc[outer_fold, name_metric] = "{:.3f}".format(PERFORMANCES[''].loc[outer_fold, name_metric]) + '+-' + "{:.3f}".format(PERFORMANCES['_sd'].loc[outer_fold, name_metric])
     
     #calculate the fold sd (variance between the metrics values obtained on the different folds)
@@ -768,8 +777,9 @@ def fill_performances_matrix_for_single_model(PERFORMANCES, Predictions, target,
     # save performances
     if save_performances:
         for mode in modes:
-            #TODO see comment below about index=False that replace index=True
-            PERFORMANCES[mode].to_csv(path_store + 'Performances_' + version + '_' + fold + mode + '.csv', index=False) #TODO maybe need to UNDO? TODO
+            PERFORMANCES[mode].to_csv(path_store + 'Performances_' + version + '_' + fold + '_' + id_set + mode + '.csv', index=False)
+    
+    return PERFORMANCES
 
 def initiate_empty_performances_summary_df(target, list_models):
     #Define the columns of the Performances dataframe
@@ -824,10 +834,11 @@ def fill_summary_performances_matrix(list_models, target, fold, id_set, ensemble
         #load the performances subdataframe
         PERFORMANCES={}
         for mode in modes:
-            PERFORMANCES[mode] = pd.read_csv(model.replace('_str',mode), index_col=0)
+            PERFORMANCES[mode] = pd.read_csv(model.replace('_str',mode))
+            PERFORMANCES[mode].set_index('outer_fold', drop=False, inplace=True)
             
         #Fill the columns corresponding to the model's parameters
-        version = '_'.join(model.split('_')[1:-1])
+        version = '_'.join(model.split('_')[1:-3])
         parameters = version_to_parameters(version, names_model_parameters)
         
         #fill the columns for model parameters
@@ -863,7 +874,7 @@ def fill_summary_performances_matrix(list_models, target, fold, id_set, ensemble
             Performances[name_col] = Performances[name_col].astype('Int64') #need recent version of pandas to use this type. Otherwise nan cannot be int
     
     #rename the version column to get rid of fold
-    Performances['version'] = Performances['version'].str.rstrip('_' + fold)
+    #Performances['version'] = Performances['version'].str.rstrip('_' + fold)
     
     #For ensemble models, merge the new performances with the previously computed performances
     if ensemble_models:
@@ -940,14 +951,14 @@ def is_rank_one(df):
 def build_single_ensemble(PREDICTIONS, Predictions, y, main_metric_name, id_set, Performances_subset, version):
     #define which models should be integrated into the ensemble model, and how they should be weighted
     performance_cutoff = np.max(Performances_subset[main_metric_name + '_all'])*ensembles_performance_cutoff_percent
-    ensemble_namecols = ['Pred_' + model_name for model_name in Performances_subset['version'][Performances_subset[main_metric_name + '_all'] > performance_cutoff]]
+    ensemble_namecols = ['pred_' + model_name for model_name in Performances_subset['version'][Performances_subset[main_metric_name + '_all'] > performance_cutoff]]
     weights = Performances_subset[main_metric_name + '_all'][Performances_subset[main_metric_name + '_all'] > performance_cutoff].values
-    ensemble_outerfolds = [model_name.replace('Pred_', 'outer_fold_') for model_name in ensemble_namecols]
+    ensemble_outerfolds = [model_name.replace('pred_', 'outer_fold_') for model_name in ensemble_namecols]
     
     #for each fold, build the ensemble model
     for fold in folds:
         Ensemble_predictions = PREDICTIONS[fold][ensemble_namecols]*weights
-        PREDICTIONS[fold]['Pred_' + version] = Ensemble_predictions.sum(axis=1)/np.sum(weights)
+        PREDICTIONS[fold]['pred_' + version] = Ensemble_predictions.sum(axis=1)/np.sum(weights)
         Ensemble_outerfolds = PREDICTIONS[fold][ensemble_outerfolds]
         if is_rank_one(Ensemble_outerfolds):
             #print('The folds were shared by all the models in the ensemble models. Saving the folds too.')
@@ -956,9 +967,8 @@ def build_single_ensemble(PREDICTIONS, Predictions, y, main_metric_name, id_set,
             PREDICTIONS[fold]['outer_fold_' + version] = np.nan
         
         #build and save a dataset for this specific ensemble model
-        df_single_ensemble = PREDICTIONS[fold][['eid', 'outer_fold_' + version, 'Pred_' + version]]
-        #TODO format the dataframe differently after changing previous steps with respect to Pred_** and pred. also get rid of jpg.
-        df_single_ensemble.rename(columns={'outer_fold_' + version: 'outer_fold'}, inplace=True)
+        df_single_ensemble = PREDICTIONS[fold][['eid', 'outer_fold_' + version, 'pred_' + version]]
+        df_single_ensemble.rename(columns={'outer_fold_' + version: 'outer_fold', 'pred_' + version: 'pred'}, inplace=True)
         df_single_ensemble.to_csv(path_store + 'Predictions_' + version + '_' + fold + '_' + id_set +'.csv', index=False)
 
 def recursive_ensemble_builder(PREDICTIONS, Predictions, y, main_metric_name, id_set, Performances_grandparent, parameters_parent, version_parent, list_ensemble_levels_parent):   
