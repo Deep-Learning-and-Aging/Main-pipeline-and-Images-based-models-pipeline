@@ -34,7 +34,7 @@ if len(sys.argv) != 10:
     sys.argv.append('0') #outer_fold
 
 #read parameters from command
-target, image_type, organ, field_id, view, transformation, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold = read_parameters_from_command(sys.argv)
+target, image_type, organ, field_id, view, transformation, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold, id_set = read_parameters_from_command(sys.argv)
 
 #set other parameters accordingly
 functions_version = 'Keras' #use 'Keras' for functions during training, and 'sklearn' for functions during testing

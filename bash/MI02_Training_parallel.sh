@@ -2,6 +2,7 @@
 targets=( "Age" "Sex" )
 targets=( "Age" )
 image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
+image_types=(  "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
 #image_types=( "Heart_20208_allviewsRGB" )
 transformations_images=( "raw" "contrast" )
 transformations_images=( "raw" )
