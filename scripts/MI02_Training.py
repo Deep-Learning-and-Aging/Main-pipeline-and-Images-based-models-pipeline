@@ -115,4 +115,4 @@ model.fit_generator(generator=GENERATORS['train'], steps_per_epoch=STEP_SIZES['t
 
 #exit
 print('\nTHE MODEL CONVERGED!\n')
-sys.exit(0)
+

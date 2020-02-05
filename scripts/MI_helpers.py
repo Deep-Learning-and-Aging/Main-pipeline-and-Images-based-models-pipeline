@@ -772,7 +772,7 @@ def fill_performances_matrix_for_single_model(Predictions, target, version, fold
     #calculate the fold sd (variance between the metrics values obtained on the different folds)
     folds_sd = PERFORMANCES[''].iloc[1:,:].std(axis=0)
     for name_metric in names_metrics:
-        PERFORMANCES['_str'].loc['all', name_metric] = "{:.3f}".format(PERFORMANCES[''].loc[outer_fold, name_metric]) + '+-' + "{:.3f}".format(folds_sd[name_metric]) + '+-' + "{:.3f}".format(PERFORMANCES['_sd'].loc[outer_fold, name_metric])
+        PERFORMANCES['_str'].loc['all', name_metric] = "{:.3f}".format(PERFORMANCES[''].loc['all', name_metric]) + '+-' + "{:.3f}".format(folds_sd[name_metric]) + '+-' + "{:.3f}".format(PERFORMANCES['_sd'].loc['all', name_metric])
     
     # save performances
     if save_performances:
@@ -958,17 +958,18 @@ def build_single_ensemble(PREDICTIONS, Predictions, y, main_metric_name, id_set,
     #for each fold, build the ensemble model
     for fold in folds:
         Ensemble_predictions = PREDICTIONS[fold][ensemble_namecols]*weights
-        PREDICTIONS[fold]['pred_' + version] = Ensemble_predictions.sum(axis=1)/np.sum(weights)
+        PREDICTIONS[fold]['pred_' + version] = Ensemble_predictions.sum(axis=1, skipna=False)/np.sum(weights)
         Ensemble_outerfolds = PREDICTIONS[fold][ensemble_outerfolds]
         if is_rank_one(Ensemble_outerfolds):
             #print('The folds were shared by all the models in the ensemble models. Saving the folds too.')
-            PREDICTIONS[fold]['outer_fold_' + version] = Ensemble_outerfolds.mean(axis=1)
+            PREDICTIONS[fold]['outer_fold_' + version] = Ensemble_outerfolds.mean(axis=1, skipna=False)
         else:
             PREDICTIONS[fold]['outer_fold_' + version] = np.nan
         
         #build and save a dataset for this specific ensemble model
         df_single_ensemble = PREDICTIONS[fold][['eid', 'outer_fold_' + version, 'pred_' + version]]
         df_single_ensemble.rename(columns={'outer_fold_' + version: 'outer_fold', 'pred_' + version: 'pred'}, inplace=True)
+        df_single_ensemble.dropna(inplace=True, subset=['pred'])
         df_single_ensemble.to_csv(path_store + 'Predictions_' + version + '_' + fold + '_' + id_set +'.csv', index=False)
 
 def recursive_ensemble_builder(PREDICTIONS, Predictions, y, main_metric_name, id_set, Performances_grandparent, parameters_parent, version_parent, list_ensemble_levels_parent):   

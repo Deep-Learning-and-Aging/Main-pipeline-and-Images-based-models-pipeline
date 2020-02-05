@@ -29,4 +29,4 @@ DATA_FEATURES = generate_data_features(image_field=image_field, organ=organ, tar
 
 #exit
 print('Done.')
-sys.exit(0)
+
