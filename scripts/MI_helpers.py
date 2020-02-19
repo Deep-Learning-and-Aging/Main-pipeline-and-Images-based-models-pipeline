@@ -30,6 +30,7 @@ from numpy.polynomial.polynomial import polyfit
 
 #images
 import matplotlib.pyplot as plt
+import seaborn as sns
 from PIL import Image
 from scipy.ndimage import shift, rotate
 from skimage.color import gray2rgb
@@ -46,6 +47,7 @@ from datetime import datetime
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, precision_score, recall_score, confusion_matrix, precision_recall_curve, average_precision_score
 from sklearn.utils import class_weight, resample
+from sklearn import linear_model
 
 #tensorflow
 import tensorflow as tf
@@ -212,10 +214,11 @@ def configure_gpus():
    #device_count = {'GPU': 1, 'CPU': mp.cpu_count() },log_device_placement =  True)
    config = tf.ConfigProto()
    config.gpu_options.allow_growth = True
-   sess= tf.Session(config = config)
-   K.set_session(session= sess)
+   gpu_session = tf.Session(config = config)
+   K.set_session(session= gpu_session)
    K.tensorflow_backend._get_available_gpus()
-   warnings.filterwarnings('ignore') 
+   warnings.filterwarnings('ignore')
+   return gpu_session
 
 def append_ext(fn):
     return fn+".jpg"
@@ -234,7 +237,7 @@ def generate_data_features(image_field, organ, target, dir_images, image_quality
             data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
             data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
         else:
-            data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0'])
+            data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0'])
         data_features.columns = ['eid', 'Sex', 'Age']
         data_features['eid'] = data_features['eid'].astype(str)
         data_features['eid'] = data_features['eid'].apply(append_ext)
@@ -254,7 +257,7 @@ def generate_data_features(image_field, organ, target, dir_images, image_quality
         data_features = data_features[data_features['Data_quality'] != np.nan]
         data_features = data_features.drop('Data_quality', axis=1)
     # get rid of samples with NAs
-    data_features = data_features.dropna()
+    data_features.dropna(inplace=True)
     # list the samples' ids for which liver images are available
     all_files = os.listdir(dir_images)
     data_features = data_features.loc[all_files]

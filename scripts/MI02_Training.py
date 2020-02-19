@@ -62,7 +62,7 @@ if GPUs[0].memoryTotal > 20000:
 
 #configure cpus and gpus
 n_cpus = len(os.sched_getaffinity(0))
-configure_gpus()
+gpu_session = configure_gpus()
 
 #generate data_features
 DATA_FEATURES = load_data_features(folds=folds_tune, path_store=path_store, image_field=dict_image_field_to_ids[organ + '_' + field_id], target=dict_target_to_ids[target], outer_fold=outer_fold)
@@ -115,4 +115,6 @@ model.fit_generator(generator=GENERATORS['train'], steps_per_epoch=STEP_SIZES['t
 
 #exit
 print('\nTHE MODEL CONVERGED!\n')
+gpu_session.close()
+sys.exit(0)
 
