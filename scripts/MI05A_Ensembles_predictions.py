@@ -25,17 +25,14 @@ parameters = {'target':target, 'organ':'*', 'field_id':'*', 'view':'*', 'transfo
 version = parameters_to_version(parameters)
 main_metric_name = dict_main_metrics_names[target]
 init_perf = -np.Inf if main_metrics_modes[main_metric_name] == 'max' else np.Inf
-Performances = pd.read_csv(path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + target + '_val_' + id_set + '.csv').set_index('version', drop=False)
+Performances = pd.read_csv(path_store + 'PERFORMANCES_tuned_ranked_' + target + '_val_' + id_set + '.csv').set_index('version', drop=False)
 Performances['field_id'] = Performances['field_id'].astype(str)
 
 #compute the new prediction for each inner fold, and save them in the Predictions dataframes
 #prepare variables
 PREDICTIONS = {}
 for fold in folds:
-    PREDICTIONS[fold] = pd.read_csv(path_store + 'PREDICTIONS_withoutEnsembles_' + target + '_' + fold + '_' + id_set + '.csv')
-
-Predictions = PREDICTIONS['val']
-y = Predictions[target]
+    PREDICTIONS[fold] = pd.read_csv(path_store + 'PREDICTIONS_tuned_' + target + '_' + fold + '_' + id_set + '.csv')
 
 #Generate all the ensemble models
 list_ensemble_levels = ['transformation', 'view', 'field_id', 'organ'] #list in reverse order for the recursive call of the ensemble building algo purpose
