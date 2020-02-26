@@ -1,31 +1,26 @@
 #!/bin/bash
-regenerate_predictions=false
+regenerate_predictions=true
 targets=( "Age" "Sex" )
 targets=( "Age" )
 image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
 #image_types=( "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
 image_types=( "Heart_20208_3chambers" )
-#image_types=( "PhysicalActivity_90001_main" )
-#image_types=( "Liver_20204_main" )
 transformations_images=( "raw" "contrast" )
 transformations_images=( "raw" )
-#transformations_images=( "contrast" )
 transformations_PA=( "raw" )
 architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
 architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 architectures=( "InceptionResNetV2" )
 optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
-learning_rates=( "0.0001" )
+learning_rates=( "0.0001" "1e-05" "1e-06" "1e-07" )
 weight_decays=( "0.0" )
-#weight_decays=( "0.0" "0.0001" "0.001" "0.01" "0.1" )
-dropout_rates=( "0.1" "0.3" "0.5" "0.8" )
 dropout_rates=( "0.0" )
-#dropout_rates=( "0.0" "0.1" "0.3" "0.5" "0.8" "0.95")
+#weight_decays=( "0.0" "0.0001" "0.001" )
+#dropout_rates=( "0.0" "0.1" "0.2" )
 folds=( "train" "val" "test" )
 #folds=( "val" "test" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
-#outer_folds=( "2" "3" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
@@ -49,7 +44,7 @@ for target in "${targets[@]}"; do
 						for weight_decay in "${weight_decays[@]}"; do
 							for dropout_rate in "${dropout_rates[@]}"; do
 								version=${target}_${image_type}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}
-								name=M03A-$version
+								name=M03A_$version
 								job_name="$name.job"
 								out_file="../eo/$name.out"
 								err_file="../eo/$name.err"
@@ -68,7 +63,7 @@ for target in "${targets[@]}"; do
 									fi
 								done
 								if $missing_weights; then
-									break
+									continue
 								fi
 								#if regenerate_predictions option is on or if one of the predictions is missing, run the job
 								to_run=false

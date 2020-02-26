@@ -24,9 +24,9 @@ if len(sys.argv) != 9:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age') #target
-    sys.argv.append('Liver_20204_main') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
-    sys.argv.append('contrast') #transformation
-    sys.argv.append('NASNetLarge') #architecture
+    sys.argv.append('Heart_20208_3chambers') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
+    sys.argv.append('raw') #transformation
+    sys.argv.append('InceptionResNetV2') #architecture
     sys.argv.append('Adam') #optimizer
     sys.argv.append('0.0001') #learning_rate
     sys.argv.append('0.0') #weight decay
@@ -37,7 +37,7 @@ target, image_type, organ, field_id, view, preprocessing, architecture, optimize
 id_set = dict_organ_to_idset[organ]
 
 #set other parameters accordingly
-version = target + '_' + image_type + '_' + preprocessing + '_' + architecture + '_' + optimizer + '_' + str(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate)
+version = target + '_' + image_type + '_' + preprocessing + '_' + architecture + '_' + optimizer + '_' + np.format_float_positional(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate)
 dir_images = dir_images = path_store + '../images/' + organ + '/' + field_id + '/' + view + '/' + preprocessing + '/'
 prediction_type = dict_prediction_types[target]
 image_size = input_size_models[architecture]
@@ -97,7 +97,8 @@ for outer_fold in outer_folds:
             model.load_weights(path_store + 'backup-model-weights_' + model_version + '.h5')
             print('THE FILE FOR THE WEIGHTS ' + model_version + ' COULD NOT BE OPENED. USING THE BACKUP INSTEAD.')
         except:
-            print('NEITHER THE NORMAL NOR THE BACKUP FILES FOR THE WEIGHTS ' + model_version + ' COULD BE OPENED. MOVING ON TO THE NEXT MODEL.')
+            print('NEITHER THE NORMAL NOR THE BACKUP FILES FOR THE WEIGHTS ' + model_version + ' COULD BE OPENED. ABORTING.')
+            #sys.exit(1) TODO
             break
     
     # Generate predictions

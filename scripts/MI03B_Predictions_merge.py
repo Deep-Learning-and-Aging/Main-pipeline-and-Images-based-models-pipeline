@@ -24,11 +24,12 @@ id_set = sys.argv[3]
 
 #load the selected features
 #Define dictionary of Predictions_tables, one for each id_set
+#TODO: fix the way age is collected
 if id_set == 'A':
     data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
     data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
 elif id_set == 'B':
-    data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0'])
+    data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0'])
 else:
     print('ERROR: id_set must be either A or B')
     sys.exit(1)

@@ -19,6 +19,7 @@ import tarfile
 import shutil
 import pyreadr
 import fnmatch
+import re
 
 #maths
 import numpy as np
@@ -62,6 +63,7 @@ from keras.models import Sequential, Model, model_from_json, clone_model
 from keras import regularizers, optimizers
 from keras.optimizers import Adam, RMSprop, Adadelta
 from keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger, TerminateOnNaN, TensorBoard
+from keras.constraints import max_norm
 
 
 ### PARAMETERS
@@ -139,6 +141,9 @@ outer_folds = [str(x) for x in list(range(n_CV_outer_folds))]
 
 #compiler
 n_epochs_max = 1000
+
+#architecture
+keras_max_norm = 4
 
 #ensemble models
 ensembles_performance_cutoff_percent = 0
@@ -231,6 +236,7 @@ def load_data_features(path_store, image_field, target, folds, outer_fold):
 
 def generate_data_features(image_field, organ, target, dir_images, image_quality_id):
     DATA_FEATURES = {}
+    #TODO: change the way age is collected for the different datasets
     if image_quality_id == None:
         # load the selected features
         if organ in ["PhysicalActivity"]: #different set of eids
@@ -239,8 +245,7 @@ def generate_data_features(image_field, organ, target, dir_images, image_quality
         else:
             data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0'])
         data_features.columns = ['eid', 'Sex', 'Age']
-        data_features['eid'] = data_features['eid'].astype(str)
-        data_features['eid'] = data_features['eid'].apply(append_ext)
+        data_features['eid'] = data_features['eid'].astype(str).apply(append_ext)
         data_features = data_features.set_index('eid', drop=False)
     else:
         # load the selected features
@@ -248,7 +253,7 @@ def generate_data_features(image_field, organ, target, dir_images, image_quality
             print("This has not been implemented (yet?). No image_quality_id is present in UKB for this field (?).")
             sys.exit(1)
         else:
-            data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0', image_quality_id])
+            data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0', image_quality_id])
         data_features.columns = ['eid', 'Sex', 'Age', 'Data_quality']
         data_features['eid'] = data_features['eid'].astype(str)
         data_features['eid'] = data_features['eid'].apply(append_ext)
@@ -433,6 +438,160 @@ def complete_architecture(x, input_shape, activation, weight_decay, dropout_rate
     predictions = Dense(1, activation=activation)(x)
     model = Model(inputs=input_shape, outputs=predictions)
     return model
+
+"""
+def complete_architecture(x, input_shape, activation, weight_decay, dropout_rate):
+    x = Dense(1024, activation='selu', kernel_regularizer=regularizers.l2(weight_decay))(x)
+    x = Dropout(dropout_rate)(x)
+    x = Dense(512, activation='selu', kernel_regularizer=regularizers.l2(weight_decay))(x)
+    x = Dropout(dropout_rate)(x)
+    x = Dense(256, activation='selu', kernel_regularizer=regularizers.l2(weight_decay))(x)
+    x = Dropout(dropout_rate)(x)
+    x = Dense(128, activation='selu')(x)
+    x = Dense(64, activation='selu')(x)
+    x = Dense(32, activation='selu')(x)
+    x = Dense(16, activation='selu')(x)
+    x = Dense(8, activation='selu')(x)
+    x = Dense(4, activation='selu')(x)
+    x = Dense(2, activation='selu')(x)
+    predictions = Dense(1, activation=activation)(x)
+    model = Model(inputs=input_shape, outputs=predictions)
+    return model
+
+
+def complete_architecture(x, input_shape, activation, weight_decay, dropout_rate):
+    for n in [int(2**(10-i)) for i in range(10)]:
+        x = Dense(n, activation='selu', kernel_regularizer=regularizers.l2(weight_decay), kernel_constraint=max_norm(keras_max_norm))(x)
+        if n < 3:
+            x = Dropout(dropout_rate/(n+1))(x)
+    predictions = Dense(1, activation=activation)(x)
+    model = Model(inputs=input_shape, outputs=predictions)
+    return model
+
+
+def generate_generators(DATA_FEATURES, target, dir_images, image_size, batch_size, folds, seed, mode):
+    GENERATORS = {}
+    STEP_SIZES = {}
+    for fold in folds:
+        #Do not generate a generator if there are no samples (can happen for leftovers generators)
+        if len(DATA_FEATURES[fold].index) == 0:
+            continue
+        
+        if fold == 'train':
+            datagen = ImageDataGenerator(rescale=1./255., rotation_range=10, width_shift_range=0.1, height_shift_range=0.1)
+            shuffle = True if mode == 'model_training' else False
+        else:
+            datagen = ImageDataGenerator(rescale=1./255.)
+            shuffle = False
+        
+        #define batch size for testing: data is split between a part that fits in batches, and leftovers
+        batch_size_fold = min(batch_size, len(DATA_FEATURES[fold].index)) if mode == 'model_testing' else batch_size
+        
+        # define data generator
+        generator_fold = datagen.flow_from_dataframe(
+            dataframe=DATA_FEATURES[fold],
+            directory=dir_images,
+            x_col='eid',
+            y_col=target,
+            color_mode='rgb',
+            batch_size= batch_size_fold,
+            seed=seed,
+            shuffle=shuffle,
+            class_mode='raw',
+            target_size=(image_size, image_size))
+        
+        #TODO: modify to allow multi input
+        a = 0
+        while a == 0:
+            a = 1
+            X1i = generator_fold.next()
+            yield [X1i[0], X1i[2]], X1i[1]
+        # assign variables to their names
+        GENERATORS[fold] = generator_fold
+        STEP_SIZES[fold] = generator_fold.n//generator_fold.batch_size
+    return GENERATORS, STEP_SIZES
+
+def generate_cnn(architecture, weight_decay, dropout_rate, keras_weights):
+    if architecture in ['VGG16', 'VGG19']:
+        if architecture == 'VGG16':
+            from keras.applications.vgg16 import VGG16
+            cnn = VGG16(include_top=False, weights=keras_weights, input_shape=(224,224,3))
+        elif architecture == 'VGG19':
+            from keras.applications.vgg19 import VGG19
+            cnn = VGG19(include_top=False, weights=keras_weights, input_shape=(224,224,3))
+        x = cnn.output
+        x = Flatten()(x)
+        x = Dense(4096, activation='relu', kernel_regularizer=regularizers.l2(weight_decay))(x)
+        x = Dropout(dropout_rate)(x)
+        x = Dense(4096, activation='relu', kernel_regularizer=regularizers.l2(weight_decay))(x)
+        x = Dropout(dropout_rate)(x) 
+    elif architecture in ['MobileNet', 'MobileNetV2']:
+        if architecture == 'MobileNet':
+            from keras.applications.mobilenet import MobileNet
+            cnn = MobileNet(include_top=False, weights=keras_weights, input_shape=(224,224,3))
+        elif architecture == 'MobileNetV2':
+            from keras.applications.mobilenet_v2 import MobileNetV2
+            cnn = MobileNetV2(include_top=False, weights=keras_weights, input_shape=(224,224,3))
+        x = cnn.output
+        x = GlobalAveragePooling2D()(x)
+    elif architecture in ['DenseNet121', 'DenseNet169', 'DenseNet201']:
+        if architecture == 'DenseNet121':
+            from keras.applications.densenet import DenseNet121
+            cnn = DenseNet121(include_top=True, weights=keras_weights, input_shape=(224,224,3))
+        elif architecture == 'DenseNet169':
+            from keras.applications.densenet import DenseNet169
+            cnn = DenseNet169(include_top=True, weights=keras_weights, input_shape=(224,224,3))
+        elif architecture == 'DenseNet201':
+            from keras.applications.densenet import DenseNet201
+            cnn = DenseNet201(include_top=True, weights=keras_weights, input_shape=(224,224,3))            
+        cnn = Model(cnn.inputs, cnn.layers[-2].output)
+        x = cnn.output
+    elif architecture in ['NASNetMobile', 'NASNetLarge']:
+        if architecture == 'NASNetMobile':
+            from keras.applications.nasnet import NASNetMobile
+            cnn = NASNetMobile(include_top=True, weights=keras_weights, input_shape=(224,224,3))
+        elif architecture == 'NASNetLarge':
+            from keras.applications.nasnet import NASNetLarge
+            cnn = NASNetLarge(include_top=True, weights=keras_weights, input_shape=(331,331,3))
+        cnn = Model(cnn.inputs, cnn.layers[-2].output)
+        x = cnn.output
+    elif architecture == 'Xception':
+        from keras.applications.xception import Xception
+        cnn = Xception(include_top=False, weights=keras_weights, input_shape=(299,299,3))
+        x = cnn.output
+        x = GlobalAveragePooling2D()(x)
+    elif architecture == 'InceptionV3':
+        from keras.applications.inception_v3 import InceptionV3
+        cnn = InceptionV3(include_top=False, weights=keras_weights, input_shape=(299,299,3))
+        x = cnn.output        
+        x = GlobalAveragePooling2D()(x)
+    elif architecture == 'InceptionResNetV2':
+        from keras.applications.inception_resnet_v2 import InceptionResNetV2
+        cnn = InceptionResNetV2(include_top=False, weights=keras_weights, input_shape=(299,299,3))
+        x = cnn.output        
+        x = GlobalAveragePooling2D()(x)
+    return cnn.input, x
+
+def generate_side_nn(dim):
+	side_nn = Sequential()
+	side_nn.add(Dense(8, input_dim=dim, activation="relu"))
+	side_nn.add(Dense(4, activation="relu"))
+	return side_nn.input, side_nn.output
+
+def complete_architecture(cnn_input, cnn_output, side_nn_input,side_nn_output, activation, weight_decay, dropout_rate):
+    x = concatenate([cnn_output, side_nn_output])
+    for n in [int(2**(10-i)) for i in range(10)]:
+        if n < 3:
+            x = Dense(n, activation='selu', kernel_regularizer=regularizers.l2(weight_decay))(x)
+            x = Dropout(dropout_rate)(x)
+        else:
+            x = Dense(n, activation='selu')(x)
+        
+    predictions = Dense(1, activation=activation)(x)
+    model = Model(inputs=[input_cnn, input_nn], outputs=predictions)
+    return model
+
+"""
 
 """Find the most similar model for transfer learning.
 The function returns path_load_weights, keras_weights """
@@ -676,7 +835,7 @@ def preprocess_data_features_predictions_for_performances(path_store, id_set, ta
         data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
         data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
     elif id_set == 'B':
-        data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-0.0'])
+        data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0'])
     else:
         print('ERROR: id_set must be either A or B')
         sys.exit(1)
@@ -951,36 +1110,120 @@ def is_rank_one(df):
                 return False
     return True 
 
-def build_single_ensemble(PREDICTIONS, Predictions, y, main_metric_name, id_set, Performances_subset, version):
+def weighted_weights_by_category(weights, Performances, ensemble_level):
+    weights_names = weights.index.values
+    for category in Performances[ensemble_level].unique():
+        n_category = len([name for name in weights_names if category in name])
+        for weight_name in weights.index.values:
+            if category in weight_name:
+                weights[weight_name] = weights[weight_name]/n_category
+    weights = weights.values/weights.values.sum()
+    return weights
+
+def weighted_weights_by_ensembles(Predictions, Performances, parameters, ensemble_level, main_metric_name):
+    sub_levels = Performances[ensemble_level].unique()
+    ensemble_namecols = []
+    weights = []
+    for sub in sub_levels:
+        parameters_sub = parameters.copy()
+        parameters_sub[ensemble_level] = sub
+        version_sub = parameters_to_version(parameters_sub)
+        ensemble_namecols.append('pred_' + version_sub)
+        df_score = Predictions[[parameters['target'], 'pred_' + version_sub]]
+        df_score.dropna(inplace=True)
+        weight = dict_metrics[main_metric_name]['sklearn'](df_score[parameters['target']], df_score['pred_' + version_sub])
+        weights.append(weight)
+    weights = np.array(weights)
+    weights = weights/weights.sum()
+    return ensemble_namecols, weights
+
+def build_single_ensemble(PREDICTIONS, target, main_metric_name, id_set, Performances, parameters, version, list_ensemble_levels, ensemble_level):
     #define which models should be integrated into the ensemble model, and how they should be weighted
-    performance_cutoff = np.max(Performances_subset[main_metric_name + '_all'])*ensembles_performance_cutoff_percent
-    ensemble_namecols = ['pred_' + model_name for model_name in Performances_subset['version'][Performances_subset[main_metric_name + '_all'] > performance_cutoff]]
-    weights = Performances_subset[main_metric_name + '_all'][Performances_subset[main_metric_name + '_all'] > performance_cutoff].values
+    Predictions = PREDICTIONS['val']
+    y = Predictions[target]
+    performance_cutoff = np.max(Performances[main_metric_name + '_all'])*ensembles_performance_cutoff_percent
+    ensemble_namecols = ['pred_' + model_name for model_name in Performances['version'][Performances[main_metric_name + '_all'] > performance_cutoff]]
+    
+    #calculate the ensemble model using two different kinds of weights
     ensemble_outerfolds = [model_name.replace('pred_', 'outer_fold_') for model_name in ensemble_namecols]
+    #weighted by performance
+    weights_with_names = Performances[main_metric_name + '_all'][Performances[main_metric_name + '_all'] > performance_cutoff]
+    weights = weights_with_names.values/weights_with_names.values.sum()
+    if len(list_ensemble_levels) > 0:
+        #weighted by both performance and subcategories
+        weights_by_category = weighted_weights_by_category(weights_with_names, Performances, ensemble_level)
+        #weighted by the performance of the ensemble models right below it
+        sub_ensemble_names, weights_by_ensembles = weighted_weights_by_ensembles(Predictions, Performances, parameters, ensemble_level, main_metric_name)
     
     #for each fold, build the ensemble model
     for fold in folds:
         Ensemble_predictions = PREDICTIONS[fold][ensemble_namecols]*weights
-        PREDICTIONS[fold]['pred_' + version] = Ensemble_predictions.sum(axis=1, skipna=False)/np.sum(weights)
-        Ensemble_outerfolds = PREDICTIONS[fold][ensemble_outerfolds]
-        if is_rank_one(Ensemble_outerfolds):
-            #print('The folds were shared by all the models in the ensemble models. Saving the folds too.')
-            PREDICTIONS[fold]['outer_fold_' + version] = Ensemble_outerfolds.mean(axis=1, skipna=False)
-        else:
-            PREDICTIONS[fold]['outer_fold_' + version] = np.nan
-        
-        #build and save a dataset for this specific ensemble model
-        df_single_ensemble = PREDICTIONS[fold][['eid', 'outer_fold_' + version, 'pred_' + version]]
-        df_single_ensemble.rename(columns={'outer_fold_' + version: 'outer_fold', 'pred_' + version: 'pred'}, inplace=True)
-        df_single_ensemble.dropna(inplace=True, subset=['pred'])
-        df_single_ensemble.to_csv(path_store + 'Predictions_' + version + '_' + fold + '_' + id_set +'.csv', index=False)
+        PREDICTIONS[fold]['pred_' + version] = Ensemble_predictions.sum(axis=1, skipna=False)
+        if len(list_ensemble_levels) > 0:
+            Ensemble_predictions_weighted_by_category = PREDICTIONS[fold][ensemble_namecols]*weights_by_category
+            Ensemble_predictions_weighted_by_ensembles = PREDICTIONS[fold][sub_ensemble_names]*weights_by_ensembles
+            PREDICTIONS[fold]['pred_' + version.replace('*', ',')] = Ensemble_predictions_weighted_by_category.sum(axis=1, skipna=False)
+            PREDICTIONS[fold]['pred_' + version.replace('*', '?')] = Ensemble_predictions_weighted_by_ensembles.sum(axis=1, skipna=False)
 
-def recursive_ensemble_builder(PREDICTIONS, Predictions, y, main_metric_name, id_set, Performances_grandparent, parameters_parent, version_parent, list_ensemble_levels_parent):   
-    #compute the ensemble model for the parent
-    print('Building the ensemble model ' + version_parent)
-    Performances_parent = Performances_grandparent[Performances_grandparent['version'].isin(fnmatch.filter(Performances_grandparent['version'], version_parent))]
-    build_single_ensemble(PREDICTIONS, Predictions, y, main_metric_name, id_set, Performances_parent, version_parent)
+def build_single_ensemble_wrapper(PREDICTIONS, target, main_metric_name, id_set, Performances, parameters, version, list_ensemble_levels, ensemble_level):
+    Predictions = PREDICTIONS['val']
+    #Select the outerfolds columns for the model
+    ensemble_outerfolds_cols = [name_col for name_col in Predictions.columns.values if bool(re.compile('outer_fold_' + version).match(name_col))]
+    Ensemble_outerfolds = Predictions[ensemble_outerfolds_cols]
     
+    #Evaluate if the model can be built piece by piece on each outer_fold, or if the folds are not shared and the model should be built on all the folds at once
+    if not is_rank_one(Ensemble_outerfolds):
+        build_single_ensemble(PREDICTIONS, target, main_metric_name, id_set, Performances, parameters, version, list_ensemble_levels, ensemble_level)
+        for fold in folds:
+            PREDICTIONS[fold]['outer_fold_' + version] = np.nan
+    else:
+        PREDICTIONS_ENSEMBLE = {}
+        for outer_fold in outer_folds:
+            #take the subset of the rows that correspond to the outer_fold
+            col_outer_fold = ensemble_outerfolds_cols[0]
+            PREDICTIONS_outerfold = {}
+            for fold in folds:
+                PREDICTIONS[fold]['outer_fold_' + version] = PREDICTIONS[fold][col_outer_fold]
+                PREDICTIONS_outerfold[fold] = PREDICTIONS[fold][PREDICTIONS[fold]['outer_fold_' + version] == float(outer_fold)]
+            
+            #build the ensemble model
+            build_single_ensemble(PREDICTIONS_outerfold, target, main_metric_name, id_set, Performances, parameters, version, list_ensemble_levels, ensemble_level)
+            
+            #merge the predictions on each outer_fold
+            for fold in folds:
+                PREDICTIONS_outerfold[fold]['outer_fold_' + version]= float(outer_fold)
+                if not fold in PREDICTIONS_ENSEMBLE.keys():
+                    if ensemble_level == None:
+                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version]]
+                    else:
+                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version, 'pred_' + version.replace('*', ','), 'pred_' + version.replace('*', '?')]]
+                else:
+                    if ensemble_level == None:
+                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_ENSEMBLE[fold].append(PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version]])
+                    else:
+                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_ENSEMBLE[fold].append(PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version, 'pred_' + version.replace('*', ','), 'pred_' + version.replace('*', '?')]])
+        
+        #Add the ensemble predictions to the dataframe
+        for fold in folds:
+            if fold == 'train':
+                PREDICTIONS[fold] = PREDICTIONS[fold].merge(PREDICTIONS_ENSEMBLE[fold], how='outer', on =['eid', 'outer_fold_' + version])
+            else:
+                PREDICTIONS_ENSEMBLE[fold].drop('outer_fold_' + version, axis=1, inplace=True)
+                PREDICTIONS[fold] = PREDICTIONS[fold].merge(PREDICTIONS_ENSEMBLE[fold], how='outer', on =['eid'])
+    
+    #build and save a dataset for this specific ensemble model
+    for ensemble_type in ['*', ',', '?']:
+        version_type = version.replace('*', ensemble_type)
+        if 'pred_' + version_type in PREDICTIONS[fold].columns.values:
+            for fold in folds:
+                df_single_ensemble = PREDICTIONS[fold][['eid', 'outer_fold_' + version, 'pred_' + version_type]]
+                df_single_ensemble.rename(columns={'outer_fold_' + version: 'outer_fold', 'pred_' + version_type: 'pred'}, inplace=True)
+                df_single_ensemble.dropna(inplace=True, subset=['pred'])
+                df_single_ensemble.to_csv(path_store + 'Predictions_' + version_type + '_' + fold + '_' + id_set +'.csv', index=False)
+
+def recursive_ensemble_builder(PREDICTIONS, target, main_metric_name, id_set, Performances_grandparent, parameters_parent, version_parent, list_ensemble_levels_parent):   
+    #Compute the ensemble models for the children first, so that they can be used for the parent model
+    Performances_parent = Performances_grandparent[Performances_grandparent['version'].isin(fnmatch.filter(Performances_grandparent['version'], version_parent))]
     #if the last ensemble level has not been reached, go down one level and create a branch for each child. Otherwise the leaf has been reached
     if len(list_ensemble_levels_parent) > 0:
         list_ensemble_levels_child = list_ensemble_levels_parent.copy()
@@ -991,7 +1234,14 @@ def recursive_ensemble_builder(PREDICTIONS, Predictions, y, main_metric_name, id
             parameters_child[ensemble_level] = child
             version_child = parameters_to_version(parameters_child)
             #recursive call to the function
-            recursive_ensemble_builder(PREDICTIONS, Predictions, y, main_metric_name, id_set, Performances_parent, parameters_child, version_child, list_ensemble_levels_child)
+            recursive_ensemble_builder(PREDICTIONS, target, main_metric_name, id_set, Performances_parent, parameters_child, version_child, list_ensemble_levels_child)
+    else:
+        ensemble_level = None
+    
+    #compute the ensemble model for the parent
+    print('Building the ensemble model ' + version_parent)
+    build_single_ensemble_wrapper(PREDICTIONS, target, main_metric_name, id_set, Performances_parent, parameters_parent, version_parent, list_ensemble_levels_parent, ensemble_level)
+
 
 
 ### PARAMETERS THAT DEPEND ON FUNCTIONS

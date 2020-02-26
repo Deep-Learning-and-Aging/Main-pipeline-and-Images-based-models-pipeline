@@ -24,21 +24,21 @@ if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age') #target
-    sys.argv.append('Heart_20208_2chambers') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
+    sys.argv.append('Heart_20208_3chambers') #image_type, e.g PhysicalActivity_90001_main, Liver_20204_main or Heart_20208_3chambers
     sys.argv.append('raw') #transformation
-    sys.argv.append('DenseNet169') #architecture
+    sys.argv.append('InceptionResNetV2') #architecture
     sys.argv.append('Adam') #optimizer
-    sys.argv.append('0.0001') #learning_rate
+    sys.argv.append('0.001') #learning_rate
     sys.argv.append('0.0') #weight decay
     sys.argv.append('0.0') #dropout
-    sys.argv.append('0') #outer_fold
+    sys.argv.append('1') #outer_fold
 
 #read parameters from command
 target, image_type, organ, field_id, view, transformation, architecture, optimizer, learning_rate, weight_decay, dropout_rate, outer_fold, id_set = read_parameters_from_command(sys.argv)
 
 #set other parameters accordingly
 functions_version = 'Keras' #use 'Keras' for functions during training, and 'sklearn' for functions during testing
-version = target + '_' + image_type + '_' + transformation + '_' + architecture + '_' + optimizer + '_' + str(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate) + '_' + str(outer_fold)
+version = target + '_' + image_type + '_' + transformation + '_' + architecture + '_' + optimizer + '_' + np.format_float_positional(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate) + '_' + str(outer_fold)
 dir_images = '../images/' + organ + '/' + field_id + '/' + view + '/' + transformation + '/'
 image_size = input_size_models[architecture]
 batch_size = dict_batch_sizes[architecture]
@@ -77,12 +77,18 @@ class_weights = generate_class_weights(data_features=DATA_FEATURES['train'], tar
 GENERATORS, STEP_SIZES = generate_generators(DATA_FEATURES=DATA_FEATURES, target=target, dir_images=dir_images, image_size=image_size, batch_size=batch_size, folds=folds_tune, seed=seed, mode='model_training')
 
 #define the model
+"""
+cnn_input, cnn_output = generate_cnn(architecture=architecture, weight_decay=weight_decay, dropout_rate=dropout_rate, keras_weights=keras_weights)
+side_nn_input, side_nn_output = generate_side_nn(dim):
+model = complete_architecture(cnn_input=cnn_input, cnn_output=cnn_output, scalar_predictors =, activation=dict_activations[prediction_type], weight_decay=weight_decay, dropout_rate=dropout_rate)
+"""
 x, base_model_input = generate_base_model(architecture=architecture, weight_decay=weight_decay, dropout_rate=dropout_rate, keras_weights=keras_weights)
 model = complete_architecture(x=x, input_shape=base_model_input, activation=dict_activations[prediction_type], weight_decay=weight_decay, dropout_rate=dropout_rate)
 
 #(re-)set the learning rate
 set_learning_rate(model=model, optimizer=optimizer, learning_rate=learning_rate, loss=loss_function, metrics=metrics)
 
+"""
 #load weights to continue training
 if keras_weights == None:
     try:
@@ -94,6 +100,20 @@ else:
     #save imagenet weights as baseline in case no better weights can be found before convergence
     model.save_weights(path_weights.replace('model-weights', 'backup-model-weights'))
     model.save_weights(path_weights)
+"""
+#load weights to continue training
+try:
+    model.load_weights(path_load_weights)
+except:
+    #load backup weights if the main weights are corrupted
+    try:
+        model.load_weights(path_load_weights.replace('model-weights', 'backup-model-weights'))
+    except:
+        try:
+            model.load_weights('../data_WrongAge/model-weights_' + target + '_' + image_type + '_' + transformation + '_' + architecture + '_' + optimizer + '_' + str(0.0001) + '_' + str(weight_decay) + '_' + str(dropout_rate) + '_' + str(outer_fold) + '.h5')
+        except:
+            model.load_weights(('../data_WrongAge/model-weights_' + target + '_' + image_type + '_' + transformation + '_' + architecture + '_' + optimizer + '_' + str(0.0001) + '_' + str(weight_decay) + '_' + str(dropout_rate) + '_' + str(outer_fold) + '.h5').replace('model-weights', 'backup-model-weights'))
+        model.save_weights(path_weights)
 
 #calculate initial val_loss value
 if continue_training:

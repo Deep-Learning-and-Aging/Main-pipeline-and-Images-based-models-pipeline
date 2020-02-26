@@ -53,7 +53,8 @@ if len(sys.argv) != 11:
 
 #set other parameters accordingly
 target, image_type, organ, field_id, view, preprocessing, architecture, optimizer, learning_rate, weight_decay, dropout_rate, fold, id_set = read_parameters_from_command(sys.argv)
-version = target + '_' + image_type + '_' + preprocessing + '_' + architecture + '_' + optimizer + '_' + str(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate)
+version = target + '_' + image_type + '_' + preprocessing + '_' + architecture + '_' + optimizer + '_' + np.format_float_positional(learning_rate) + '_' + str(weight_decay) + '_' + str(dropout_rate)
+
 names_metrics = dict_metrics_names[dict_prediction_types[target]]
 
 if os.path.exists(path_store + 'Performances_' + version + '_' + fold + '_str.csv') and (not regenerate_performances):

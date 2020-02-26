@@ -39,7 +39,7 @@ y = Predictions[target]
 
 #Generate all the ensemble models
 list_ensemble_levels = ['transformation', 'view', 'field_id', 'organ'] #list in reverse order for the recursive call of the ensemble building algo purpose
-recursive_ensemble_builder(PREDICTIONS, Predictions, y, main_metric_name, id_set, Performances, parameters, version, list_ensemble_levels)
+recursive_ensemble_builder(PREDICTIONS, target, main_metric_name, id_set, Performances, parameters, version, list_ensemble_levels)
 
 #save ensemble predictions
 for fold in folds:
@@ -47,4 +47,9 @@ for fold in folds:
 
 print('Done.')
 sys.exit(0)
+
+
+
+
+
 
