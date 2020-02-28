@@ -1,19 +1,20 @@
 #!/bin/bash
 regenerate_predictions=true
-targets=( "Age" "Sex" )
+#targets=( "Age" "Sex" )
 targets=( "Age" )
-image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
+#image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
 #image_types=( "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Heart_20208_allviewsRGB" )
-image_types=( "Heart_20208_3chambers" )
-transformations_images=( "raw" "contrast" )
+#image_types=( "Heart_20208_3chambers" )
+image_types=( "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
+#transformations_images=( "raw" "contrast" )
 transformations_images=( "raw" )
 transformations_PA=( "raw" )
-architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
+#architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
 architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
-architectures=( "InceptionResNetV2" )
-optimizers=( "Adam" "RMSprop" "Adadelta" )
+#architectures=( "InceptionResNetV2" )
+#optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
-learning_rates=( "0.0001" "1e-05" "1e-06" "1e-07" )
+learning_rates=( "0.000001" )
 weight_decays=( "0.0" )
 dropout_rates=( "0.0" )
 #weight_decays=( "0.0" "0.0001" "0.001" )
@@ -78,7 +79,7 @@ for target in "${targets[@]}"; do
 								fi
 								if $to_run; then
 									echo Submitting job for $version
-									sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time --x11=batch MI03A_Predictions_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
+									#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time --x11=batch MI03A_Predictions_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
 								else
 									echo Predictions for $version have already been generated.
 								fi

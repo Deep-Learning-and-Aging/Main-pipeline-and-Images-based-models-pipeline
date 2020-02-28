@@ -51,7 +51,7 @@ for model in list_models:
     df_model = df_model.drop(columns=['Age', 'pred_' + model])
     Residuals = Residuals.merge(df_model, how='outer', on=['eid'])
 #save the residuals
-Residuals.to_csv(path_store + 'Residuals_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
+Residuals.to_csv(path_store + 'RESIDUALS_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
 
 #Generate the correlation matrix for the corrected residuals
 Residuals_only = Residuals[[col_name for col_name in Residuals.columns.values if 'res_' in col_name]]

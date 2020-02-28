@@ -65,7 +65,7 @@ n_cpus = len(os.sched_getaffinity(0))
 gpu_session = configure_gpus()
 
 #generate data_features
-DATA_FEATURES = load_data_features(folds=folds_tune, path_store=path_store, image_field=dict_image_field_to_ids[organ + '_' + field_id], target=dict_target_to_ids[target], outer_fold=outer_fold)
+DATA_FEATURES = load_data_features(folds=folds_tune, path_store=path_store, image_field=dict_image_field_to_ids[organ + '_' + field_id], target=dict_target_to_ids[target], outer_fold=outer_fold, images_ext=True)
 
 if debunk_mode:
     DATA_FEATURES = take_subset_data_features(DATA_FEATURES=DATA_FEATURES, batch_size=batch_size, fraction=0.1)

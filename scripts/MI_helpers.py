@@ -80,10 +80,17 @@ models_names = ['VGG16', 'VGG19', 'MobileNet', 'MobileNetV2', 'DenseNet121', 'De
 images_sizes = ['224', '299', '331']
 targets_regression = ['Age']
 targets_binary = ['Sex']
-image_quality_ids = {'Liver':'22414-2.0', 'Heart':None, 'PhysicalActivity':None}
+image_quality_ids = {'Liver':'22414-2.0'}
+image_quality_ids .update(dict.fromkeys(['Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid', 'ECG', 'ArterialStiffness'], None))
+
 id_sets = ['A', 'B']
-dict_organ_to_idset={'PhysicalActivity':'A', 'Liver':'B', 'Heart':'B'}
-dict_idset_to_organ={'A':['PhysicalActivity'], 'B':['Liver', 'Heart']}
+dict_idset_to_organ={'A':['Biomarkers', 'ArterialStiffness', 'ECG', 'EyeFundus', 'PhysicalActivity'], 'B':['Liver', 'Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid']}
+dict_organ_to_idset = dict.fromkeys(['Biomarkers', 'ArterialStiffness', 'ECG', 'EyeFundus', 'PhysicalActivity'], 'A')
+dict_organ_to_idset.update(dict.fromkeys(['Liver', 'Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid'], 'B'))
+dict_field_id_to_age_instance = dict.fromkeys(['Placeholder', '6025', '4205'], 'Age_Assessment')
+dict_field_id_to_age_instance.update(dict.fromkeys(['20204', '20208', '20205'], 'Age_Imaging'))
+dict_field_id_to_age_instance.update(dict.fromkeys(['90001'], 'Age_Accelerometer'))
+
 metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
 metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
 modes = ['', '_sd', '_str']
@@ -228,37 +235,31 @@ def configure_gpus():
 def append_ext(fn):
     return fn+".jpg"
 
-def load_data_features(path_store, image_field, target, folds, outer_fold):
+def load_data_features(path_store, image_field, target, folds, outer_fold, images_ext):
     DATA_FEATURES = {}
     for fold in folds:
         DATA_FEATURES[fold] = pd.read_csv(path_store + 'data-features_' + image_field + '_' + target + '_' + fold + '_' + outer_fold + '.csv')
+        if images_ext:
+            DATA_FEATURES[fold]['eid'] = DATA_FEATURES[fold]['eid'].astype(str).apply(append_ext)
+            DATA_FEATURES[fold] = DATA_FEATURES[fold].set_index('eid', drop=False)
     return DATA_FEATURES
 
-def generate_data_features(image_field, organ, target, dir_images, image_quality_id):
-    DATA_FEATURES = {}
-    #TODO: change the way age is collected for the different datasets
-    if image_quality_id == None:
-        # load the selected features
-        if organ in ["PhysicalActivity"]: #different set of eids
+def generate_data_features(image_field, organ, field_id, target, dir_images, image_quality_id):
+    cols_data_features = ['eid', 'Sex', dict_field_id_to_age_instance[field_id]]
+    dict_rename_cols = {dict_field_id_to_age_instance[field_id]: 'Age'}
+    if dict_organ_idset[organ] == 'A':
             data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
             data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
-        else:
-            data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0'])
-        data_features.columns = ['eid', 'Sex', 'Age']
+            print('THIS IS PROBABLY NOT CORRECT. Implement if new organ and make sure age matches')
+    else:
+        if image_quality_id != None:
+            col_data_features.append(image_quality_id)
+            dict_rename_cols[organ + '_images_quality'] = 'Data_quality'
+        data_features = pd.read_csv(path_store + 'data-features.csv', usecols = cols_data_features)
+        data_features.rename(columns={dict_rename_cols}, inplace=True)
         data_features['eid'] = data_features['eid'].astype(str).apply(append_ext)
         data_features = data_features.set_index('eid', drop=False)
-    else:
-        # load the selected features
-        if organ in ["PhysicalActivity"]: #different set of eids
-            print("This has not been implemented (yet?). No image_quality_id is present in UKB for this field (?).")
-            sys.exit(1)
-        else:
-            data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0', image_quality_id])
-        data_features.columns = ['eid', 'Sex', 'Age', 'Data_quality']
-        data_features['eid'] = data_features['eid'].astype(str)
-        data_features['eid'] = data_features['eid'].apply(append_ext)
-        data_features = data_features.set_index('eid', drop=False)
-        # remove the samples for which the image data is low quality
+    if image_quality_id != None:
         data_features = data_features[data_features['Data_quality'] != np.nan]
         data_features = data_features.drop('Data_quality', axis=1)
     # get rid of samples with NAs
@@ -309,9 +310,7 @@ def generate_data_features(image_field, organ, target, dir_images, image_quality
             if target in targets_regression:
                 data_features_fold[target + '_raw'] = data_features_fold[target]
                 data_features_fold[target] = (data_features_fold[target] - target_mean) / target_std
-            DATA_FEATURES[fold] = data_features_fold
             data_features_fold.to_csv(path_store + 'data-features_' + image_field + '_' + target + '_' + fold + '_' + outer_fold + '.csv', index=False)
-    return DATA_FEATURES
 
 def take_subset_data_features(DATA_FEATURES, batch_size, fraction=0.1):
     for fold in DATA_FEATURES.keys():
@@ -835,7 +834,9 @@ def preprocess_data_features_predictions_for_performances(path_store, id_set, ta
         data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
         data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
     elif id_set == 'B':
-        data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0'])
+        cols_data_features = ['eid', 'Sex', dict_field_id_to_age_instance[field_id]]
+        data_features = pd.read_csv(path_store + 'data-features.csv', usecols = cols_data_features)
+        data_features.rename(columns={dict_rename_cols}, inplace=True)
     else:
         print('ERROR: id_set must be either A or B')
         sys.exit(1)

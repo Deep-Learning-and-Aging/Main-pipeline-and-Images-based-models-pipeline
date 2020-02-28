@@ -35,9 +35,9 @@ list_models = glob.glob(path_store + 'Performances_' + target + '_*_' + fold + '
 
 #get rid of ensemble models
 if ensemble_models:
-    list_models = [model for model in list_models if '*' in model]
+    list_models = [model for model in list_models if ('*' in model | '?' in model | ',' in model) ]
 else:
-    list_models = [model for model in list_models if '*' not in model]
+    list_models = [model for model in list_models if not ('*' in model | '?' in model | ',' in model) ]
 
 #Fill the summary performances dataframe row by row
 Performances_ranked = fill_summary_performances_matrix(list_models, target, fold, id_set, ensemble_models, save_performances)
