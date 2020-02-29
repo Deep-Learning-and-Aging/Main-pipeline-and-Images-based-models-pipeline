@@ -28,17 +28,19 @@ id_set = sys.argv[3]
 if id_set == 'A':
     data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
     data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
+    print('THIS IS PROBABLY NOT CORRECT. Implement if new organ and make sure age matches')
+    data_features.columns = ['eid', 'Sex', 'Age']
+    data_features['eid'] = data_features['eid'].astype(str)
+    data_features = data_features.set_index('eid', drop=False)
+    data_features.index.name = 'column_names'
 elif id_set == 'B':
-    data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv', usecols=['eid', '31-0.0', '21003-2.0'])
+    data_features = pd.read_csv(path_store + 'data_features.csv', usecols = ['eid', 'Sex', 'Age_Assessment', 'Age_Imaging'])
+    data_features['eid'] = data_features['eid'].astype(str)
+    data_features = data_features.set_index('eid', drop=False)
+    data_features.index.name = 'column_names'
 else:
     print('ERROR: id_set must be either A or B')
     sys.exit(1)
-
-#format the data_features
-data_features.columns = ['eid', 'Sex', 'Age']
-data_features['eid'] = data_features['eid'].astype(str)
-data_features = data_features.set_index('eid', drop=False)
-data_features.index.name = 'column_names'
 
 #For the training set, each sample is predicted n_CV_outer_folds times, so prepare a larger dataframe to receive the predictions
 if fold == 'train':
@@ -92,8 +94,13 @@ if fold == 'train':
 else:
     Predictions_df = data_features.merge(Predictions_df, how='outer', on=['eid']) #not supported for panda version > 0.23.4 for now
 
-#remove rows for which no prediction is available (should be none), before saving the Prediction tables
+#remove rows for which no prediction is available (should be none)
 Predictions_df.dropna(subset=[col for col in Predictions_df.columns if 'pred_' in col], how='all', inplace=True)
+
+#Format the dataframe
+Predictions_df.drop(['Age_Imaging', 'outer_fold'], axis=1, inplace=True)
+
+#Save the Prediction tables
 Predictions_df.to_csv(path_store + 'PREDICTIONS_withoutEnsembles_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
 
 #exit

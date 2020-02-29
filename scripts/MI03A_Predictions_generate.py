@@ -11,7 +11,7 @@ from MI_helpers import *
 
 #options
 #debug mode: exclude train set
-debug_mode = False
+debug_mode = True
 #generate training plots
 generate_training_plots = False
 #regenerate predictions even if already exists
@@ -28,7 +28,7 @@ if len(sys.argv) != 9:
     sys.argv.append('raw') #transformation
     sys.argv.append('InceptionResNetV2') #architecture
     sys.argv.append('Adam') #optimizer
-    sys.argv.append('0.0001') #learning_rate
+    sys.argv.append('0.000001') #learning_rate
     sys.argv.append('0.0') #weight decay
     sys.argv.append('0.0') #dropout
 
@@ -66,7 +66,7 @@ for outer_fold in outer_folds:
     print('Predicting samples for the outer_fold = ' + outer_fold)
     
     # load data_features, 
-    DATA_FEATURES = load_data_features(path_store=path_store, image_field=dict_image_field_to_ids[organ + '_' + field_id], target=dict_target_to_ids[target], folds=['train', 'val', 'test'], outer_fold=outer_fold)
+    DATA_FEATURES = load_data_features(path_store=path_store, image_field=dict_image_field_to_ids[organ + '_' + field_id], target=dict_target_to_ids[target], folds=['train', 'val', 'test'], outer_fold=outer_fold, images_ext='.jpg')
     # If regression target: calculate the mean and std of the target
     if target in targets_regression:
         mean_train = DATA_FEATURES['train'][target+'_raw'].mean()
@@ -128,10 +128,30 @@ for outer_fold in outer_folds:
     if generate_training_plots:
         plot_training(path_store=path_store, version=model_version, display_learning_rate=True)
 
+
+#Format the dataframes
+for fold in folds:
+    PREDICTIONS[fold].index.name = 'column_names' 
+    PREDICTIONS[fold] = PREDICTIONS[fold][['eid', 'outer_fold', 'pred']]
+
+#For age, correct the prediction if the model was trained on datasets from another instance than instance 0
+if (target == 'Age') & (field_id in list_instance2_field_ids):
+    data_features = pd.read_csv(path_store + 'data-features.csv')
+    data_features['eid'] = data_features['eid'].astype(str)
+    data_features['correction'] = data_features['Age'] - data_features['Age_Imaging']
+    data_features = data_features[['eid', 'correction']]
+    data_features.set_index('eid', drop=False,inplace=True)
+    data_features.index.name = 'column_names' 
+    
+    for fold in folds:
+        PREDICTIONS[fold] = PREDICTIONS[fold].merge(data_features, how='inner', on=['eid'])
+        PREDICTIONS[fold]['pred'] = PREDICTIONS[fold]['pred'] + PREDICTIONS[fold]['correction']
+        PREDICTIONS[fold] = PREDICTIONS[fold][['eid', 'outer_fold', 'pred']]
+
 # save predictions
 if save_predictions:
     for fold in folds:
-        PREDICTIONS[fold][['eid', 'outer_fold', 'pred']].to_csv(path_store + 'Predictions_' + version + '_' + fold + '_' + id_set +'.csv', index=False)
+        PREDICTIONS[fold].to_csv(path_store + 'Predictions_' + version + '_' + fold + '_' + id_set +'.csv', index=False)
 
 #exit
 print('Done.')

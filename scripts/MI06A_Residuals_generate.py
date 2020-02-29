@@ -53,14 +53,6 @@ for model in list_models:
 #save the residuals
 Residuals.to_csv(path_store + 'RESIDUALS_' + target + '_' + fold + '_' + id_set + '.csv', index=False)
 
-#Generate the correlation matrix for the corrected residuals
-Residuals_only = Residuals[[col_name for col_name in Residuals.columns.values if 'res_' in col_name]]
-Residuals_only.rename(columns=lambda x: x.replace('res_' + target + '_',''), inplace=True)
-Residuals_correlations = Residuals_only.corr()
-
-#save the correlation
-Residuals_correlations.to_csv(path_store + 'ResidualsCorrelations_' + target + '_' + fold + '_' + id_set + '.csv', index=True)
-
 #exit
 print('Done.')
 sys.exit(0)

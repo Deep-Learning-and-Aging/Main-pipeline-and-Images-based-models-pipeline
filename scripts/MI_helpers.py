@@ -32,6 +32,7 @@ from numpy.polynomial.polynomial import polyfit
 #images
 import matplotlib.pyplot as plt
 import seaborn as sns
+import cv2
 from PIL import Image
 from scipy.ndimage import shift, rotate
 from skimage.color import gray2rgb
@@ -65,6 +66,10 @@ from keras.optimizers import Adam, RMSprop, Adadelta
 from keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger, TerminateOnNaN, TensorBoard
 from keras.constraints import max_norm
 
+#Model's attention
+import innvestigate
+import innvestigate.utils
+
 
 ### PARAMETERS
 names_model_parameters = ['target', 'organ', 'field_id', 'view', 'transformation', 'architecture', 'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate']
@@ -82,12 +87,13 @@ targets_regression = ['Age']
 targets_binary = ['Sex']
 image_quality_ids = {'Liver':'22414-2.0'}
 image_quality_ids .update(dict.fromkeys(['Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid', 'ECG', 'ArterialStiffness'], None))
-
+dict_UKB_fields_to_names={'31-0.0': 'Sex', '21003-0.0': 'Age', '21003-2.0': 'Age_Imaging', '22414-2.0': 'Liver_images_quality'}
 id_sets = ['A', 'B']
 dict_idset_to_organ={'A':['Biomarkers', 'ArterialStiffness', 'ECG', 'EyeFundus', 'PhysicalActivity'], 'B':['Liver', 'Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid']}
 dict_organ_to_idset = dict.fromkeys(['Biomarkers', 'ArterialStiffness', 'ECG', 'EyeFundus', 'PhysicalActivity'], 'A')
 dict_organ_to_idset.update(dict.fromkeys(['Liver', 'Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid'], 'B'))
-dict_field_id_to_age_instance = dict.fromkeys(['Placeholder', '6025', '4205'], 'Age_Assessment')
+list_instance2_field_ids = ['20204', '20208', '20205']
+dict_field_id_to_age_instance = dict.fromkeys(['Placeholder', '6025', '4205'], 'Age')
 dict_field_id_to_age_instance.update(dict.fromkeys(['20204', '20208', '20205'], 'Age_Imaging'))
 dict_field_id_to_age_instance.update(dict.fromkeys(['90001'], 'Age_Accelerometer'))
 
