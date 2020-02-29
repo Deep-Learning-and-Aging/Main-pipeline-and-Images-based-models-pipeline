@@ -28,7 +28,7 @@ if len(sys.argv) != 10:
     sys.argv.append('raw') #transformation
     sys.argv.append('InceptionResNetV2') #architecture
     sys.argv.append('Adam') #optimizer
-    sys.argv.append('0.001') #learning_rate
+    sys.argv.append('0.000001') #learning_rate
     sys.argv.append('0.0') #weight decay
     sys.argv.append('0.0') #dropout
     sys.argv.append('1') #outer_fold

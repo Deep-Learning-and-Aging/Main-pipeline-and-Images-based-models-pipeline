@@ -65,12 +65,3 @@ Residuals_correlations.to_csv(path_store + 'ResidualsCorrelations_' + target + '
 print('Done.')
 sys.exit(0)
 
-#TODO: For each level, plot the correlations between the best models for the sublevel.
-#Eg for Age, plot the correlation between the best model for each organ.
-#For each organ, plot the correlation between the best model for each field id.
-#For each field id, plot the correlation between the best model for each view
-#For each view, plot the correlation between the best model for each transformation.
-#Residuals_ensembles = Residuals_only[[col_name for col_name in Residuals_only.columns.values if '*' in col_name]]
-#Residuals_ensembles_correlations = Residuals_ensembles.corr()
-#sns.heatmap(Residuals_correlations, annot=True)
-

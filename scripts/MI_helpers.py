@@ -1243,6 +1243,21 @@ def recursive_ensemble_builder(PREDICTIONS, target, main_metric_name, id_set, Pe
     print('Building the ensemble model ' + version_parent)
     build_single_ensemble_wrapper(PREDICTIONS, target, main_metric_name, id_set, Performances_parent, parameters_parent, version_parent, list_ensemble_levels_parent, ensemble_level)
 
+def bootstrap_correlations(data, n_bootstrap_iterations):
+    names = data.columns.values
+    results = []
+    for i in range(n_bootstrap_iterations):
+        if (i % 100 == 0):
+            print('Bootstrap iteration ' + str(i) + ' out of ' + str(n_bootstrap_iterations))
+        data_i = resample(data, replace=True, n_samples=len(data.index))
+        results.append(np.array(data_i.corr()))
+    results = np.array(results)
+    for op in ['mean', 'std']:
+        results_op = pd.DataFrame(getattr(np, op)(results, axis=0))
+        results_op.index = names
+        results_op.columns = names
+        globals()['results_' + op] = results_op
+    return results_mean, results_std
 
 
 ### PARAMETERS THAT DEPEND ON FUNCTIONS
