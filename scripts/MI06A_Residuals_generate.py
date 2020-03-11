@@ -5,8 +5,6 @@ Created on Tue Feb 11 16:24:04 2020
 
 @author: Alan
 """
-os.chdir('/Users/Alan/Desktop/Aging/Medical_Images/scripts/')
-
 
 #load libraries, import functions and import parameters (nested import in the line below)
 from MI_helpers import *
@@ -27,7 +25,6 @@ id_set = sys.argv[3]
 #options
 debug_mode = False
 
-#Predictions = pd.read_csv(path_store + 'PREDICTIONS_withEnsembles_' + target + '_' + fold + '_' + id_set + '.csv')
 Predictions = pd.read_csv(path_store + 'PREDICTIONS_withEnsembles_' + target + '_' + fold + '_' + id_set + '.csv')
 Residuals = Predictions[['eid', 'Sex', 'Age']]
 list_models = [col_name.replace('pred_', '') for col_name in Predictions.columns.values if 'pred_' in col_name]

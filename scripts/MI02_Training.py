@@ -135,6 +135,19 @@ model.fit_generator(generator=GENERATORS['train'], steps_per_epoch=STEP_SIZES['t
 
 #exit
 print('\nTHE MODEL CONVERGED!\n')
+print('Closing the GPU session before exiting...')
 gpu_session.close()
+print('Exiting with sys.exit(0)')
 sys.exit(0)
-
+time.sleep(60) 
+print('Escalating to kill JOB PID with kill...')
+os.system('touch ../eo/' + os.environ['SLURM_JOBID'])
+os.system('kill ' + str(os.getpid()))
+time.sleep(60) 
+print('Escalating to kill JOB PID with kill -9...')
+os.system('kill -9 ' + str(os.getpid()))
+time.sleep(60) 
+print('Escalating to kill JOB ID')
+os.system('scancel '+ os.environ['SLURM_JOBID'])
+time.sleep(60) 
+print('Everything failed to kill the job. Hanging there until hitting walltime...')

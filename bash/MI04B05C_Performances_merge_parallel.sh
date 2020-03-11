@@ -1,12 +1,13 @@
 #!/bin/bash
 #define parameters
-targets=( "Age" "Sex" )
+#targets=( "Age" "Sex" )
 targets=( "Age" )
 folds=( "train" "val" "test" )
-id_sets=( "A" "B" )
+#id_sets=( "A" "B" )
+id_sets=( "B" )
 #Ensure that the ensemble_model parameter was specified
 if [[ ! ($1 == "True" || $1 == "False") ]]; then
-    echo ERROR. Usage: ./MI04B05C_Performance_merge_parallel.sh ensemble_models    ensemble_models must be either True to generate performances for ensemble models \(05C\), or False to generate performances for simple models \(04B\)
+    echo ERROR. Usage: ./MI04B05C_Performance_merge_parallel.sh ensemble_models    ensemble_models must be either False to generate performances for simple models \(04B\), or True to generate performances for ensemble models \(05C\)
 	exit
 fi
 ensemble_models=$1

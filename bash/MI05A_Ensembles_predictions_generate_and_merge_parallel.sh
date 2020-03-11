@@ -1,6 +1,8 @@
 #!/bin/bash
-targets=( "Age" "Sex" )
-id_sets=( "A" "B" )
+#targets=( "Age" "Sex" )
+targets=( "Age" )
+#id_sets=( "A" "B" )
+id_sets=( "B" )
 memory=8G
 n_cpu_cores=1
 time=60

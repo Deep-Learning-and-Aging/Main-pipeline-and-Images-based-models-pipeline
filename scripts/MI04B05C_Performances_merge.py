@@ -16,8 +16,7 @@ if len(sys.argv) != 5:
     sys.argv.append('Age') #target
     sys.argv.append('test') #inner_fold
     sys.argv.append('B') #id_set
-    sys.argv.append('True') #ensemble_models. if True, only compute the performances for the ensemble models. Otherwise ignore them. Set False for MI04B and True for MI05B.
-
+    sys.argv.append('False') #ensemble_models. Set False for MI04B and True for MI05B. if True, only compute the performances for the ensemble models. Otherwise ignore them. 
 #read parameters from command
 target = sys.argv[1]
 fold = sys.argv[2]
@@ -25,8 +24,6 @@ id_set = sys.argv[3]
 ensemble_models = convert_string_to_boolean(sys.argv[4])
 
 #options
-debug_mode = True
-regenerate_performances = True
 save_performances = True
 names_metrics = dict_metrics_names[dict_prediction_types[target]]
 
@@ -35,9 +32,9 @@ list_models = glob.glob(path_store + 'Performances_' + target + '_*_' + fold + '
 
 #get rid of ensemble models
 if ensemble_models:
-    list_models = [model for model in list_models if ('*' in model | '?' in model | ',' in model) ]
+    list_models = [model for model in list_models if (('*' in model) | ('?' in model) | (',' in model)) ]
 else:
-    list_models = [model for model in list_models if not ('*' in model | '?' in model | ',' in model) ]
+    list_models = [model for model in list_models if not (('*' in model) | ('?' in model) | (',' in model)) ]
 
 #Fill the summary performances dataframe row by row
 Performances_ranked = fill_summary_performances_matrix(list_models, target, fold, id_set, ensemble_models, save_performances)

@@ -1,9 +1,9 @@
 #!/bin/bash
-targets=( "Age" "Sex" )
+#targets=( "Age" "Sex" )
 targets=( "Age" )
 folds=( "train" "val" "test" )
 #folds=("train" )
-id_sets=( "A" "B" )
+#id_sets=( "A" "B" )
 id_sets=( "B" )
 n_cpu_cores=1
 for fold in "${folds[@]}"; do

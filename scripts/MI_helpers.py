@@ -44,6 +44,7 @@ from tqdm import tqdm_notebook as tqdm
 import gc
 import GPUtil
 from datetime import datetime
+import time
 
 #sklearn
 from sklearn.model_selection import train_test_split
@@ -69,6 +70,8 @@ from keras.constraints import max_norm
 #Model's attention
 import innvestigate
 import innvestigate.utils
+from vis.utils import utils
+from vis.visualization import visualize_cam
 
 
 ### PARAMETERS
@@ -93,13 +96,16 @@ dict_idset_to_organ={'A':['Biomarkers', 'ArterialStiffness', 'ECG', 'EyeFundus',
 dict_organ_to_idset = dict.fromkeys(['Biomarkers', 'ArterialStiffness', 'ECG', 'EyeFundus', 'PhysicalActivity'], 'A')
 dict_organ_to_idset.update(dict.fromkeys(['Liver', 'Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid'], 'B'))
 list_instance2_field_ids = ['20204', '20208', '20205']
+images_field_ids = ['20204', '20208']
 dict_field_id_to_age_instance = dict.fromkeys(['Placeholder', '6025', '4205'], 'Age')
 dict_field_id_to_age_instance.update(dict.fromkeys(['20204', '20208', '20205'], 'Age_Imaging'))
 dict_field_id_to_age_instance.update(dict.fromkeys(['90001'], 'Age_Accelerometer'))
-
+dift_field_id_to_organ = {'20204': 'Liver', '20205': 'ECG', '20208': 'Heart', '6025': 'ECG', '4205': 'ArterialStiffness'}
 metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
 metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
 modes = ['', '_sd', '_str']
+ensemble_types = ['*', ',', '?']
+dict_architecture_to_last_conv_layer_name = {'VGG16': 'block5_conv3', 'VGG19': 'block5_conv4', 'MobileNet': 'conv_pw_13_relu', 'MobileNetV2': 'out_relu', 'DenseNet121': 'relu', 'DenseNet169':'relu', 'DenseNet201': 'relu', 'NASNetMobile': 'activation_1136', 'NASNetLarge': 'activation_1396', 'Xception': 'block14_sepconv2_act', 'InceptionV3': 'mixed10', 'InceptionResNetV2': 'conv_7b_ac'}
 
 #define dictionary of batch sizes to fit as many samples as the model's architecture allows
 dict_batch_sizes = dict.fromkeys(['NASNetMobile'], 128)
@@ -164,8 +170,12 @@ ensembles_performance_cutoff_percent = 0
 #postprocessing
 n_bootstrap_iterations = 1000
 
-#set parameters
+#Visualization
+N_samples_saliencymaps = 10
+
+#set seeds
 seed=0
+np.random.seed(seed)
 random.seed(seed)
 set_random_seed(seed)
 
@@ -198,7 +208,7 @@ def read_parameters_from_command(args):
     parameters['organ'], parameters['field_id'], parameters['view'] = parameters['image_type'].split('_')
     #convert parameters to float if a specific value other than 'all' was selected
     for parameter_name in ['learning_rate', 'weight_decay', 'dropout_rate']:
-        if(parameters[parameter_name] != '*'):
+        if(parameters[parameter_name] not in ['*', ',', '?']):
             parameters[parameter_name] = float(parameters[parameter_name])
     return parameters['target'], parameters['image_type'], parameters['organ'], parameters['field_id'], parameters['view'], parameters['transformation'], parameters['architecture'], parameters['optimizer'], parameters['learning_rate'], parameters['weight_decay'], parameters['dropout_rate'], parameters['outer_fold'], parameters['id_set']
 
@@ -250,20 +260,23 @@ def load_data_features(path_store, image_field, target, folds, outer_fold, image
             DATA_FEATURES[fold] = DATA_FEATURES[fold].set_index('eid', drop=False)
     return DATA_FEATURES
 
-def generate_data_features(image_field, organ, field_id, target, dir_images, image_quality_id):
+def generate_data_features(image_field, organ, field_id, target, list_available_ids, image_quality_id):
     cols_data_features = ['eid', 'Sex', dict_field_id_to_age_instance[field_id]]
     dict_rename_cols = {dict_field_id_to_age_instance[field_id]: 'Age'}
-    if dict_organ_idset[organ] == 'A':
+    if dict_organ_to_idset[organ] == 'A':
             data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
             data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
+            data_features.columns = ['eid', 'Sex', 'Age']
+            data_features['eid'] = data_features['eid'].astype(str)
+            data_features = data_features.set_index('eid', drop=False)
             print('THIS IS PROBABLY NOT CORRECT. Implement if new organ and make sure age matches')
     else:
         if image_quality_id != None:
-            col_data_features.append(image_quality_id)
+            cols_data_features.append(organ + '_images_quality')
             dict_rename_cols[organ + '_images_quality'] = 'Data_quality'
         data_features = pd.read_csv(path_store + 'data-features.csv', usecols = cols_data_features)
-        data_features.rename(columns={dict_rename_cols}, inplace=True)
-        data_features['eid'] = data_features['eid'].astype(str).apply(append_ext)
+        data_features.rename(columns=dict_rename_cols, inplace=True)
+        data_features['eid'] = data_features['eid'].astype(str) #.apply(append_ext)
         data_features = data_features.set_index('eid', drop=False)
     if image_quality_id != None:
         data_features = data_features[data_features['Data_quality'] != np.nan]
@@ -271,8 +284,7 @@ def generate_data_features(image_field, organ, field_id, target, dir_images, ima
     # get rid of samples with NAs
     data_features.dropna(inplace=True)
     # list the samples' ids for which liver images are available
-    all_files = os.listdir(dir_images)
-    data_features = data_features.loc[all_files]
+    data_features = data_features.loc[list_available_ids]
     #files = data_features.index.values
     ids = data_features.index.values.copy()
     np.random.shuffle(ids)
@@ -302,15 +314,12 @@ def generate_data_features(image_field, organ, field_id, target, dir_images, ima
         print(outer_fold)
         # compute values for scaling of regression targets
         if target in targets_regression:
-            idx = np.where(np.isin(data_features.index.values, TRAINING_IDS[outer_fold]))[0]
-            data_features_train = data_features.iloc[idx, :]
+            data_features_train = data_features.loc[TRAINING_IDS[outer_fold], :] 
             target_mean = data_features_train[target].mean()
             target_std = data_features_train[target].std()
         #generate folds
-        indices = {}
         for fold in folds:
-            indices[fold] = np.where(np.isin(data_features.index.values, IDS[fold][outer_fold]))[0]
-            data_features_fold = data_features.iloc[indices[fold], :]
+            data_features_fold = data_features.loc[IDS[fold][outer_fold], :]
             data_features_fold['outer_fold'] = outer_fold
             data_features_fold = data_features_fold[['eid', 'outer_fold', 'Sex', 'Age']]
             if target in targets_regression:
@@ -690,7 +699,7 @@ def define_callbacks(path_store, version, baseline, continue_training, main_metr
     model_checkpoint_backup = myModelCheckpoint(path_store + 'backup-model-weights_' + version + '.h5', monitor='val_' + main_metric.__name__, baseline=baseline, verbose=1, save_best_only=True, save_weights_only=True, mode=main_metric_mode, period=1)
     model_checkpoint = myModelCheckpoint(path_store + 'model-weights_' + version + '.h5', monitor='val_' + main_metric.__name__, baseline=baseline, verbose=1, save_best_only=True, save_weights_only=True, mode=main_metric_mode, period=1)
     reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=2, verbose=1, mode='min', min_delta=0, cooldown=0, min_lr=0)
-    early_stopping = EarlyStopping(monitor= 'val_' + main_metric.__name__, min_delta=0, patience=5, verbose=0, mode=main_metric_mode, baseline=None, restore_best_weights=False)
+    early_stopping = EarlyStopping(monitor= 'val_' + main_metric.__name__, min_delta=0, patience=15, verbose=0, mode=main_metric_mode, baseline=None, restore_best_weights=False)
     return [csv_logger, model_checkpoint_backup, model_checkpoint, reduce_lr_on_plateau, early_stopping]
 
 def R2_K(y_true, y_pred):
@@ -792,7 +801,7 @@ def save_model_weights(model, path_store, version):
     model.save_weights(path_store + "model_weights_" + version + ".h5")
     print("Model's best weights for "+ version + " were saved.")
 
-def plot_training(path_store, version, display_learning_rate):
+def plot_logger(path_store, version, display_learning_rate):
     try:
         logger = pd.read_csv(path_store + 'logger_' + version + '.csv')
     except:
@@ -831,29 +840,29 @@ def plot_training(path_store, version, display_learning_rate):
             ax2.legend(['Learning Rate'], loc='upper right')
     fig.tight_layout()
     #save figure as pdf before closing
-    fig.savefig("../figures/Training_" + version + '.pdf', bbox_inches='tight')
+    fig.savefig("../figures/Loggers/Logger_" + version + '.pdf', bbox_inches='tight')
     plt.close('all')
 
-def preprocess_data_features_predictions_for_performances(path_store, id_set, target):
+def preprocess_data_features_predictions_for_performances(path_store, id_set, target, field_id):
     #load dataset
     if id_set == 'A':
         data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
         data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
+        data_features.columns = ['eid', 'Sex', 'Age']
     elif id_set == 'B':
-        cols_data_features = ['eid', 'Sex', dict_field_id_to_age_instance[field_id]]
+        cols_data_features = ['eid', 'Sex', 'Age']
         data_features = pd.read_csv(path_store + 'data-features.csv', usecols = cols_data_features)
-        data_features.rename(columns={dict_rename_cols}, inplace=True)
+        #data_features.rename(columns={dict_rename_cols}, inplace=True)
     else:
         print('ERROR: id_set must be either A or B')
         sys.exit(1)
     #format data_features to extract y
-    data_features.columns = ['eid', 'Sex', 'Age']
     data_features.rename(columns={target:'y'}, inplace=True)
     data_features = data_features[['eid', 'y']]
     data_features['eid'] = data_features['eid'].astype(str)
     data_features['eid'] = data_features['eid']
     data_features = data_features.set_index('eid', drop=False)
-    data_features.index.name = 'column_names'
+    data_features.index.name = 'columns_names'
     return data_features
 
 def preprocess_predictions_for_performances(data_features, path_store, version, fold, id_set):
@@ -1047,7 +1056,7 @@ def fill_summary_performances_matrix(list_models, target, fold, id_set, ensemble
     
     #For ensemble models, merge the new performances with the previously computed performances
     if ensemble_models:
-        Performances_withoutEnsembles = pd.read_csv(path_store + 'PERFORMANCES_withoutEnsembles_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv')
+        Performances_withoutEnsembles = pd.read_csv(path_store + 'PERFORMANCES_tuned_alphabetical_' + target + '_' + fold + '_' + id_set + '.csv')
         Performances = Performances_withoutEnsembles.append(Performances)
     
     #Ranking, printing and saving
@@ -1183,6 +1192,8 @@ def build_single_ensemble_wrapper(PREDICTIONS, target, main_metric_name, id_set,
         build_single_ensemble(PREDICTIONS, target, main_metric_name, id_set, Performances, parameters, version, list_ensemble_levels, ensemble_level)
         for fold in folds:
             PREDICTIONS[fold]['outer_fold_' + version] = np.nan
+            PREDICTIONS[fold]['outer_fold_' + version.replace('*', ',')] = np.nan
+            PREDICTIONS[fold]['outer_fold_' + version.replace('*', '?')] = np.nan
     else:
         PREDICTIONS_ENSEMBLE = {}
         for outer_fold in outer_folds:
@@ -1199,16 +1210,20 @@ def build_single_ensemble_wrapper(PREDICTIONS, target, main_metric_name, id_set,
             #merge the predictions on each outer_fold
             for fold in folds:
                 PREDICTIONS_outerfold[fold]['outer_fold_' + version]= float(outer_fold)
-                if not fold in PREDICTIONS_ENSEMBLE.keys():
-                    if ensemble_level == None:
-                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version]]
-                    else:
-                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version, 'pred_' + version.replace('*', ','), 'pred_' + version.replace('*', '?')]]
+                PREDICTIONS_outerfold[fold]['outer_fold_' + version.replace('*', ',')]= float(outer_fold)
+                PREDICTIONS_outerfold[fold]['outer_fold_' + version.replace('*', '?')]= float(outer_fold)    
+                
+                #Save all the ensemble models if available
+                if ensemble_level == None:
+                    df_outer_fold = PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version]]
                 else:
-                    if ensemble_level == None:
-                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_ENSEMBLE[fold].append(PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version]])
-                    else:
-                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_ENSEMBLE[fold].append(PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version, 'pred_' + version.replace('*', ','), 'pred_' + version.replace('*', '?')]])
+                    df_outer_fold = PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version, 'outer_fold_' + version.replace('*', ','), 'pred_' + version.replace('*', ','), 'outer_fold_' + version.replace('*', '?'), 'pred_' + version.replace('*', '?')]]
+                
+                #Initiate, or append if some previous outerfolds have already been concatenated
+                if not fold in PREDICTIONS_ENSEMBLE.keys():
+                    PREDICTIONS_ENSEMBLE[fold] = df_outer_fold
+                else:
+                    PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_ENSEMBLE[fold].append(df_outer_fold)
         
         #Add the ensemble predictions to the dataframe
         for fold in folds:
@@ -1249,6 +1264,75 @@ def recursive_ensemble_builder(PREDICTIONS, target, main_metric_name, id_set, Pe
     print('Building the ensemble model ' + version_parent)
     build_single_ensemble_wrapper(PREDICTIONS, target, main_metric_name, id_set, Performances_parent, parameters_parent, version_parent, list_ensemble_levels_parent, ensemble_level)
 
+def plot_cam_map(image, gradient, plot_title, save_title):
+    r_ch = gradient[:,:,0]
+    g_ch = gradient[:,:,1]
+    b_ch = gradient[:,:,2]
+    a_ch = ((255 - b_ch)*.5).astype(int)
+    b_ch = b_ch
+    g = np.dstack((r_ch, g_ch, b_ch, a_ch))
+    im = plt.imshow(image)
+    gr = plt.imshow(g)
+    plt.axis('off')
+    plt.title(plot_title)
+    fig = plt.gcf()
+    fig.savefig('../figures/Saliency_Maps/GradCam-map_' + save_title + '.png')
+    plt.show()
+
+def plot_saliency_map(image, gradient, plot_title, save_title):
+    gradient = np.linalg.norm(gradient, axis=2)
+    gradient = (gradient*255/gradient.max()).astype(int)
+    r_ch = gradient.copy()
+    g_ch = gradient.copy()*0
+    b_ch = gradient.copy()*0
+    a_ch = gradient*3
+    g = np.dstack((r_ch, g_ch, b_ch, a_ch))
+    im = plt.imshow(image)
+    gr = plt.imshow(g)
+    plt.axis('off')
+    plt.title(plot_title)
+    fig1 = plt.gcf()
+    fig1.savefig('../figures/Saliency_Maps/Saliency-map_' + save_title + '.png')
+    plt.show()
+
+def plot_saliency_map2(image, gradient, plot_title, save_title):
+    print('PLOT SALIENCY MAP 2')
+    gradient = gradient.sum(axis=2)
+    gradient /= np.max(np.abs(gradient))
+    max_abs = np.absolute(gradient).max()
+    gradient = (gradient*255/max_abs).astype(int)
+    r_ch = gradient.copy()
+    r_ch[r_ch < 0] = 0
+    b_ch = -gradient.copy()
+    b_ch[b_ch < 0] = 0
+    g_ch = gradient.copy()*0
+    a_ch = np.maximum(b_ch, r_ch)*5
+    g = np.dstack((r_ch, g_ch, b_ch, a_ch))
+    i2 = plt.imshow(image)
+    i1 = plt.imshow(g)
+    plt.axis('off')
+    plt.title(plot_title)
+    fig1 = plt.gcf()
+    fig1.savefig('../figures/Saliency_Maps/Saliency-map_' + save_title + '.png')
+    plt.show()
+
+def plot_saliency_map3(image, gradient, plot_title, save_title):
+    print('PLOT SALIENCY MAP 3')
+    gradient = np.abs(gradient)
+    gradient = (gradient*255/gradient.max(axis=(0,1))).astype(int)
+    print(gradient.shape)
+    a_ch = np.max(gradient, axis=2)*3
+    g = np.dstack((gradient, a_ch))
+    print(g.shape)
+    print(g.max())
+    i2 = plt.imshow(image)
+    i1 = plt.imshow(g)
+    plt.axis('off')
+    plt.title(plot_title)
+    fig1 = plt.gcf()
+    fig1.savefig('../figures/Saliency_Maps/Saliency-map_' + save_title + '.png')
+    plt.show()
+
 def bootstrap_correlations(data, n_bootstrap_iterations):
     names = data.columns.values
     results = []
@@ -1264,6 +1348,24 @@ def bootstrap_correlations(data, n_bootstrap_iterations):
         results_op.columns = names
         globals()['results_' + op] = results_op
     return results_mean, results_std
+
+def plot_correlations (data, save_figure, title_save):
+    
+    #set parameters
+    plt.clf()
+    sns.set(font_scale=1, rc={'figure.figsize':(23.4,16.54)})
+    
+    #plot
+    cor_plot = sns.heatmap(
+        data=data, xticklabels=1, yticklabels=1, annot=(data*100).round().astype(int), fmt='d', annot_kws={"size": 10},
+        vmin=-1, vmax=1, center=0, cmap=sns.diverging_palette(20, 220, n=200), square=True)
+    #optional: inclined x labels
+    #cor_plot.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right');
+    
+    #Save figure
+    if save_figure:
+        fig = cor_plot.get_figure()
+        fig.savefig('../figures/Correlations/' + title_save + '.png')
 
 
 ### PARAMETERS THAT DEPEND ON FUNCTIONS

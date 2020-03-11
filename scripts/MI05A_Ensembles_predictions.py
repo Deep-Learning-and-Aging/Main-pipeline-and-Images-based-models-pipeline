@@ -8,7 +8,7 @@ Created on Tue Dec 17 17:17:38 2019
 
 #load libraries, import functions and import parameters (nested import in the line below)
 from MI_helpers import *
-    
+
 #default parameters
 if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
@@ -44,9 +44,4 @@ for fold in folds:
 
 print('Done.')
 sys.exit(0)
-
-
-
-
-
 

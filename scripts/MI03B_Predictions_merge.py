@@ -14,7 +14,7 @@ if len(sys.argv) != 4:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age') #target
-    sys.argv.append('val') #fold
+    sys.argv.append('train') #fold
     sys.argv.append('B') #id_set
 
 #read parameters from command
@@ -24,7 +24,6 @@ id_set = sys.argv[3]
 
 #load the selected features
 #Define dictionary of Predictions_tables, one for each id_set
-#TODO: fix the way age is collected
 if id_set == 'A':
     data_features = pd.read_csv("/n/groups/patel/uk_biobank/main_data_9512/data_features.csv")[['f.eid', 'f.31.0.0', 'f.21003.0.0']]
     data_features.replace({'f.31.0.0': {'Male': 0, 'Female': 1}}, inplace=True)
@@ -34,7 +33,7 @@ if id_set == 'A':
     data_features = data_features.set_index('eid', drop=False)
     data_features.index.name = 'column_names'
 elif id_set == 'B':
-    data_features = pd.read_csv(path_store + 'data_features.csv', usecols = ['eid', 'Sex', 'Age_Assessment', 'Age_Imaging'])
+    data_features = pd.read_csv(path_store + 'data-features.csv', usecols = ['eid', 'Sex', 'Age', 'Age_Imaging'])
     data_features['eid'] = data_features['eid'].astype(str)
     data_features = data_features.set_index('eid', drop=False)
     data_features.index.name = 'column_names'
@@ -53,7 +52,7 @@ if fold == 'train':
 #generate list of predictions that will be integrated in the Predictions dataframe
 list_models = glob.glob(path_store + 'Predictions_' + target + '_*_' + fold + '_' + id_set + '.csv')
 #get rid of ensemble models
-list_models = [ model for model in list_models if '*' not in model ]
+list_models = [ model for model in list_models if not (('*' in model) | ('?' in model) | (',' in model)) ]
 list_models.sort()
 
 #garbage collector
@@ -61,7 +60,8 @@ gc.collect()
 
 #merge the predictions
 print('There are ' + str(len(list_models)) + ' models to merge.')
-for i, file_name in enumerate(list_models):
+#for i, file_name in enumerate(list_models):
+for i, file_name in enumerate(list_models):    
     print('Merging the ' + str(i) + 'th model: ' + file_name.replace(path_store + 'Predictions_', '').replace('.csv', ''))
     #load csv and format the predictions
     prediction = pd.read_csv(path_store + file_name)
@@ -85,6 +85,7 @@ for i, file_name in enumerate(list_models):
     print('Predictions_df\'s shape: ' + str(Predictions_df.shape))
     
     #print('Printing size and shape of the Predictions_df dataframe: \nSize: ' + str(round(sys.getsizeof(Predictions_df)/1e9,3)) + 'GB. Shape: ' + str(Predictions_df.shape))
+
 
 #get rid of useless rows in data_features before merging to keep the memory requirements as low as possible
 data_features = data_features[data_features['eid'].isin(Predictions_df['eid'].values)]

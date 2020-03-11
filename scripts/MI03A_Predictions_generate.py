@@ -11,7 +11,7 @@ from MI_helpers import *
 
 #options
 #debug mode: exclude train set
-debug_mode = True
+debug_mode = False
 #generate training plots
 generate_training_plots = False
 #regenerate predictions even if already exists
