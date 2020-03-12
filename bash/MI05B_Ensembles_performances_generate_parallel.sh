@@ -1,5 +1,5 @@
 #!/bin/bash
-regenerate_performances=true
+regenerate_performances=false
 memory=8G
 n_cpu_cores=1
 n_gpus=1
@@ -47,7 +47,7 @@ do
 	#if regenerate_performances option is on or if the performances have not yet been generated, run the job
 	if ! test -f "../data/Performances_${version}.csv" || $regenerate_performances; then
 		echo Submitting job for "$version"
-		sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh "${target}" "${image_type}" "${transformation}" "${architecture}" "${optimizer}" "${learning_rate}" "${weight_decay}" "${dropout_rate}" "${fold}" "${id_set}"
+		#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh "${target}" "${image_type}" "${transformation}" "${architecture}" "${optimizer}" "${learning_rate}" "${weight_decay}" "${dropout_rate}" "${fold}" "${id_set}"
 	#else
 	#	echo Performance for $version have already been generated.
 	fi

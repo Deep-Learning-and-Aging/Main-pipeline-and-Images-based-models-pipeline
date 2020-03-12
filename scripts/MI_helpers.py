@@ -1264,73 +1264,34 @@ def recursive_ensemble_builder(PREDICTIONS, target, main_metric_name, id_set, Pe
     print('Building the ensemble model ' + version_parent)
     build_single_ensemble_wrapper(PREDICTIONS, target, main_metric_name, id_set, Performances_parent, parameters_parent, version_parent, list_ensemble_levels_parent, ensemble_level)
 
-def plot_cam_map(image, gradient, plot_title, save_title):
-    r_ch = gradient[:,:,0]
-    g_ch = gradient[:,:,1]
-    b_ch = gradient[:,:,2]
-    a_ch = ((255 - b_ch)*.5).astype(int)
-    b_ch = b_ch
-    g = np.dstack((r_ch, g_ch, b_ch, a_ch))
+def plot_visualization_map(image, filter_map, plot_title, save_title):
     im = plt.imshow(image)
-    gr = plt.imshow(g)
+    gr = plt.imshow(filter_map)
     plt.axis('off')
     plt.title(plot_title)
     fig = plt.gcf()
-    fig.savefig('../figures/Saliency_Maps/GradCam-map_' + save_title + '.png')
+    fig.savefig('../figures/Visualization_Maps/' + save_title + '.png')
     plt.show()
 
-def plot_saliency_map(image, gradient, plot_title, save_title):
-    gradient = np.linalg.norm(gradient, axis=2)
-    gradient = (gradient*255/gradient.max()).astype(int)
-    r_ch = gradient.copy()
-    g_ch = gradient.copy()*0
-    b_ch = gradient.copy()*0
-    a_ch = gradient*3
-    g = np.dstack((r_ch, g_ch, b_ch, a_ch))
-    im = plt.imshow(image)
-    gr = plt.imshow(g)
-    plt.axis('off')
-    plt.title(plot_title)
-    fig1 = plt.gcf()
-    fig1.savefig('../figures/Saliency_Maps/Saliency-map_' + save_title + '.png')
-    plt.show()
-
-def plot_saliency_map2(image, gradient, plot_title, save_title):
-    print('PLOT SALIENCY MAP 2')
-    gradient = gradient.sum(axis=2)
-    gradient /= np.max(np.abs(gradient))
-    max_abs = np.absolute(gradient).max()
-    gradient = (gradient*255/max_abs).astype(int)
-    r_ch = gradient.copy()
-    r_ch[r_ch < 0] = 0
-    b_ch = -gradient.copy()
-    b_ch[b_ch < 0] = 0
-    g_ch = gradient.copy()*0
-    a_ch = np.maximum(b_ch, r_ch)*5
-    g = np.dstack((r_ch, g_ch, b_ch, a_ch))
-    i2 = plt.imshow(image)
-    i1 = plt.imshow(g)
-    plt.axis('off')
-    plt.title(plot_title)
-    fig1 = plt.gcf()
-    fig1.savefig('../figures/Saliency_Maps/Saliency-map_' + save_title + '.png')
-    plt.show()
-
-def plot_saliency_map3(image, gradient, plot_title, save_title):
-    print('PLOT SALIENCY MAP 3')
-    gradient = np.abs(gradient)
-    gradient = (gradient*255/gradient.max(axis=(0,1))).astype(int)
-    print(gradient.shape)
-    a_ch = np.max(gradient, axis=2)*3
-    g = np.dstack((gradient, a_ch))
-    print(g.shape)
-    print(g.max())
-    i2 = plt.imshow(image)
-    i1 = plt.imshow(g)
-    plt.axis('off')
-    plt.title(plot_title)
-    fig1 = plt.gcf()
-    fig1.savefig('../figures/Saliency_Maps/Saliency-map_' + save_title + '.png')
+def plot_visualization_maps(image, saliency, grad_cam, guided_backprop, plot_title, save_title):
+    
+    #format the grid of plots
+    fig, axes = plt.subplots(2,2,figsize=(14,10))
+    subtitles = {0:{0:'Original Image', 1:'Saliency'}, 1: {0:'Grad-CAM', 1:'Guided Backpropagation'}}
+    for i in [0,1]:
+        for j in [0,1]:
+            axes[i,j].imshow(image)
+            axes[i,j].axis('off')
+            axes[i,j].set_title(subtitles[i][j], {'fontsize': 15})
+    
+    #fill the plot array
+    axes[0,1].imshow(saliency)
+    axes[1,0].imshow(grad_cam)
+    axes[1,1].imshow(guided_backprop)
+    
+    plt.suptitle(plot_title, fontsize=20)
+    fig = plt.gcf()
+    fig.savefig('../figures/Visualization_Maps/Summary_' + save_title + '.png')
     plt.show()
 
 def bootstrap_correlations(data, n_bootstrap_iterations):
