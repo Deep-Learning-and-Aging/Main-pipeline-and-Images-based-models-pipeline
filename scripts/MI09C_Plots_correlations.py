@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Feb 11 16:25:21 2020
+Created on Sun Mar  1 15:21:38 2020
 
 @author: Alan
 """
 
 from MI_Libraries import *
-from MI_Classes import ResidualsCorrelations
+from MI_Classes import PlotsCorrelations
 
 # Default parameters
 if len(sys.argv) != 3:
@@ -17,13 +17,12 @@ if len(sys.argv) != 3:
     sys.argv.append('test')  # fold
 
 # Options
-debug_mode = True
+save_figures = True
 
 # Compute results
-Residuals_Correlations = ResidualsCorrelations(target=sys.argv[1], fold=sys.argv[2], debug_mode=debug_mode)
-Residuals_Correlations.preprocessing()
-Residuals_Correlations.generate_correlations()
-Residuals_Correlations.save_correlations()
+Plots_Correlations = PlotsCorrelations(target=sys.argv[1], fold=sys.argv[2], save_figures=save_figures)
+Plots_Correlations.preprocessing()
+Plots_Correlations.generate_plots()
 
 # Exit
 print('Done.')

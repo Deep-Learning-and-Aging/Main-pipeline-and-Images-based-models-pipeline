@@ -4,15 +4,16 @@ targets=( "Age" )
 #image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
 image_types=(  "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
 #image_types=(  "Liver_20204_main" )
-#image_types=( "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
+image_types=( "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
 #image_types=( "Heart_20208_3chambers" )
 #transformations_images=( "raw" "contrast" )
-transformations_images=( "raw" )
+#transformations_images=( "raw" )
+transformations_images=( "contrast" )
 transformations_PA=( "raw" )
 #architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
-architectures=( "VGG16" "VGG19" "NASNetLarge" )
+#architectures=( "VGG16" "VGG19" "NASNetLarge" )
 #architectures=( "InceptionResNetV2" "DenseNet201" "Xception" "InceptionV3" )
 #architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" )
 #architectures=( "NASNetMobile" )
@@ -33,7 +34,7 @@ memory=8G
 n_cpu_cores=1
 n_gpus=1
 time=600
-time=1500
+#time=1500
 for target in "${targets[@]}"; do
 	for image_type in "${image_types[@]}"; do
 		if [ $image_type == "PhysicalActivity_90001_main" ]; then

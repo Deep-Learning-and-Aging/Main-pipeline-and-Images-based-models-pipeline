@@ -23,12 +23,7 @@ do
 	weight_decay="${PARAMETERS[9]}"
 	dropout_rate="${PARAMETERS[10]}"
 	fold="${PARAMETERS[11]}"
-	if [ "${PARAMETERS[2]}" == "PhysicalActivity" ]; then
-		id_set="A"
-	else
-		id_set="B"
-	fi
-	version="${target}_${image_type}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${fold}_${id_set}"
+	version="${target}_${image_type}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${fold}"
 	name=MI05B-"$version"
 	job_name="$name.job"
 	out_file="../eo/$name.out"

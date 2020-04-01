@@ -13,6 +13,7 @@ transformations_PA=( "raw" )
 architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "Xception" )
+architectures=( "VGG16" "VGG19" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.000001" )
@@ -80,7 +81,7 @@ for target in "${targets[@]}"; do
 								fi
 								if $to_run; then
 									echo Submitting job for $version
-									#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
+									sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
 								else
 									echo Predictions for $version have already been generated.
 								fi
