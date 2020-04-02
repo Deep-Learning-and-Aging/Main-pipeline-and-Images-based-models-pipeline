@@ -33,6 +33,7 @@ from keras_preprocessing.image import ImageDataGenerator
 from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D
 from keras.models import Model
 from keras import regularizers
+from keras.optimizers import Adam, RMSprop, Adadelta
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
 
 # Model's attention
