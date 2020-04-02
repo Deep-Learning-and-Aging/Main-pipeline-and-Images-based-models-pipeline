@@ -251,24 +251,10 @@ class PreprocessingFolds(Metrics):
 
 
 class MyModelCheckpoint(ModelCheckpoint):
-    """Take as input baseline instead of np.Inf, useful if model has already been trained.
-    """
-    def __init__(self, filepath, monitor='val_loss', baseline=np.Inf, verbose=0,
-                 save_best_only=False, save_weights_only=False,
-                 mode='auto', period=1):
-        super(ModelCheckpoint, self).__init__()
-        self.monitor = monitor
-        self.verbose = verbose
-        self.filepath = filepath
-        self.save_best_only = save_best_only
-        self.save_weights_only = save_weights_only
-        self.period = period
-        self.epochs_since_last_save = 0
-        
-        if mode not in ['auto', 'min', 'max']:
-            warnings.warn('ModelCheckpoint mode %s is unknown, fallback to auto mode.' % mode, RuntimeWarning)
-            mode = 'auto'
-        
+    def __init__(self, filepath, monitor='val_loss', baseline=-np.Inf, verbose=0, save_best_only=False,
+                 save_weights_only=False, mode='auto', period=1):
+        ModelCheckpoint.__init__(self, filepath, monitor=monitor, verbose=verbose, save_best_only=save_best_only,
+                                 save_weights_only=save_weights_only, mode=mode, period=period)
         if mode == 'min':
             self.monitor_op = np.less
             self.best = baseline
@@ -276,12 +262,8 @@ class MyModelCheckpoint(ModelCheckpoint):
             self.monitor_op = np.greater
             self.best = baseline
         else:
-            if 'acc' in self.monitor or self.monitor.startswith('fmeasure'):
-                self.monitor_op = np.greater
-                self.best = -np.Inf
-            else:
-                self.monitor_op = np.less
-                self.best = baseline
+            print('Error. mode for metric must be either min or max')
+            sys.exit(1)
 
 
 class DeepLearning(Metrics):
@@ -318,7 +300,7 @@ class DeepLearning(Metrics):
         
         # Generators
         self.debug_mode = debug_mode
-        self.debug_fraction = 0.1
+        self.debug_fraction = 0.02
         self.DATA_FEATURES = {}
         self.mode = None
         self.n_cpus = len(os.sched_getaffinity(0))
@@ -334,8 +316,8 @@ class DeepLearning(Metrics):
         # define dictionary of batch sizes to fit as many samples as the model's architecture allows
         self.dict_batch_sizes = dict.fromkeys(['NASNetMobile'], 128)
         self.dict_batch_sizes.update(dict.fromkeys(['MobileNet', 'MobileNetV2'], 64))
-        self.dict_batch_sizes.update(dict.fromkeys(['InceptionV3', 'VGG16', 'VGG19', 'DenseNet121', 'DenseNet169'], 32))
-        self.dict_batch_sizes.update(dict.fromkeys(['DenseNet201', 'Xception'], 16))
+        self.dict_batch_sizes.update(dict.fromkeys(['InceptionV3', 'VGG19', 'DenseNet121', 'DenseNet169'], 32))
+        self.dict_batch_sizes.update(dict.fromkeys(['DenseNet201', 'VGG16', 'Xception'], 16))
         self.dict_batch_sizes.update(dict.fromkeys(['InceptionResNetV2'], 8))
         self.dict_batch_sizes.update(dict.fromkeys(['NASNetLarge'], 4))
         self.dict_rotation_ranges = {'Brain': 0, 'Liver': 20, 'Heart': 20}
@@ -722,6 +704,19 @@ class Training(DeepLearning):
         opt = self.optimizers[self.optimizer](lr=self.learning_rate, clipnorm=1.0)
         self.model.compile(optimizer=opt, loss=self.loss_function, metrics=self.metrics)
     
+    def _compute_baseline_performance(self):
+        # calculate initial val_loss value
+        if self.continue_training:
+            steps = self.GENERATORS['val'].n // self.GENERATORS['val'].batch_size
+            idx_metric_name = ([self.loss_name] + self.metrics_names).index(self.main_metric_name)
+            self.baseline_performance = self.model.evaluate_generator(self.GENERATORS['val'], steps=steps)[
+                idx_metric_name]
+        elif self.main_metric_mode == 'min':
+            self.baseline_performance = np.Inf
+        else:
+            self.baseline_performance = -np.Inf
+        print('Baseline validation performance is: ' + str(self.baseline_performance))
+    
     def _define_callbacks(self):
         csv_logger = CSVLogger(self.path_store + 'logger_' + self.version + '.csv', separator=',',
                                append=self.continue_training)
@@ -738,19 +733,6 @@ class Training(DeepLearning):
         early_stopping = EarlyStopping(monitor='val_' + self.main_metric.__name__, min_delta=0, patience=15, verbose=0,
                                        mode=self.main_metric_mode, baseline=None, restore_best_weights=False)
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, reduce_lr_on_plateau, early_stopping]
-        
-    def _compute_baseline_performance(self):
-        # calculate initial val_loss value
-        if self.continue_training:
-            steps = self.GENERATORS['val'].n // self.GENERATORS['val'].batch_size
-            idx_metric_name = ([self.loss_name] + self.metrics_names).index(self.main_metric_name)
-            self.performance_baseline = self.model.evaluate_generator(self.GENERATORS['val'], steps=steps)[
-                idx_metric_name]
-        elif self.main_metric_mode == 'min':
-            self.performance_baseline = np.Inf
-        else:
-            self.performance_baseline = -np.Inf
-        print('Baseline validation performance is: ' + str(self.performance_baseline))
     
     def build_model(self):
         self._weights_for_transfer_learning()
@@ -758,8 +740,8 @@ class Training(DeepLearning):
         if self.keras_weights is None:
             self._load_model_weights()
         self._set_learning_rate()
-        self._define_callbacks()
         self._compute_baseline_performance()
+        self._define_callbacks()
     
     def train_model(self):
         # garbage collector

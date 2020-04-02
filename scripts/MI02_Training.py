@@ -26,7 +26,7 @@ if len(sys.argv) != 10:
     sys.argv.append('Age')  # target
     sys.argv.append('Brain_20227_sagittal')  # organ_id_view, e.g PhysicalActivity_90001_main, or Heart_20208_3chambers
     sys.argv.append('raw')  # transformation
-    sys.argv.append('InceptionResNetV2')  # architecture
+    sys.argv.append('VGG16')  # architecture
     sys.argv.append('Adam')  # optimizer
     sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
