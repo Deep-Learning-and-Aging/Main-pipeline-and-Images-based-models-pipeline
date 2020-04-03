@@ -295,7 +295,7 @@ class DeepLearning(Metrics):
         # NNet's architecture and weights
         self.dict_final_activations = {'regression': 'linear', 'binary': 'sigmoid', 'multiclass': 'softmax',
                                        'saliency': 'linear'}
-        self.path_load_weights = self.path_store + 'model-weights_' + self.version + '.h5'
+        self.path_load_weights = None
         self.keras_weights = None
         
         # Generators
@@ -437,7 +437,9 @@ class DeepLearning(Metrics):
     
     def _take_subset_to_debug(self):
         for fold in self.folds:
-            n_limit_fold = self.batch_size * \
+            # use +1 or +2 to test the leftovers pipeline
+            leftovers_extra = {'train': 0, 'val': 1, 'test': 2}
+            n_limit_fold = leftovers_extra[fold] + self.batch_size * \
                            int(len(self.DATA_FEATURES[fold].index) / self.batch_size * self.debug_fraction)
             self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].iloc[:n_limit_fold, :]
     
@@ -446,15 +448,16 @@ class DeepLearning(Metrics):
         STEP_SIZES = {}
         for fold in self.folds:
             # do not generate a generator if there are no samples (can happen for leftovers generators)
-            if len(DATA_FEATURES[fold].index) == 0:
+            if fold not in DATA_FEATURES.keys():
                 continue
             
             # define image generators
-            if fold == 'train':
-                datagen = ImageDataGenerator(rescale=1. / 255., rotation_range=self.dict_rotation_ranges[self.organ],
+            if (fold == 'train') & (self.mode == 'model_training'):
+                datagen = ImageDataGenerator(rotation_range=self.dict_rotation_ranges[self.organ],
                                              width_shift_range=self.dict_shift_ranges[self.organ],
-                                             height_shift_range=self.dict_shift_ranges[self.organ])
-                shuffle = True if self.mode == 'model_training' else False
+                                             height_shift_range=self.dict_shift_ranges[self.organ],
+                                             rescale=1. / 255.)
+                shuffle = True
             else:
                 datagen = ImageDataGenerator(rescale=1. / 255.)
                 shuffle = False
@@ -480,7 +483,7 @@ class DeepLearning(Metrics):
             
             # assign variables to their names
             GENERATORS[fold] = generator_fold
-            STEP_SIZES[fold] = generator_fold.n // generator_fold.batch_size
+            STEP_SIZES[fold] = math.ceil(generator_fold.n/generator_fold.batch_size)
         return GENERATORS, STEP_SIZES
     
     def _generate_class_weights(self):
@@ -758,10 +761,10 @@ class PredictionsGenerate(DeepLearning):
     
     def __init__(self, target=None, organ_id_view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
-
+        
         DeepLearning.__init__(self, target, organ_id_view, transformation, architecture, optimizer, learning_rate,
                               weight_decay, dropout_rate, debug_mode)
-        
+        self.mode = 'model_testing'
         # Define dictionaries attributes for data, generators and predictions
         self.DATA_FEATURES_BATCH = {}
         self.DATA_FEATURES_LEFTOVERS = {}
@@ -770,8 +773,6 @@ class PredictionsGenerate(DeepLearning):
         self.STEP_SIZES_BATCH = None
         self.STEP_SIZES_LEFTOVERS = None
         self.PREDICTIONS = {}
-        if self.debug_mode:
-            self.folds = ['val', 'test']
     
     def _split_batch_leftovers(self):
         # split the samples into two groups: what can fit into the batch size, and the leftovers.
@@ -779,9 +780,9 @@ class PredictionsGenerate(DeepLearning):
             n_leftovers = len(self.DATA_FEATURES[fold].index) % self.batch_size
             if n_leftovers > 0:
                 self.DATA_FEATURES_BATCH[fold] = self.DATA_FEATURES[fold].iloc[:-n_leftovers]
+                self.DATA_FEATURES_LEFTOVERS[fold] = self.DATA_FEATURES[fold].tail(n_leftovers)
             else:
                 self.DATA_FEATURES_BATCH[fold] = self.DATA_FEATURES[fold]  # special case for syntax if no leftovers
-                self.DATA_FEATURES_LEFTOVERS[fold] = self.DATA_FEATURES[fold].tail(n_leftovers)
     
     def _generate_outerfolds_predictions(self):
         # prepare unscaling
@@ -824,14 +825,18 @@ class PredictionsGenerate(DeepLearning):
         for outer_fold in self.outer_folds:
             self.outer_fold = outer_fold
             print('Predicting samples for the outer_fold = ' + self.outer_fold)
+            self.path_load_weights = self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5'
             self._load_data_features()
+            if self.debug_mode:
+                self._take_subset_to_debug()
             self._load_model_weights()
             self._split_batch_leftovers()
             # generate the generators
             self.GENERATORS_BATCH, self.STEP_SIZES_BATCH = \
                 self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_BATCH)
-            self.GENERATORS_LEFTOVERS, self.STEP_SIZES_LEFTOVERS = \
-                self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_LEFTOVERS)
+            if self.DATA_FEATURES_LEFTOVERS is not None:
+                self.GENERATORS_LEFTOVERS, self.STEP_SIZES_LEFTOVERS = \
+                    self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_LEFTOVERS)
             self._generate_outerfolds_predictions()
     
     def _format_predictions(self):
@@ -858,6 +863,7 @@ class PredictionsGenerate(DeepLearning):
             self._correct_age_instance()
     
     def generate_predictions(self):
+        self._generate_architecture()
         self._generate_and_concatenate_predictions()
         self._postprocess_predictions()
     

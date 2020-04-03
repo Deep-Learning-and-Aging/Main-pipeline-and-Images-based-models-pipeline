@@ -11,7 +11,7 @@ from MI_Classes import PredictionsGenerate
 
 # options
 # debug mode: exclude train set
-debug_mode = False
+debug_mode = True
 # save predictions
 save_predictions = True
 
@@ -33,6 +33,11 @@ Predictions_Generate = PredictionsGenerate(target=sys.argv[1], organ_id_view=sys
                                            architecture=sys.argv[4], optimizer=sys.argv[5], learning_rate=sys.argv[6],
                                            weight_decay=sys.argv[7], dropout_rate=sys.argv[8], debug_mode=debug_mode)
 Predictions_Generate.generate_predictions()
+self = Predictions_Generate
+pred_leftovers = self.model.predict_generator(self.GENERATORS_LEFTOVERS[fold], steps=self.STEP_SIZES_LEFTOVERS[fold], verbose=0)
+
+gen_l, step_l = self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_LEFTOVERS)
+
 if save_predictions:
     Predictions_Generate.save_predictions()
 
