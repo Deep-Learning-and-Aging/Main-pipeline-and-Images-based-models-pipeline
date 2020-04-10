@@ -1,24 +1,25 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-#image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
+#image_types=( "PhysicalActivity_90001_main" "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" "Brain_20227_sagittal" "Brain_20227_coronal" "Brain_20227_transverse" "EyeFundus_210156_right" "EyeFundus_210156_left" )
 image_types=(  "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
-image_types=(  "Brain_20227_sagittal" "Brain_20227_coronal" "Brain_20227_transverse" )
+#image_types=(  "Brain_20227_sagittal" "Brain_20227_coronal" "Brain_20227_transverse" )
 #image_types=(  "Liver_20204_main" )
-#image_types=( "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
-#image_types=( "Heart_20208_3chambers" )
-#transformations_images=( "raw" "contrast" )
+#image_types=(  "Heart_20208_4chambers" )
+#image_types=( "EyeFundus_210156_right" "EyeFundus_210156_left" )
+transformations_images=( "raw" "contrast" )
 #transformations_images=( "raw" )
-transformations_images=( "raw" "reference" )
-transformations_PA=( "raw" )
+#transformations_images=( "raw" "reference" )
+#transformations_PA=( "raw" )
 #architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
-#architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
-architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
+architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
+#architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "VGG16" "VGG19" "NASNetLarge" )
 #architectures=( "InceptionResNetV2" "DenseNet201" "Xception" "InceptionV3" )
 #architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" )
 #architectures=( "NASNetMobile" )
-architectures=( "InceptionResNetV2" )
+#architectures=( "InceptionResNetV2" )
+#architectures=( "VGG16" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.000001" )
@@ -36,7 +37,7 @@ memory=8G
 n_cpu_cores=1
 n_gpus=1
 time=600
-#time=1500
+#time=900
 for target in "${targets[@]}"; do
 	for image_type in "${image_types[@]}"; do
 		if [ $image_type == "PhysicalActivity_90001_main" ]; then

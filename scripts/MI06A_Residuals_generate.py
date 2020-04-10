@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Feb 11 16:24:04 2020
-
-@author: Alan
-"""
-
 from MI_Libraries import *
 from MI_Classes import ResidualsGenerate
 

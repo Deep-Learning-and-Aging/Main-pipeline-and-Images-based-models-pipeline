@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Mar  1 15:21:38 2020
-
-@author: Alan
-"""
-
 from MI_Libraries import *
 from MI_Classes import PlotsCorrelations
 

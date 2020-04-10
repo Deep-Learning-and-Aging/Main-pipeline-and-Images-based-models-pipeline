@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec 17 17:17:38 2019
-
-@author: Alan
-"""
-
 from MI_Libraries import *
 from MI_Classes import EnsemblesPredictions
 

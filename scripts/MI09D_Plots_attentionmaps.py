@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Feb 26 11:00:08 2020
-
-@author: Alan
-"""
-
 from MI_Libraries import *
 from MI_Classes import PlotsAttentionMaps
 

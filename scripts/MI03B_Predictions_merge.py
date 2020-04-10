@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Dec 12 18:16:14 2019
-
-@author: Alan
-"""
-
 from MI_Libraries import *
 from MI_Classes import PredictionsMerge
 
@@ -14,7 +6,7 @@ if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('train')  # fold
+    sys.argv.append('val')  # fold
 
 # Compute results
 Predictions_Merge = PredictionsMerge(target=sys.argv[1], fold=sys.argv[2])

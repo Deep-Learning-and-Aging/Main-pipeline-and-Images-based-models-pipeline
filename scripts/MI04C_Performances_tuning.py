@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Feb 25 21:00:53 2020
-
-@author: Alan
-"""
-
 from MI_Libraries import *
 from MI_Classes import PerformancesTuning
 
@@ -20,7 +12,7 @@ Performances_Tuning = PerformancesTuning(target=sys.argv[1])
 Performances_Tuning.load_data()
 Performances_Tuning.preprocess_data()
 Performances_Tuning.select_models()
-Performances_Tuning.save_performances()
+Performances_Tuning.save_data()
 
 # Exit
 print('Done.')

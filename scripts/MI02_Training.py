@@ -1,16 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Dec  3 00:07:03 2019
-
-@author: Alan
-"""
-
 from MI_Libraries import *
 from MI_Classes import Training
 
 # Options
 # Use a small subset of the data VS. run the actual full data pipeline to get accurate results
+# /!\ if True, path to save weights will be automatically modified to avoid rewriting them
 debug_mode = False
 # Load weights from previous best training results, VS. start from scratch
 continue_training = True
@@ -24,9 +17,9 @@ if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Brain_20227_sagittal')  # organ_id_view, e.g PhysicalActivity_90001_main, or Heart_20208_3chambers
+    sys.argv.append('EyeFundus_210156_left')  # organ_id_view, e.g Heart_20208_3chambers.
     sys.argv.append('raw')  # transformation
-    sys.argv.append('VGG16')  # architecture
+    sys.argv.append('Xception')  # architecture
     sys.argv.append('Adam')  # optimizer
     sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
@@ -44,6 +37,3 @@ Model_Training.build_model()
 Model_Training.train_model()
 Model_Training.clean_exit()
 
-# Exit
-print('Done.')
-sys.exit(0)

@@ -64,7 +64,7 @@ class Metrics(Hyperparameters):
         self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
         self.metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
         self.metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
-        self.images_field_ids = ['20204', '20208', '20227']
+        self.images_field_ids = ['20204', '20208', '20227', '210156']
         self.dict_metrics_names = {'regression': ['RMSE', 'R-Squared'],
                                    'binary': ['ROC-AUC', 'F1-Score', 'PR-AUC', 'Binary-Accuracy', 'Sensitivity',
                                               'Specificity', 'Precision', 'Recall', 'True-Positives', 'False-Positives',
@@ -148,18 +148,22 @@ class PreprocessingFolds(Metrics):
         self.field_id = self.image_field.split('_')[1]
         self.image_quality_ids = {'Liver': '22414-2.0'}
         self.image_quality_ids.update(
-            dict.fromkeys(['Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid', 'ECG', 'ArterialStiffness'], None))
+            dict.fromkeys(['Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid', 'ECG', 'ArterialStiffness', 'EyeFundus'],
+                          None))
         self.image_quality_id = self.image_quality_ids[self.organ]
         self.list_available_ids = None
         self.data = None
+        self.IDS = None
         
         # dictionary of dir_images used to generate the IDs split during preprocessing
         self.dict_default_dir_images = {'Liver_20204': '../images/Liver/20204/main/raw/',
                                         'Heart_20208': '../images/Heart/20208/4chambers/raw/',
                                         'Brain_20227': '../images/Brain/20227/sagittal/raw/',
+                                        'EyeFundus_210156': '../images/EyeFundus/210156/right/raw/',
                                         'PhysicalActivity_90001': '../images/PhysicalActivity/90001/main/raw/'}
-        self.dict_field_id_to_age_instance = dict.fromkeys(['Placeholder', '6025', '4205'], 'Age')
-        self.dict_field_id_to_age_instance.update(dict.fromkeys(['20204', '20208', '20205', '20227'], 'Age_Imaging'))
+        self.dict_field_id_to_age_instance = dict.fromkeys(['Placeholder', '6025', '4205', '210156'], 'Age')
+        self.dict_field_id_to_age_instance.update(dict.fromkeys(['20204', '20208', '20205', '20227'],
+                                                                'Age_Imaging'))
         self.dict_field_id_to_age_instance.update(dict.fromkeys(['90001'], 'Age_Accelerometer'))
     
     def _get_list_available_ids(self):
@@ -190,7 +194,7 @@ class PreprocessingFolds(Metrics):
             data = data.drop('Data_quality', axis=1)
         # get rid of samples with NAs
         data.dropna(inplace=True)
-        # list the samples' ids for which liver images are available
+        # list the samples' ids for which images are available
         data = data.loc[self.list_available_ids]
         self.data = data
     
@@ -217,23 +221,23 @@ class PreprocessingFolds(Metrics):
                     TEST_IDS[i].extend(FOLDS_IDS[j])
                 else:
                     TRAINING_IDS[i].extend(FOLDS_IDS[j])
-        IDS = {'train': TRAINING_IDS, 'val': VALIDATION_IDS, 'test': TEST_IDS}
-        return IDS
+        self.IDS = {'train': TRAINING_IDS, 'val': VALIDATION_IDS, 'test': TEST_IDS}
     
     def _split_data(self):
-        IDS = self._split_ids()
+        # split ids
+        self._split_ids()
         # generate inner fold split for each outer fold
         for outer_fold in self.outer_folds:
             print('Splitting data for outer fold ' + outer_fold)
             # compute values for scaling of regression targets
             target_mean, target_std = np.nan, np.nan
             if self.target in self.targets_regression:
-                data_train = self.data.loc[IDS['train'][outer_fold], :]
+                data_train = self.data.loc[self.IDS['train'][outer_fold], :]
                 target_mean = data_train[self.target].mean()
                 target_std = data_train[self.target].std()
             # generate folds
             for fold in self.folds:
-                data_fold = self.data.loc[IDS[fold][outer_fold], :]
+                data_fold = self.data.loc[self.IDS[fold][outer_fold], :]
                 data_fold['outer_fold'] = outer_fold
                 data_fold = data_fold[['eid', 'outer_fold', 'Sex', 'Age']]
                 if self.target in self.targets_regression:
@@ -320,8 +324,8 @@ class DeepLearning(Metrics):
         self.dict_batch_sizes.update(dict.fromkeys(['DenseNet201', 'VGG16', 'Xception'], 16))
         self.dict_batch_sizes.update(dict.fromkeys(['InceptionResNetV2'], 8))
         self.dict_batch_sizes.update(dict.fromkeys(['NASNetLarge'], 4))
-        self.dict_rotation_ranges = {'Brain': 0, 'Liver': 20, 'Heart': 20}
-        self.dict_shift_ranges = {'Brain': 0, 'Liver': 0.2, 'Heart': 0.2}
+        self.dict_rotation_ranges = {'Brain': 0, 'EyeFundus': 0, 'Liver': 20, 'Heart': 20}
+        self.dict_shift_ranges = {'Brain': 0, 'EyeFundus': 0, 'Liver': 0.2, 'Heart': 0.2}
         self.batch_size = self.dict_batch_sizes[self.architecture]
         # double the batch size for the teslaM40 cores that have bigger memory
         if GPUtil.getGPUs()[0].memoryTotal > 20000:
@@ -335,6 +339,7 @@ class DeepLearning(Metrics):
         self.dict_image_field_to_ids.update(dict.fromkeys(['Liver_20204'], 'Liver_20204'))
         self.dict_image_field_to_ids.update(dict.fromkeys(['Heart_20208'], 'Heart_20208'))
         self.dict_image_field_to_ids.update(dict.fromkeys(['Brain_20227'], 'Brain_20227'))
+        self.dict_image_field_to_ids.update(dict.fromkeys(['EyeFundus_210156'], 'EyeFundus_210156'))
         
         # Metrics
         self.prediction_type = self.dict_prediction_types[self.target]
@@ -570,7 +575,7 @@ class DeepLearning(Metrics):
     def _load_model_weights(self):
         try:
             self.model.load_weights(self.path_load_weights)
-        except FileNotFoundError:
+        except (FileNotFoundError, TypeError):
             # load backup weights if the main weights are corrupted
             try:
                 self.model.load_weights(self.path_load_weights.replace('model-weights', 'backup-model-weights'))
@@ -638,6 +643,11 @@ class Training(DeepLearning):
         self.baseline_performance = None
         
         # Model
+        self.path_load_weights = self.path_store + 'model-weights_' + self.version + '.h5'
+        if self.debug_mode:
+            self.path_save_weights = self.path_store + 'mw-debug_' + self.version + '.h5'
+        else:
+            self.path_save_weights = self.path_store + 'model-weights_' + self.version + '.h5'
         self.n_epochs_max = 1000
         self.callbacks = None
         self.optimizers = {'Adam': Adam, 'RMSprop': RMSprop, 'Adadelta': Adadelta}
@@ -700,6 +710,7 @@ class Training(DeepLearning):
         
         # Otherwise use imagenet weights to initialize
         print('Using imagenet weights.')
+        # using string instead of None for path to not ge
         self.path_load_weights = None
         self.keras_weights = 'imagenet'
     
@@ -710,7 +721,7 @@ class Training(DeepLearning):
     def _compute_baseline_performance(self):
         # calculate initial val_loss value
         if self.continue_training:
-            steps = self.GENERATORS['val'].n // self.GENERATORS['val'].batch_size
+            steps = math.ceil(self.GENERATORS['val'].n / self.GENERATORS['val'].batch_size)
             idx_metric_name = ([self.loss_name] + self.metrics_names).index(self.main_metric_name)
             self.baseline_performance = self.model.evaluate_generator(self.GENERATORS['val'], steps=steps)[
                 idx_metric_name]
@@ -723,18 +734,19 @@ class Training(DeepLearning):
     def _define_callbacks(self):
         csv_logger = CSVLogger(self.path_store + 'logger_' + self.version + '.csv', separator=',',
                                append=self.continue_training)
-        model_checkpoint_backup = MyModelCheckpoint(self.path_store + 'backup-model-weights_' + self.version + '.h5',
+        model_checkpoint_backup = MyModelCheckpoint(self.path_save_weights.replace('model-weights',
+                                                                                   'backup-model-weights'),
                                                     monitor='val_' + self.main_metric.__name__,
                                                     baseline=self.baseline_performance, verbose=1, save_best_only=True,
                                                     save_weights_only=True, mode=self.main_metric_mode)
-        model_checkpoint = MyModelCheckpoint(self.path_store + 'model-weights_' + self.version + '.h5',
+        model_checkpoint = MyModelCheckpoint(self.path_save_weights,
                                              monitor='val_' + self.main_metric.__name__,
                                              baseline=self.baseline_performance, verbose=1, save_best_only=True,
                                              save_weights_only=True, mode=self.main_metric_mode)
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=2, verbose=1, mode='min',
                                                  min_delta=0, cooldown=0, min_lr=0)
-        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.__name__, min_delta=0, patience=15, verbose=0,
-                                       mode=self.main_metric_mode, baseline=None, restore_best_weights=False)
+        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.__name__, min_delta=0, patience=10, verbose=0,
+                                       mode=self.main_metric_mode, baseline=self.baseline_performance)
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, reduce_lr_on_plateau, early_stopping]
     
     def build_model(self):
@@ -742,6 +754,10 @@ class Training(DeepLearning):
         self._generate_architecture()
         if self.keras_weights is None:
             self._load_model_weights()
+        else:
+            # save imagenet weights as default, in case no better weights are found
+            self.model.save_weights(self.path_save_weights.replace('model-weights', 'backup-model-weights'))
+            self.model.save_weights(self.path_save_weights)
         self._set_learning_rate()
         self._compute_baseline_performance()
         self._define_callbacks()
@@ -858,6 +874,7 @@ class PredictionsGenerate(DeepLearning):
             self.PREDICTIONS[fold] = self.PREDICTIONS[fold][['eid', 'outer_fold', 'pred']]
     
     def _postprocess_predictions(self):
+        self._average_predictions_per_sample()
         self._format_predictions()
         if (self.target == 'Age') & (self.field_id in self.list_field_ids_in_instance_2):
             self._correct_age_instance()
@@ -1142,7 +1159,7 @@ class PerformancesMerge(Metrics):
     
     def __init__(self, target=None, fold=None, ensemble_models=False):
         
-        Hyperparameters.__init__(self)
+        Metrics.__init__(self)
         
         self.target = target
         self.fold = fold
@@ -1152,7 +1169,7 @@ class PerformancesMerge(Metrics):
         # list the models that need to be merged
         self.list_models = glob.glob(self.path_store + 'Performances_' + self.target + '_*_' + self.fold + '_str.csv')
         # get rid of ensemble models
-        if ensemble_models:
+        if self.ensemble_models:
             self.list_models = [model for model in self.list_models
                                 if (('*' in model) | ('?' in model) | (',' in model))]
         else:
@@ -1223,7 +1240,7 @@ class PerformancesMerge(Metrics):
                 PERFORMANCES[mode].set_index('outer_fold', drop=False, inplace=True)
             
             # Fill the columns corresponding to the model's parameters
-            version = '_'.join(model.split('_')[1:-3])
+            version = '_'.join(model.split('_')[1:-2])
             parameters = self._version_to_parameters(version)
             
             # fill the columns for model parameters
@@ -1305,7 +1322,7 @@ class PerformancesTuning(Metrics):
             self.PERFORMANCES[fold] = pd.read_csv(path).set_index('version', drop=False)
             self.PERFORMANCES[fold]['field_id'] = self.PERFORMANCES[fold]['field_id'].astype(str)
             self.PERFORMANCES[fold].index.name = 'columns_names'
-            self.PREDICTIONS[fold] = pd.read_csv(path.replace('PERFORMANCES', 'PREDICTIONS'))
+            self.PREDICTIONS[fold] = pd.read_csv(path.replace('PERFORMANCES', 'PREDICTIONS').replace('_ranked', ''))
     
     def preprocess_data(self):
         # Get list of distinct models without taking into account hyperparameters tuning
@@ -1331,10 +1348,10 @@ class PerformancesTuning(Metrics):
                 self.PERFORMANCES[fold].drop(versions_to_drop, inplace=True)
                 self.PREDICTIONS[fold].drop(cols_to_drop, inplace=True, axis=1)
     
-    def save_performances(self):
+    def save_data(self):
         # Save the files
         for fold in self.folds:
-            path_pred = self.path_store + 'PREDICTIONS_tuned_placeholder_' + self.target + '_' + fold + '.csv'
+            path_pred = self.path_store + 'PREDICTIONS_tuned_' + self.target + '_' + fold + '.csv'
             path_perf = self.path_store + 'PERFORMANCES_tuned_ranked_' + self.target + '_' + fold + '.csv'
             self.PREDICTIONS[fold].to_csv(path_pred, index=False)
             self.PERFORMANCES[fold].to_csv(path_perf, index=False)
@@ -1652,6 +1669,69 @@ class ResidualsCorrelations(Hyperparameters):
                 index=True)
 
 
+class SelectBest(Metrics):
+    
+    def __init__(self, target=None):
+        Metrics.__init__(self)
+        
+        self.target = target
+        self.organs = None
+        self.best_models = None
+        self.PREDICTIONS = {}
+        self.RESIDUALS = {}
+        self.PERFORMANCES = {}
+    
+    def _load_data(self):
+        for fold in self.folds:
+            path_pred = self.path_store + 'PREDICTIONS_withEnsembles_' + self.target + '_' + fold + '.csv'
+            path_res = self.path_store + 'RESIDUALS_withEnsembles_' + self.target + '_' + fold + '.csv'
+            path_perf = self.path_store + 'PERFORMANCES_withEnsembles_ranked_' + self.target + '_' + fold + '.csv'
+            self.PREDICTIONS[fold] = pd.read_csv(path_pred)
+            self.RESIDUALS[fold] = pd.read_csv(path_res)
+            self.PERFORMANCES[fold] = pd.read_csv(path_perf)
+            self.PERFORMANCES[fold] = self.PERFORMANCES[fold].set_index('version', drop=False)
+    
+    def _select_versions(self):
+        Performances = self.PERFORMANCES[fold]
+        idx_Ensembles = Performances['organ'].isin(['*', '?', ',']).values
+        idx_withoutEnsembles = [not b for b in idx_Ensembles]
+        Perf_Ensembles = Performances[idx_Ensembles]
+        Perf_withoutEnsembles = Performances[idx_withoutEnsembles]
+        self.organs = ['*']
+        self.best_models = [Perf_Ensembles['version'].values[0]]
+        for organ in Perf_withoutEnsembles['organ'].unique():
+            Perf_organ = Perf_withoutEnsembles[Perf_withoutEnsembles['organ'] == organ]
+            self.organs.append(organ)
+            self.best_models.append(Perf_organ['version'].values[0])
+    
+    def _take_subsets(self):
+        for fold in self.folds:
+            best_models_pred = ['pred_' + model for model in self.best_models]
+            best_models_res = ['res_' + model for model in self.best_models]
+            self.PREDICTIONS[fold] = self.PREDICTIONS[fold].loc[:, best_models_pred]
+            self.PREDICTIONS[fold].columns = self.organs
+            self.RESIDUALS[fold] = self.RESIDUALS[fold].loc[:, best_models_res]
+            self.RESIDUALS[fold].columns = self.organs
+            self.PERFORMANCES[fold] = self.PERFORMANCES[fold].loc[self.best_models, :]
+            self.PERFORMANCES[fold].index = self.organs
+    
+    def select_models(self):
+        self._load_data()
+        self._select_versions()
+        self._take_subsets()
+    
+    def save_data(self):
+        for fold in self.folds:
+            path_pred = self.path_store + 'PREDICTIONS_bestmodels_' + self.target + '_' + fold + '.csv'
+            path_res = self.path_store + 'RESIDUALS_bestmodels_' + self.target + '_' + fold + '.csv'
+            path_perf = self.path_store + 'PERFORMANCES_bestmodels_ranked_' + self.target + '_' + fold + '.csv'
+            self.PREDICTIONS[fold].to_csv(path_pred, index=False)
+            self.RESIDUALS[fold].to_csv(path_res, index=False)
+            self.PERFORMANCES[fold].to_csv(path_perf, index=False)
+            Performances_alphabetical = self.PERFORMANCES[fold].sort_values(by='version')
+            Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
+
+
 class PlotsCorrelations(Hyperparameters):
     
     def __init__(self, target=None, fold=None, save_figures=True):
@@ -1941,7 +2021,7 @@ class PlotsAttentionMaps(DeepLearning):
                                                      y_col='res', color_mode='rgb', batch_size=self.batch_size,
                                                      seed=self.seed, shuffle=False, class_mode='raw',
                                                      target_size=(self.image_size, self.image_size))
-        self.step_size = self.generator.n // self.generator.batch_size
+        self.step_size = math.ceil(self.generator.n / self.generator.batch_size)
         
         # load the weights for the fold
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
@@ -2047,5 +2127,5 @@ class PlotsAttentionMaps(DeepLearning):
     def generate_plots(self):
         for outer_fold in self.outer_folds:
             self._preprocess_for_outer_fold(outer_fold)
-            for i in range(self.n_images // self.batch_size + 1):
+            for i in range(math.ceil(self.n_images / self.batch_size)):
                 self._generate_maps_for_one_sample(i)
