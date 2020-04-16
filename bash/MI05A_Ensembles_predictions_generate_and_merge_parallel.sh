@@ -5,7 +5,7 @@ memory=8G
 n_cpu_cores=1
 time=60
 for target in "${targets[@]}"; do
-		version=MI05A_${target}_${id_set}
+		version=MI05A_${target}
 		job_name="$version.job"
 		out_file="../eo/$version.out"
 		err_file="../eo/$version.err"

@@ -6,17 +6,16 @@ targets=( "Age" )
 image_types=( "Liver_20204_main" "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
 #image_types=( "Heart_20208_3chambers" )
 #image_types=( "Heart_20208_2chambers" "Heart_20208_3chambers" "Heart_20208_4chambers" )
-#transformations_images=( "raw" "contrast" )
-transformations_images=( "raw" )
+transformations_images=( "raw" "contrast" )
+#transformations_images=( "raw" )
 transformations_PA=( "raw" )
-architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
-#architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
-architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "InceptionV3" "InceptionResNetV2" )
+#architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
+architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
+#architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "Xception" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.000001" )
-#learning_rates=( "0.0001" "1e-05" "1e-06" "1e-07" )
 weight_decays=( "0.0" )
 #dropout_rates=( "0.1" "0.3" "0.5" "0.8" )
 dropout_rates=( "0.0" )
@@ -34,11 +33,6 @@ for target in "${targets[@]}"; do
 		else
 			transformations=("${transformations_images[@]}")
 		fi
-		if [ $image_type == "PhysicalActivity_90001_main" ]; then
-			id_set="A"
-		else
-			id_set="B"
-		fi
 		for transformation in "${transformations[@]}"; do
 			for architecture in "${architectures[@]}"; do
 				for optimizer in "${optimizers[@]}"; do
@@ -46,7 +40,7 @@ for target in "${targets[@]}"; do
 						for weight_decay in "${weight_decays[@]}"; do
 							for dropout_rate in "${dropout_rates[@]}"; do
 								for fold in "${folds[@]}"; do
-									version=${target}_${image_type}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${fold}_${id_set}
+									version=${target}_${image_type}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${fold}
 									name=MI04A-$version
 									job_name="$name.job"
 									out_file="../eo/$name.out"
@@ -65,7 +59,7 @@ for target in "${targets[@]}"; do
 									#if regenerate_performances option is on or if the performances have not yet been generated, run the job
 									if ! test -f "../data/Performances_${version}.csv" || $regenerate_performances; then
 										echo Submitting job for $version
-										sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $fold $id_set
+										sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh $target $image_type $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $fold
 									#else
 									#	echo Performance for $version have already been generated.
 									fi

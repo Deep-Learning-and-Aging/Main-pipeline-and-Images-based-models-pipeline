@@ -6,7 +6,7 @@ if len(sys.argv) != 4:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('test')  # inner_fold
+    sys.argv.append('val')  # inner_fold
     sys.argv.append('True')  # ensemble_models. Set False for MI04B and True for MI05B
 
 # Compute results

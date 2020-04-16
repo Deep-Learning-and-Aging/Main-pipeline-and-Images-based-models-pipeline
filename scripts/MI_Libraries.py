@@ -1,4 +1,9 @@
 # LIBRARIES
+
+# set up backend for ssh -x11 figures
+import matplotlib
+matplotlib.use('Agg')
+
 # read and write
 import os
 import sys
@@ -43,6 +48,4 @@ from vis.visualization import visualize_cam
 
 # plot figures
 import seaborn as sns
-import matplotlib
-matplotlib.use('Agg')  # allows to generate and save figures with ssh -x11
 import matplotlib.pyplot as plt

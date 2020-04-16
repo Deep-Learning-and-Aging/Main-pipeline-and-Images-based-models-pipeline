@@ -312,18 +312,23 @@ class DeepLearning(Metrics):
                                 + self.transformation + '/'
         # define dictionary to resize the images to the right size depending on the model
         self.input_size_models = dict.fromkeys(
-            ['VGG16', 'VGG19', 'MobileNet', 'MobileNetV2', 'DenseNet121', 'DenseNet169', 'DenseNet201', 'NASNetMobile'],
-            224)
+            ['VGG16', 'VGG19', 'MobileNet', 'MobileNetV2', 'DenseNet121', 'DenseNet169', 'DenseNet201', 'NASNetMobile',
+             'ResNet50', 'ResNext50'], 224)
         self.input_size_models.update(dict.fromkeys(['Xception', 'InceptionV3', 'InceptionResNetV2'], 299))
         self.input_size_models.update(dict.fromkeys(['NASNetLarge'], 331))
+        self.input_size_models.update(dict.fromkeys(['EfficientNetB7'], 300))
+        # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
+        self.dict_field_id_to_image_size = {'20204': 288, '20208': 200, '20227': 88, '210156': 300}
+        # for future v2: self.image_size = self.dict_field_id_to_image_size[self.field_id]
+        
         self.image_size = self.input_size_models[self.architecture]
         # define dictionary of batch sizes to fit as many samples as the model's architecture allows
         self.dict_batch_sizes = dict.fromkeys(['NASNetMobile'], 128)
-        self.dict_batch_sizes.update(dict.fromkeys(['MobileNet', 'MobileNetV2'], 64))
+        self.dict_batch_sizes.update(dict.fromkeys(['MobileNet', 'MobileNetV2', 'ResNet50', 'ResNext50'], 64))
         self.dict_batch_sizes.update(dict.fromkeys(['InceptionV3', 'VGG19', 'DenseNet121', 'DenseNet169'], 32))
         self.dict_batch_sizes.update(dict.fromkeys(['DenseNet201', 'VGG16', 'Xception'], 16))
         self.dict_batch_sizes.update(dict.fromkeys(['InceptionResNetV2'], 8))
-        self.dict_batch_sizes.update(dict.fromkeys(['NASNetLarge'], 4))
+        self.dict_batch_sizes.update(dict.fromkeys(['NASNetLarge', 'EfficientNetB7'], 4))
         self.dict_rotation_ranges = {'Brain': 0, 'EyeFundus': 0, 'Liver': 20, 'Heart': 20}
         self.dict_shift_ranges = {'Brain': 0, 'EyeFundus': 0, 'Liver': 0.2, 'Heart': 0.2}
         self.batch_size = self.dict_batch_sizes[self.architecture]
@@ -444,8 +449,8 @@ class DeepLearning(Metrics):
         for fold in self.folds:
             # use +1 or +2 to test the leftovers pipeline
             leftovers_extra = {'train': 0, 'val': 1, 'test': 2}
-            n_limit_fold = leftovers_extra[fold] + self.batch_size * \
-                           int(len(self.DATA_FEATURES[fold].index) / self.batch_size * self.debug_fraction)
+            n_batches = int(len(self.DATA_FEATURES[fold].index) / self.batch_size * self.debug_fraction)
+            n_limit_fold = leftovers_extra[fold] + self.batch_size * n_batches
             self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].iloc[:n_limit_fold, :]
     
     def _generate_generators(self, DATA_FEATURES):
@@ -559,7 +564,113 @@ class DeepLearning(Metrics):
             base_model = InceptionResNetV2(include_top=False, weights=self.keras_weights, input_shape=(299, 299, 3))
             x = base_model.output
             x = GlobalAveragePooling2D()(x)
+        elif self.architecture in ['ResNet50V2', 'ResNet152V2', 'ResNext101']:
+            import keras
+            kwargs = {"backend": keras.backend, "layers": keras.layers, "models": keras.models, "utils": keras.utils}
+            model_builder = None
+            if self.architecture == 'ResNet50V2':
+                from keras_applications.resnet_v2 import ResNet50V2
+                model_builder = ResNet50V2
+            elif self.architecture == 'ResNet152V2':
+                from keras_applications.resnet_v2 import ResNet152V2
+                model_builder = ResNet152V2
+            elif self.architecture == 'ResNeXt101':
+                from keras_applications.resnext import ResNeXt101
+                model_builder = ResNeXt101
+            base_model = model_builder(include_top=False, weights=self.keras_weights, input_shape=(224, 224, 3),
+                                       **kwargs)
+            x = base_model.output
+            x = GlobalAveragePooling2D()(x)
+        elif self.architecture == 'EfficientNetB7':
+            from efficientnet.keras import EfficientNetB7
+            w = 'noisy-student' if self.keras_weights == 'imagenet' else self.keras_weights
+            base_model = EfficientNetB7(include_top=False, weights=w, input_shape=(300, 300, 3))
+            x = base_model.output
+            x = GlobalAveragePooling2D()(x)
+            x = Dropout(self.dropout_rate)(x)
         return x, base_model.input
+    
+    def _generate_architecture_v2(self):
+        # define the arguments
+        # take special initial weights for EfficientNetB7 (better)
+        if self.architecture == 'EfficientNetB7' & self.keras_weights == 'imagenet':
+            w = 'noisy-student'
+        else:
+            w = self.keras_weights
+        kwargs = {"include_top": False, "weights": w, "input_shape": (self.self.image_size, self.self.image_size, 3)}
+        if self.architecture in ['ResNet50V2', 'ResNet152V2', 'ResNext101']:
+            import keras
+            kwargs.update(
+                {"backend": keras.backend, "layers": keras.layers, "models": keras.models, "utils": keras.utils})
+        
+        # load the architecture builder
+        ModelBuilder = None
+        if self.architecture == 'VGG16':
+            from keras.applications.vgg16 import VGG16 as ModelBuilder
+        elif self.architecture == 'VGG19':
+            from keras.applications.vgg19 import VGG19 as ModelBuilder
+        elif self.architecture == 'MobileNet':
+            from keras.applications.mobilenet import MobileNet as ModelBuilder
+        elif self.architecture == 'MobileNetV2':
+            from keras.applications.mobilenet_v2 import MobileNetV2 as ModelBuilder
+        elif self.architecture == 'DenseNet121':
+            from keras.applications.densenet import DenseNet121 as ModelBuilder
+        elif self.architecture == 'DenseNet169':
+            from keras.applications.densenet import DenseNet169 as ModelBuilder
+        elif self.architecture == 'DenseNet201':
+            from keras.applications.densenet import DenseNet201 as ModelBuilder
+        if self.architecture == 'NASNetMobile':
+            from keras.applications.nasnet import NASNetMobile as ModelBuilder
+        elif self.architecture == 'NASNetLarge':
+            from keras.applications.nasnet import NASNetLarge as ModelBuilder
+        elif self.architecture == 'Xception':
+            from keras.applications.xception import Xception as ModelBuilder
+        elif self.architecture == 'InceptionV3':
+            from keras.applications.inception_v3 import InceptionV3 as ModelBuilder
+        elif self.architecture == 'InceptionResNetV2':
+            from keras.applications.inception_resnet_v2 import InceptionResNetV2 as ModelBuilder
+        elif self.architecture == 'ResNet50':
+            from keras_applications.resnet import ResNet50V2 as ModelBuilder
+        elif self.architecture == 'ResNet101':
+            from keras_applications.resnet import ResNet101V2 as ModelBuilder
+        elif self.architecture == 'ResNet152':
+            from keras_applications.resnet import ResNet152V2 as ModelBuilder
+        elif self.architecture == 'ResNet50V2':
+            from keras_applications.resnet_v2 import ResNet50V2 as ModelBuilder
+        elif self.architecture == 'ResNet101V2':
+            from keras_applications.resnet_v2 import ResNet101V2 as ModelBuilder
+        elif self.architecture == 'ResNet152V2':
+            from keras_applications.resnet_v2 import ResNet152V2 as ModelBuilder
+        elif self.architecture == 'ResNeXt50':
+            from keras_applications.resnext import ResNeXt50 as ModelBuilder
+        elif self.architecture == 'ResNeXt101':
+            from keras_applications.resnext import ResNeXt101 as ModelBuilder
+        elif self.architecture == 'EfficientNetB7':
+            from efficientnet.keras import EfficientNetB7 as ModelBuilder
+        
+        # build the model's base
+        base_model = ModelBuilder(kwargs)
+        x = base_model.output
+        # complete the model's base
+        if self.architecture in ['VGG16', 'VGG19']:
+            x = Flatten()(x)
+            x = Dense(4096, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
+            x = Dropout(self.dropout_rate)(x)
+            x = Dense(4096, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
+            x = Dropout(self.dropout_rate)(x)
+        else:
+            x = GlobalAveragePooling2D()(x)
+            if self.architecture == 'EfficientNetB7':
+                x = Dropout(self.dropout_rate)(x)
+        
+        return x, base_model.input
+    
+    def _complete_architecture_v2(self, x, input_shape):
+        for n in [int(2 ** (10 - i)) for i in range(7)]:
+            x = Dense(n, activation='selu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
+            x = Dropout(self.dropout_rate)(x)
+        predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
+        self.model = Model(inputs=input_shape, outputs=predictions)
     
     def _complete_architecture(self, x, input_shape):
         for n in [int(2 ** (10 - i)) for i in range(5)]:
@@ -789,7 +900,7 @@ class PredictionsGenerate(DeepLearning):
         self.STEP_SIZES_BATCH = None
         self.STEP_SIZES_LEFTOVERS = None
         self.PREDICTIONS = {}
-    
+        
     def _split_batch_leftovers(self):
         # split the samples into two groups: what can fit into the batch size, and the leftovers.
         for fold in self.folds:
@@ -810,10 +921,6 @@ class PredictionsGenerate(DeepLearning):
         
         # Generate predictions
         for fold in self.folds:
-            # only generate if predictions do not exist yet or if regenerate_predictions is true
-            if os.path.exists(self.path_store + 'Predictions_' + self.version + '_' + fold + '.csv'):
-                break
-            print('Predicting the samples in the fold: ' + fold)
             pred_batch = self.model.predict_generator(self.GENERATORS_BATCH[fold], steps=self.STEP_SIZES_BATCH[fold],
                                                       verbose=0)
             if fold in self.GENERATORS_LEFTOVERS.keys():
@@ -822,18 +929,15 @@ class PredictionsGenerate(DeepLearning):
                 pred_full = np.concatenate((pred_batch, pred_leftovers)).squeeze()
             else:
                 pred_full = pred_batch.squeeze()
-            
             # unscale predictions
             if self.target in self.targets_regression:
                 pred_full = pred_full * std_train + mean_train
-            
             # merge the predictions
             self.DATA_FEATURES[fold]['pred'] = pred_full
             if fold in self.PREDICTIONS.keys():
                 self.PREDICTIONS[fold] = pd.concat([self.PREDICTIONS[fold], self.DATA_FEATURES[fold]])
             else:
                 self.PREDICTIONS[fold] = self.DATA_FEATURES[fold]
-            
             # format the dataframe
             self.PREDICTIONS[fold]['eid'] = [eid.replace('.jpg', '') for eid in self.PREDICTIONS[fold]['eid']]
     
@@ -874,7 +978,6 @@ class PredictionsGenerate(DeepLearning):
             self.PREDICTIONS[fold] = self.PREDICTIONS[fold][['eid', 'outer_fold', 'pred']]
     
     def _postprocess_predictions(self):
-        self._average_predictions_per_sample()
         self._format_predictions()
         if (self.target == 'Age') & (self.field_id in self.list_field_ids_in_instance_2):
             self._correct_age_instance()
@@ -916,8 +1019,8 @@ class PredictionsMerge(Hyperparameters):
             for outer_fold in self.outer_folds:
                 df_fold = self.data_features.copy()
                 df_fold['outer_fold'] = outer_fold
-                self.data_features = df_fold if outer_fold == self.outer_folds[
-                    0] else self.data_features.append(df_fold)
+                df_all_folds = df_fold if outer_fold == self.outer_folds[0] else df_all_folds.append(df_fold)
+            self.data_features = df_all_folds
     
     def _list_models(self):
         # generate list of predictions that will be integrated in the Predictions dataframe
@@ -933,37 +1036,54 @@ class PredictionsMerge(Hyperparameters):
         self._list_models()
     
     def merge_predictions(self):
-        # garbage collector
-        gc.collect()
-        
         # merge the predictions
         print('There are ' + str(len(self.list_models)) + ' models to merge.')
-        # for i, file_name in enumerate(list_models):
-        for i, file_name in enumerate(self.list_models):
-            print('Merging the ' + str(i) + 'th model: ' + file_name.replace(self.path_store + 'Predictions_',
-                                                                             '').replace(
-                '.csv', ''))
-            # load csv and format the predictions
-            prediction = pd.read_csv(self.path_store + file_name)
-            print('raw prediction\'s shape: ' + str(prediction.shape))
-            prediction['eid'] = prediction['eid'].apply(str)
-            prediction['outer_fold'] = prediction['outer_fold'].apply(str)
-            version = '_'.join(file_name.split('_')[1:-2])
-            prediction['outer_fold_' + version] = prediction[
-                'outer_fold']  # create an extra column for further merging purposes on fold == 'train'
-            prediction.rename(columns={'pred': 'pred_' + version}, inplace=True)
+        i = 0
+        # define subgroups to accelerate merging process
+        list_subgroups = list(set(['_'.join(model.split('_')[2:6]) for model in self.list_models]))
+        for subgroup in list_subgroups:
+            print('Merging models from the subgroup ' + subgroup)
+            models_subgroup = [model for model in self.list_models if subgroup in model]
+            Predictions_subgroup = None
+            # merge the models one by one
+            for file_name in models_subgroup:
+                i += 1
+                print('Merging the ' + str(i) + 'th model: ' + file_name.replace(self.path_store + 'Predictions_',
+                                                                                 '').replace('.csv', ''))
+                # load csv and format the predictions
+                prediction = pd.read_csv(self.path_store + file_name)
+                print('raw prediction\'s shape: ' + str(prediction.shape))
+                prediction['eid'] = prediction['eid'].apply(str)
+                prediction['outer_fold'] = prediction['outer_fold'].apply(str)
+                version = '_'.join(file_name.split('_')[1:-1])
+                prediction['outer_fold_' + version] = prediction[
+                    'outer_fold']  # create an extra column for further merging purposes on fold == 'train'
+                prediction.rename(columns={'pred': 'pred_' + version}, inplace=True)
+                
+                # merge data frames
+                if Predictions_subgroup is None:
+                    Predictions_subgroup = prediction
+                elif self.fold == 'train':
+                    Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['eid', 'outer_fold'])
+                else:
+                    prediction = prediction.drop(['outer_fold'], axis=1)
+                    # not supported for panda version > 0.23.4 for now
+                    Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['eid'])
+                # print('prediction\'s shape: ' + str(prediction.shape))
             
-            # merge data frames
+            # merge group predictions data frames
             if self.Predictions_df is None:
-                self.Predictions_df = prediction
+                self.Predictions_df = Predictions_subgroup
             elif self.fold == 'train':
-                self.Predictions_df = self.Predictions_df.merge(prediction, how='outer', on=['eid', 'outer_fold'])
+                self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer',
+                                                                on=['eid', 'outer_fold'])
             else:
-                prediction = prediction.drop(['outer_fold'], axis=1)
+                Predictions_subgroup = Predictions_subgroup.drop(['outer_fold'], axis=1)
                 # not supported for panda version > 0.23.4 for now
-                self.Predictions_df = self.Predictions_df.merge(prediction, how='outer', on=['eid'])
-            print('prediction\'s shape: ' + str(prediction.shape))
+                self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer', on=['eid'])
             print('Predictions_df\'s shape: ' + str(self.Predictions_df.shape))
+            # garbage collector
+            gc.collect()
     
     def postprocessing(self):
         # get rid of useless rows in data_features before merging to keep the memory requirements as low as possible
@@ -981,7 +1101,7 @@ class PredictionsMerge(Hyperparameters):
         
         # Format the dataframe
         self.Predictions_df.drop(['Age_Imaging', 'outer_fold'], axis=1, inplace=True)
-        
+    
     def save_merged_predictions(self):
         self.Predictions_df.to_csv(
             self.path_store + 'PREDICTIONS_withoutEnsembles_' + self.target + '_' + self.fold + '.csv', index=False)
@@ -1151,7 +1271,7 @@ class PerformancesGenerate(Metrics):
     
     def save_performances(self):
         for mode in self.modes:
-            path_save = self.path_store + 'Performances_' + self.version + '_' + self.fold + '_' + mode + '.csv'
+            path_save = self.path_store + 'Performances_' + self.version + '_' + self.fold + mode + '.csv'
             self.PERFORMANCES[mode].to_csv(path_save, index=False)
 
 
@@ -1286,6 +1406,8 @@ class PerformancesMerge(Metrics):
             Performances_withoutEnsembles = pd.read_csv(
                 self.path_store + 'PERFORMANCES_tuned_alphabetical_' + self.target + '_' + self.fold + '.csv')
             self.Performances = Performances_withoutEnsembles.append(self.Performances)
+            # reorder the columns (weird: automatic alphabetical re-ordering happened when append was called for 'val')
+            self.Performances = self.Performances[Performances_withoutEnsembles.columns]
         
         # Ranking, printing and saving
         self.Performances_alphabetical = self.Performances.sort_values(by='version')
@@ -1575,23 +1697,27 @@ class ResidualsGenerate(Hyperparameters):
         self.target = target
         self.fold = fold
         self.debug_mode = debug_mode
-        self.Predictions = pd.read_csv(
+        self.Residuals = pd.read_csv(
             self.path_store + 'PREDICTIONS_withEnsembles_' + target + '_' + fold + '.csv')
-        self.Residuals = self.Predictions[['eid', 'Sex', 'Age']]
-        self.list_models = [col_name.replace('pred_', '') for col_name in self.Predictions.columns.values
+        self.list_models = [col_name.replace('pred_', '') for col_name in self.Residuals.columns.values
                             if 'pred_' in col_name]
     
     def generate_residuals(self):
-        for model in self.list_models:
+        list_models = [col_name.replace('pred_', '') for col_name in self.Residuals.columns.values
+                       if 'pred_' in col_name]
+        for model in list_models:
             print('Generating residuals for model ' + model)
-            df_model = self.Predictions[['eid', 'Age', 'pred_' + model, 'outer_fold_' + model]].dropna(
-                subset=['eid', 'Age', 'pred_' + model])
+            df_model = self.Residuals[['Age', 'pred_' + model]]
+            no_na_indices = [not b for b in df_model['pred_' + model].isna()]
+            df_model = df_model.dropna()
             age = df_model.loc[:, ['Age']]
             res = df_model['pred_' + model] - df_model['Age']
             regr = linear_model.LinearRegression()
             regr.fit(age, res)
             res_correction = regr.predict(age)
             res_corrected = res - res_correction
+            self.Residuals.loc[no_na_indices, 'pred_' + model] = res_corrected
+            # debug plot
             if self.debug_mode:
                 print('Bias for the residuals ' + model, regr.coef_)
                 plt.scatter(age, res)
@@ -1599,12 +1725,10 @@ class ResidualsGenerate(Hyperparameters):
                 regr2 = linear_model.LinearRegression()
                 regr2.fit(age, res_corrected)
                 print('Coefficients after: \n', regr2.coef_)
-            df_model['res_' + model] = res_corrected
-            df_model = df_model.drop(columns=['Age', 'pred_' + model])
-            self.Residuals = self.Residuals.merge(df_model, how='outer', on=['eid'])
+        self.Residuals.rename(columns=lambda x: x.replace('pred_', 'res_'), inplace=True)
     
     def save_residuals(self):
-        self.Residuals.to_csv(self.path_store + 'RESIDUALS_' + self.target + '_' + self.fold + '_' + '.csv',
+        self.Residuals.to_csv(self.path_store + 'RESIDUALS_' + self.target + '_' + self.fold + '.csv',
                               index=False)
 
 
@@ -1680,19 +1804,22 @@ class SelectBest(Metrics):
         self.PREDICTIONS = {}
         self.RESIDUALS = {}
         self.PERFORMANCES = {}
+        self.CORRELATIONS = {}
     
     def _load_data(self):
         for fold in self.folds:
             path_pred = self.path_store + 'PREDICTIONS_withEnsembles_' + self.target + '_' + fold + '.csv'
-            path_res = self.path_store + 'RESIDUALS_withEnsembles_' + self.target + '_' + fold + '.csv'
+            path_res = self.path_store + 'RESIDUALS_' + self.target + '_' + fold + '.csv'
             path_perf = self.path_store + 'PERFORMANCES_withEnsembles_ranked_' + self.target + '_' + fold + '.csv'
+            path_corr = self.path_store + 'ResidualsCorrelations_' + self.target + '_' + fold + '.csv'
             self.PREDICTIONS[fold] = pd.read_csv(path_pred)
             self.RESIDUALS[fold] = pd.read_csv(path_res)
             self.PERFORMANCES[fold] = pd.read_csv(path_perf)
-            self.PERFORMANCES[fold] = self.PERFORMANCES[fold].set_index('version', drop=False)
+            self.PERFORMANCES[fold].set_index('version', drop=False, inplace=True)
+            self.CORRELATIONS[fold] = pd.read_csv(path_corr, index_col=0)
     
     def _select_versions(self):
-        Performances = self.PERFORMANCES[fold]
+        Performances = self.PERFORMANCES['val']
         idx_Ensembles = Performances['organ'].isin(['*', '?', ',']).values
         idx_withoutEnsembles = [not b for b in idx_Ensembles]
         Perf_Ensembles = Performances[idx_Ensembles]
@@ -1705,15 +1832,20 @@ class SelectBest(Metrics):
             self.best_models.append(Perf_organ['version'].values[0])
     
     def _take_subsets(self):
+        base_cols = ['eid', 'Sex', 'Age']
+        best_models_pred = ['pred_' + model for model in self.best_models]
+        best_models_res = ['res_' + model for model in self.best_models]
+        best_models_corr = ['_'.join(model.split('_')[1:]) for model in self.best_models]
         for fold in self.folds:
-            best_models_pred = ['pred_' + model for model in self.best_models]
-            best_models_res = ['res_' + model for model in self.best_models]
-            self.PREDICTIONS[fold] = self.PREDICTIONS[fold].loc[:, best_models_pred]
-            self.PREDICTIONS[fold].columns = self.organs
-            self.RESIDUALS[fold] = self.RESIDUALS[fold].loc[:, best_models_res]
-            self.RESIDUALS[fold].columns = self.organs
+            self.PREDICTIONS[fold] = self.PREDICTIONS[fold].loc[:, base_cols + best_models_pred]
+            self.PREDICTIONS[fold].columns = base_cols + self.organs
+            self.RESIDUALS[fold] = self.RESIDUALS[fold].loc[:, base_cols + best_models_res]
+            self.RESIDUALS[fold].columns = base_cols + self.organs
             self.PERFORMANCES[fold] = self.PERFORMANCES[fold].loc[self.best_models, :]
             self.PERFORMANCES[fold].index = self.organs
+            self.CORRELATIONS[fold] = self.CORRELATIONS[fold].loc[best_models_corr, best_models_corr]
+            self.CORRELATIONS[fold].index = self.organs
+            self.CORRELATIONS[fold].columns = self.organs
     
     def select_models(self):
         self._load_data()
@@ -1724,9 +1856,11 @@ class SelectBest(Metrics):
         for fold in self.folds:
             path_pred = self.path_store + 'PREDICTIONS_bestmodels_' + self.target + '_' + fold + '.csv'
             path_res = self.path_store + 'RESIDUALS_bestmodels_' + self.target + '_' + fold + '.csv'
+            path_corr = self.path_store + 'ResidualsCorrelations_bestmodels_' + self.target + '_' + fold + '.csv'
             path_perf = self.path_store + 'PERFORMANCES_bestmodels_ranked_' + self.target + '_' + fold + '.csv'
             self.PREDICTIONS[fold].to_csv(path_pred, index=False)
             self.RESIDUALS[fold].to_csv(path_res, index=False)
+            self.CORRELATIONS[fold].to_csv(path_corr, index=True)
             self.PERFORMANCES[fold].to_csv(path_perf, index=False)
             Performances_alphabetical = self.PERFORMANCES[fold].sort_values(by='version')
             Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
@@ -1742,6 +1876,7 @@ class PlotsCorrelations(Hyperparameters):
         self.fig_xsize = 23.4
         self.fig_ysize = 16.54
         self.Correlations = None
+        self.Correlations_bestmodels = None
         
     def preprocessing(self):
         Correlations = pd.read_csv(
@@ -1753,6 +1888,8 @@ class PlotsCorrelations(Hyperparameters):
         Correlations.index = ['_'.join(np.array(idx.split('_'))[idx_to_print]) for idx in Correlations.index.values]
         Correlations.columns = ['_'.join(np.array(idx.split('_'))[idx_to_print]) for idx in Correlations.columns.values]
         self.Correlations = Correlations
+        self.Correlations_bestmodels = pd.read_csv(self.path_store + 'ResidualsCorrelations_bestmodels_' + self.target +
+                                                   '_' + self.fold + '.csv', index_col='Unnamed: 0')
     
     def _plot_correlations(self, data, title_save):
         # set parameters
@@ -1776,6 +1913,8 @@ class PlotsCorrelations(Hyperparameters):
     def generate_plots(self):
         title = 'Correlations_AllModels_' + self.target + '_' + self.fold
         self._plot_correlations(data=self.Correlations, title_save=title)
+        title_bestmodels = 'Correlations_BestModels_' + self.target + '_' + self.fold
+        self._plot_correlations(data=self.Correlations_bestmodels, title_save=title_bestmodels)
         
         # Plot the "ensemble models only" correlation plots
         for ensemble_type in self.ensemble_types:
@@ -1897,15 +2036,18 @@ class PlotsScatter(Hyperparameters):
 class PlotsAttentionMaps(DeepLearning):
     
     def __init__(self, target=None, organ_id_view=None, transformation=None, fold=None):
+        # partial initialization with placeholders to get access to parameters and functions
+        DeepLearning.__init__(self, target, organ_id_view, transformation, 'VGG16', 'Adam', 0, 0, 0, False)
+        
         self.fold = fold
         self.parameters = None
         self.image_size = None
         self.batch_size = None
-        self.N_samples_attentionmaps = 10
+        self.N_samples_attentionmaps = 10  # needs to be > 1 for the script to work
         
         # Pick the best model based on the performances
         organ, field_id, view = organ_id_view.split('_')
-        path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.target + '_test_' + '.csv'
+        path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.target + '_' + self.fold + '.csv'
         Performances = pd.read_csv(path_perf).set_index('version', drop=False)
         Performances = Performances[(Performances['organ'] == organ)
                                     & (Performances['field_id'].astype(str) == self.field_id)
@@ -1913,7 +2055,7 @@ class PlotsAttentionMaps(DeepLearning):
                                     & (Performances['transformation'] == self.transformation)]
         version = Performances['version'].values[0]
         del Performances
-        self.parameters = self._version_to_parameters(version, self.names_model_parameters)
+        self.parameters = self._version_to_parameters(version)
         self.image_size = self.input_size_models[self.parameters['architecture']]
         self.batch_size = self.dict_batch_sizes[self.parameters['architecture']]
         
@@ -1942,7 +2084,8 @@ class PlotsAttentionMaps(DeepLearning):
                                                           'DenseNet201': 'relu', 'NASNetMobile': 'activation_1136',
                                                           'NASNetLarge': 'activation_1396',
                                                           'Xception': 'block14_sepconv2_act', 'InceptionV3': 'mixed10',
-                                                          'InceptionResNetV2': 'conv_7b_ac'}
+                                                          'InceptionResNetV2': 'conv_7b_ac',
+                                                          'EfficientNetB7': 'top_activation'}
     
     def _format_residuals(self):
         # Format the residuals
@@ -1959,15 +2102,16 @@ class PlotsAttentionMaps(DeepLearning):
     
     def _select_representative_samples(self):
         # Select with samples to plot
+        print('Selecting representative samples...')
         Sexes = ['Male', 'Female']
         dict_sexes_to_values = {'Male': 0, 'Female': 1}
         df_to_plot = None
         for sex in Sexes:
-            print('Analyzing sex: ' + sex)
+            print('Sex: ' + sex)
             Residuals_sex = self.Residuals[self.Residuals['Sex'] == dict_sexes_to_values[sex]]
             Residuals_sex['Sex'] = sex
             for age_category in ['young', 'middle', 'old']:
-                print('Analyzing age category: ' + age_category)
+                print('Age category: ' + age_category)
                 if age_category == 'young':
                     Residuals_age = Residuals_sex[Residuals_sex['Age'] <= Residuals_sex['Age'].min() + 1]
                 elif age_category == 'middle':
@@ -1976,7 +2120,7 @@ class PlotsAttentionMaps(DeepLearning):
                     Residuals_age = Residuals_sex[Residuals_sex['Age'] >= Residuals_sex['Age'].max() - 1]
                 Residuals_age['age_category'] = age_category
                 for aging_rate in ['accelerated', 'normal', 'decelerated']:
-                    print('Analyzing aging rate: ' + aging_rate)
+                    print('Aging rate: ' + aging_rate)
                     Residuals_ar = Residuals_age
                     if aging_rate == 'accelerated':
                         Residuals_ar.sort_values(by='res', ascending=False, inplace=True)
@@ -1995,10 +2139,9 @@ class PlotsAttentionMaps(DeepLearning):
                 df_to_plot['Age'] + df_to_plot['res']).round().astype(str) + ', Sex = ' + df_to_plot[
                                        'Sex'] + ', sample ' + \
                                    df_to_plot['sample'].astype(str)
-        df_to_plot['save_title'] = df_to_plot['Sex'] + '_' + df_to_plot['age_category'] + '_' + df_to_plot[
-            'aging_rate'] + '_' + \
-                                   df_to_plot['sample'].astype(str)
-
+        df_to_plot['save_title'] = self.target + '_' + self.organ + '_' + self.field_id + '_' + self.view + '_' + \
+                                   self.transformation + '_' + df_to_plot['Sex'] + '_' + df_to_plot['age_category'] + \
+                                   '_' + df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
         path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ_id_view + '_' \
                     + self.transformation + '.csv'
         df_to_plot.to_csv(path_save, index=False)
@@ -2099,10 +2242,10 @@ class PlotsAttentionMaps(DeepLearning):
         fig.savefig('../figures/Attention_Maps/Summary_' + save_title + '.png')
         plt.show()
     
-    def _generate_maps_for_one_sample(self, i):
-        print(i)
+    def _generate_maps_for_one_batch(self, i):
+        print('Generating maps for batch ' + str(i))
         n_images_batch = np.min([self.batch_size, self.n_images - i * self.batch_size])
-        images = self.generator.__getitem__(0)[i][:n_images_batch, :, :, :]
+        images = self.generator.__getitem__(i)[0][:n_images_batch, :, :, :]
         saliencies = self.saliency_analyzer.analyze(images)
         guided_backprops = self.guided_backprop_analyzer.analyze(images)
         for j in range(saliencies.shape[0]):
@@ -2126,6 +2269,8 @@ class PlotsAttentionMaps(DeepLearning):
     
     def generate_plots(self):
         for outer_fold in self.outer_folds:
+            print('Generate attention maps for outer_fold ' + outer_fold)
+            gc.collect()
             self._preprocess_for_outer_fold(outer_fold)
             for i in range(math.ceil(self.n_images / self.batch_size)):
-                self._generate_maps_for_one_sample(i)
+                self._generate_maps_for_one_batch(i)

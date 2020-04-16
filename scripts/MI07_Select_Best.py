@@ -8,9 +8,9 @@ if len(sys.argv) != 2:
     sys.argv.append('Age')  # target
 
 # Compute results
-Select_Models = SelectBest(target=sys.argv[1])
-Select_Models.select_models()
-Select_Models.save_data()
+Select_Best = SelectBest(target=sys.argv[1])
+Select_Best.select_models()
+Select_Best.save_data()
 
 # Exit
 print('Done.')

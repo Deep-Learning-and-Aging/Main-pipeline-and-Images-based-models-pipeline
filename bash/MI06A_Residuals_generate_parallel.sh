@@ -3,7 +3,7 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 folds=( "train" "val" "test" )
-memory=8G
+memory=16G
 n_cpu_cores=1
 time=15
 

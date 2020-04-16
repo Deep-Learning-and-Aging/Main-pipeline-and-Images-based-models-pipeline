@@ -7,7 +7,7 @@ if len(sys.argv) != 5:
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('Heart_20208_4chambers')  # organ_id_view
-    sys.argv.append('raw')  # transformation
+    sys.argv.append('contrast')  # transformation
     sys.argv.append('test')  # fold
 
 # Generate results

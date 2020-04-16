@@ -6,7 +6,7 @@ if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('val')  # fold
+    sys.argv.append('test')  # fold
 
 # Compute results
 Predictions_Merge = PredictionsMerge(target=sys.argv[1], fold=sys.argv[2])
@@ -18,3 +18,4 @@ Predictions_Merge.save_merged_predictions()
 # Exit
 print('Done.')
 sys.exit(0)
+
