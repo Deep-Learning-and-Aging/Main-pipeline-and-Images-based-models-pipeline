@@ -1711,7 +1711,7 @@ class ResidualsGenerate(Hyperparameters):
             no_na_indices = [not b for b in df_model['pred_' + model].isna()]
             df_model = df_model.dropna()
             age = df_model.loc[:, ['Age']]
-            res = df_model['pred_' + model] - df_model['Age']
+            res = df_model['Age'] - df_model['pred_' + model]
             regr = linear_model.LinearRegression()
             regr.fit(age, res)
             res_correction = regr.predict(age)
