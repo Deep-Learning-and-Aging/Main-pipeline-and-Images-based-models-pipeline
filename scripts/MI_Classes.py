@@ -2136,7 +2136,7 @@ class PlotsAttentionMaps(DeepLearning):
                     else:
                         df_to_plot = df_to_plot.append(Residuals_ar)
         df_to_plot['plot_title'] = 'Age = ' + df_to_plot['Age'].astype(str) + ', Predicted Age = ' + (
-                df_to_plot['Age'] + df_to_plot['res']).round().astype(str) + ', Sex = ' + df_to_plot[
+                df_to_plot['Age'] - df_to_plot['res']).round().astype(str) + ', Sex = ' + df_to_plot[
                                        'Sex'] + ', sample ' + \
                                    df_to_plot['sample'].astype(str)
         df_to_plot['save_title'] = self.target + '_' + self.organ + '_' + self.field_id + '_' + self.view + '_' + \
