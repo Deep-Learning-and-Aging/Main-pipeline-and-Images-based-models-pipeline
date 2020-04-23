@@ -34,7 +34,9 @@ import tensorflow as tf
 from tensorflow import set_random_seed
 # keras
 from keras import backend as k
-from keras_preprocessing.image import ImageDataGenerator
+from keras_preprocessing.image import ImageDataGenerator, Iterator
+from keras_preprocessing.image.utils import load_img, img_to_array
+from keras.utils import Sequence
 from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D
 from keras.models import Model
 from keras import regularizers

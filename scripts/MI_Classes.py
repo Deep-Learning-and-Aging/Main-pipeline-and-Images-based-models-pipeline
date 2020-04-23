@@ -254,6 +254,66 @@ class PreprocessingFolds(Metrics):
         self._split_data()
 
 
+class MyImageDataGenerator(ImageDataGenerator, Sequence): #(ImageDataGenerator, Iterator)
+    
+    def __init__(self, target=None, field_id=None, data_features=None, batch_size=None, shuffle=None, dir_images=None,
+                 images_width=None, images_height=None):
+        # parameters
+        self.target = target
+        self.labels = data_features[self.target]
+        self.field_id = field_id
+        self.data_features = data_features
+        self.list_ids = data_features.index.values
+        self.batch_size = batch_size
+        self.steps = math.ceil(len(self.list_ids)/self.batch_size)
+        self.shuffle = shuffle
+        self.indices = None
+        self.on_epoch_end()  # initiate the indexes and shuffles the ids
+        self.dir_images = dir_images
+        self.images_width = images_width
+        self.images_height = images_height
+        # Data augmentation
+        self.dict_rotation_ranges = {'20227': 0, '210156': 0, '20204': 20, '20208': 20}
+        self.dict_width_shift_ranges = {'20227': 0, '210156': 0, '20204': 0.1, '20208': 0.1}
+        self.dict_height_shift_ranges = {'20227': 0, '210156': 0, '20204': 0.1, '20208': 0.1}
+        ImageDataGenerator.__init__(self, rotation_range=self.dict_rotation_ranges[self.field_id],
+                                    width_shift_range=self.dict_width_shift_ranges[self.field_id],
+                                    height_shift_range=self.dict_height_shift_ranges[self.field_id], rescale=1. / 255.)
+    
+    def __len__(self):
+        return int(np.floor(len(self.list_ids) / self.batch_size))
+    
+    def __getitem__(self, index):
+        indices = self.indices[index * self.batch_size:(index + 1) * self.batch_size]
+        list_ids_batch = [self.list_ids[i] for i in indices]
+        X, y = self._data_generation(list_ids_batch)
+        return X, y
+    
+    def on_epoch_end(self):
+        self.indices = np.arange(len(self.list_ids))
+        if self.shuffle:
+            np.random.shuffle(self.indices)
+    
+    def _data_generation(self, list_ids_batch):
+        # Initialization
+        n_samples_batch = min(len(list_ids_batch), self.batch_size)
+        X = np.empty((n_samples_batch, self.images_width, self.images_height, 3))
+        y = np.empty(n_samples_batch)
+        # Generate data
+        for i, ID in enumerate(list_ids_batch):
+            path_image = self.dir_images + ID  # TODO  + '.jpg'
+            img = load_img(path_image, target_size=(self.images_width, self.images_height), color_mode='rgb')
+            x = img_to_array(img)
+            if hasattr(img, 'close'):
+                img.close()
+            params = self.get_random_transform(x.shape)
+            x = self.apply_transform(x, params)
+            x = self.standardize(x)
+            X[i, ] = x
+            y[i] = self.labels[ID]
+        return X, y
+
+
 class MyModelCheckpoint(ModelCheckpoint):
     def __init__(self, filepath, monitor='val_loss', baseline=-np.Inf, verbose=0, save_best_only=False,
                  save_weights_only=False, mode='auto', period=1):
@@ -333,8 +393,9 @@ class DeepLearning(Metrics):
         self.dict_shift_ranges = {'Brain': 0, 'EyeFundus': 0, 'Liver': 0.2, 'Heart': 0.2}
         self.batch_size = self.dict_batch_sizes[self.architecture]
         # double the batch size for the teslaM40 cores that have bigger memory
-        if GPUtil.getGPUs()[0].memoryTotal > 20000:
-            self.batch_size *= 2
+        if len(GPUtil.getGPUs()) > 0:  # make sure GPUs are available (not truesometimes for debugging)
+            if GPUtil.getGPUs()[0].memoryTotal > 20000:
+                self.batch_size *= 2
         # dict to decide which field is used to generate the ids when several targets share the same ids
         # (e.g Age and Sex)
         self.dict_target_to_ids = dict.fromkeys(['Age', 'Sex'], 'Age')
@@ -448,20 +509,24 @@ class DeepLearning(Metrics):
     def _take_subset_to_debug(self):
         for fold in self.folds:
             # use +1 or +2 to test the leftovers pipeline
-            leftovers_extra = {'train': 0, 'val': 1, 'test': 2}
-            n_batches = int(len(self.DATA_FEATURES[fold].index) / self.batch_size * self.debug_fraction)
+            leftovers_extra = {'train': 0, 'val': 1, 'test': 2} #TODO fails with val = 1
+            n_batches = math.ceil(len(self.DATA_FEATURES[fold].index) / self.batch_size * self.debug_fraction)
             n_limit_fold = leftovers_extra[fold] + self.batch_size * n_batches
             self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].iloc[:n_limit_fold, :]
     
     def _generate_generators(self, DATA_FEATURES):
         GENERATORS = {}
-        STEP_SIZES = {}
         for fold in self.folds:
             # do not generate a generator if there are no samples (can happen for leftovers generators)
             if fold not in DATA_FEATURES.keys():
                 continue
             
             # define image generators
+            if (fold == 'train') & (self.mode == 'model_training'):
+                shuffle = True
+            else:
+                shuffle = False
+            """
             if (fold == 'train') & (self.mode == 'model_training'):
                 datagen = ImageDataGenerator(rotation_range=self.dict_rotation_ranges[self.organ],
                                              width_shift_range=self.dict_shift_ranges[self.organ],
@@ -471,30 +536,28 @@ class DeepLearning(Metrics):
             else:
                 datagen = ImageDataGenerator(rescale=1. / 255.)
                 shuffle = False
-            
+            """
             # define batch size for testing: data is split between a part that fits in batches, and leftovers
             if self.mode == 'model_testing':
                 batch_size_fold = min(self.batch_size, len(self.DATA_FEATURES[fold].index))
             else:
                 batch_size_fold = self.batch_size
-            
+            """
             # define data generator
-            generator_fold = datagen.flow_from_dataframe(
-                dataframe=DATA_FEATURES[fold],
-                directory=self.images_directory,
-                x_col='eid',
-                y_col=self.target,
-                color_mode='rgb',
-                batch_size=batch_size_fold,
-                seed=self.seed,
-                shuffle=shuffle,
-                class_mode='raw',
-                target_size=(self.image_size, self.image_size))
+            generator_fold = datagen.flow_from_dataframe(dataframe=DATA_FEATURES[fold], directory=self.images_directory,
+                                                         x_col='eid', y_col=self.target, color_mode='rgb',
+                                                         batch_size=batch_size_fold, seed=self.seed, shuffle=shuffle,
+                                                         class_mode='raw',
+                                                         target_size=(self.image_size, self.image_size))
+            """
+            generator_fold = MyImageDataGenerator(target=self.target, field_id=self.field_id,
+                                                  data_features=self.DATA_FEATURES[fold], batch_size=batch_size_fold,
+                                                  shuffle=shuffle, dir_images=self.images_directory,
+                                                  images_width=self.image_size, images_height=self.image_size)
             
             # assign variables to their names
             GENERATORS[fold] = generator_fold
-            STEP_SIZES[fold] = math.ceil(generator_fold.n/generator_fold.batch_size)
-        return GENERATORS, STEP_SIZES
+        return GENERATORS
     
     def _generate_class_weights(self):
         if self.dict_prediction_types[self.target] == 'binary':
@@ -737,7 +800,6 @@ class Training(DeepLearning):
         self.mode = 'model_training'
         self.class_weights = None
         self.GENERATORS = None
-        self.STEP_SIZES = None
         
         # Metrics
         self.loss_name = self.dict_losses_names[self.prediction_type]
@@ -769,7 +831,7 @@ class Training(DeepLearning):
         if self.debug_mode:
             self._take_subset_to_debug()
         self._generate_class_weights()
-        self.GENERATORS, self.STEP_SIZES = self._generate_generators(self.DATA_FEATURES)
+        self.GENERATORS = self._generate_generators(self.DATA_FEATURES)
     
     # Determine which weights to load, if any.
     def _weights_for_transfer_learning(self):
@@ -832,10 +894,9 @@ class Training(DeepLearning):
     def _compute_baseline_performance(self):
         # calculate initial val_loss value
         if self.continue_training:
-            steps = math.ceil(self.GENERATORS['val'].n / self.GENERATORS['val'].batch_size)
             idx_metric_name = ([self.loss_name] + self.metrics_names).index(self.main_metric_name)
-            self.baseline_performance = self.model.evaluate_generator(self.GENERATORS['val'], steps=steps)[
-                idx_metric_name]
+            baseline_perfs = self.model.evaluate_generator(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
+            self.baseline_performance = baseline_perfs[idx_metric_name]
         elif self.main_metric_mode == 'min':
             self.baseline_performance = np.Inf
         else:
@@ -878,10 +939,11 @@ class Training(DeepLearning):
         gc.collect()
         
         # train the model
-        self.model.fit_generator(generator=self.GENERATORS['train'], steps_per_epoch=self.STEP_SIZES['train'],
-                                 validation_data=self.GENERATORS['val'], validation_steps=self.STEP_SIZES['val'],
+        verbose = 1 if self.debug_mode else 2
+        self.model.fit_generator(generator=self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
+                                 validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
                                  use_multiprocessing=True, workers=self.n_cpus, epochs=self.n_epochs_max,
-                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=2)
+                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
 
 
 class PredictionsGenerate(DeepLearning):
@@ -897,8 +959,6 @@ class PredictionsGenerate(DeepLearning):
         self.DATA_FEATURES_LEFTOVERS = {}
         self.GENERATORS_BATCH = None
         self.GENERATORS_LEFTOVERS = None
-        self.STEP_SIZES_BATCH = None
-        self.STEP_SIZES_LEFTOVERS = None
         self.PREDICTIONS = {}
         
     def _split_batch_leftovers(self):
@@ -921,11 +981,11 @@ class PredictionsGenerate(DeepLearning):
         
         # Generate predictions
         for fold in self.folds:
-            pred_batch = self.model.predict_generator(self.GENERATORS_BATCH[fold], steps=self.STEP_SIZES_BATCH[fold],
-                                                      verbose=0)
+            pred_batch = self.model.predict_generator(self.GENERATORS_BATCH[fold],
+                                                      steps=self.GENERATORS_BATCH[fold].steps, verbose=0)
             if fold in self.GENERATORS_LEFTOVERS.keys():
                 pred_leftovers = self.model.predict_generator(self.GENERATORS_LEFTOVERS[fold],
-                                                              steps=self.STEP_SIZES_LEFTOVERS[fold], verbose=0)
+                                                              steps=self.GENERATORS_LEFTOVERS[fold].steps, verbose=0)
                 pred_full = np.concatenate((pred_batch, pred_leftovers)).squeeze()
             else:
                 pred_full = pred_batch.squeeze()
@@ -952,11 +1012,9 @@ class PredictionsGenerate(DeepLearning):
             self._load_model_weights()
             self._split_batch_leftovers()
             # generate the generators
-            self.GENERATORS_BATCH, self.STEP_SIZES_BATCH = \
-                self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_BATCH)
+            self.GENERATORS_BATCH = self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_BATCH)
             if self.DATA_FEATURES_LEFTOVERS is not None:
-                self.GENERATORS_LEFTOVERS, self.STEP_SIZES_LEFTOVERS = \
-                    self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_LEFTOVERS)
+                self.GENERATORS_LEFTOVERS = self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_LEFTOVERS)
             self._generate_outerfolds_predictions()
     
     def _format_predictions(self):
@@ -2164,7 +2222,6 @@ class PlotsAttentionMaps(DeepLearning):
                                                      y_col='res', color_mode='rgb', batch_size=self.batch_size,
                                                      seed=self.seed, shuffle=False, class_mode='raw',
                                                      target_size=(self.image_size, self.image_size))
-        self.step_size = math.ceil(self.generator.n / self.generator.batch_size)
         
         # load the weights for the fold
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')

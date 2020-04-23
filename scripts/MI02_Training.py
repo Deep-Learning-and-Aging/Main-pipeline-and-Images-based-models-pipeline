@@ -17,9 +17,9 @@ if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Heart_20208_3chambers')  # organ_id_view, e.g Heart_20208_3chambers.
+    sys.argv.append('Brain_20227_sagittal')  # organ_id_view, e.g Heart_20208_3chambers.
     sys.argv.append('raw')  # transformation
-    sys.argv.append('EfficientNetB7')  # architecture
+    sys.argv.append('MobileNet')  # architecture
     sys.argv.append('Adam')  # optimizer
     sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
