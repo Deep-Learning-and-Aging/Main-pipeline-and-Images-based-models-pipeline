@@ -187,7 +187,7 @@ class PreprocessingFolds(Metrics):
             dict_rename_cols[self.organ + '_images_quality'] = 'Data_quality'
         data = pd.read_csv(self.path_store + 'data-features.csv', usecols=cols_data)
         data.rename(columns=dict_rename_cols, inplace=True)
-        data['eid'] = data['eid'].astype(str)  # .apply(append_ext)
+        data['eid'] = data['eid'].astype(str)
         data = data.set_index('eid', drop=False)
         if self.image_quality_id is not None:
             data = data[data['Data_quality'] != np.nan]
@@ -303,7 +303,7 @@ class MyImageDataGenerator(ImageDataGenerator, Sequence):
         y = np.empty(n_samples_batch)
         # Generate data
         for i, ID in enumerate(list_ids_batch):
-            path_image = self.dir_images + ID  # TODO  + '.jpg'
+            path_image = self.dir_images + ID + '.jpg'
             img = load_img(path_image, target_size=(self.images_width, self.images_height), color_mode='rgb')
             x = img_to_array(img)
             if hasattr(img, 'close'):
@@ -392,8 +392,6 @@ class DeepLearning(Metrics):
         self.dict_batch_sizes.update(dict.fromkeys(['DenseNet201', 'VGG16', 'Xception'], 16))
         self.dict_batch_sizes.update(dict.fromkeys(['InceptionResNetV2'], 8))
         self.dict_batch_sizes.update(dict.fromkeys(['NASNetLarge', 'EfficientNetB7'], 4))
-        self.dict_rotation_ranges = {'Brain': 0, 'EyeFundus': 0, 'Liver': 20, 'Heart': 20}
-        self.dict_shift_ranges = {'Brain': 0, 'EyeFundus': 0, 'Liver': 0.2, 'Heart': 0.2}
         self.batch_size = self.dict_batch_sizes[self.architecture]
         # double the batch size for the teslaM40 cores that have bigger memory
         if len(GPUtil.getGPUs()) > 0:  # make sure GPUs are available (not truesometimes for debugging)
@@ -506,13 +504,13 @@ class DeepLearning(Metrics):
             self.DATA_FEATURES[fold] = pd.read_csv(
                 self.path_store + 'data-features_' + self.dict_image_field_to_ids[self.organ + '_' + self.field_id]
                 + '_' + self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
-            self.DATA_FEATURES[fold]['eid'] = self.DATA_FEATURES[fold]['eid'].astype(str).apply(self._append_ext)
+            self.DATA_FEATURES[fold]['eid'] = self.DATA_FEATURES[fold]['eid'].astype(str)
             self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].set_index('eid', drop=False)
     
     def _take_subset_to_debug(self):
         for fold in self.folds:
             # use +1 or +2 to test the leftovers pipeline
-            leftovers_extra = {'train': 0, 'val': 1, 'test': 2} #TODO fails with val = 1
+            leftovers_extra = {'train': 0, 'val': 1, 'test': 2}
             n_batches = math.ceil(len(self.DATA_FEATURES[fold].index) / self.batch_size * self.debug_fraction)
             n_limit_fold = leftovers_extra[fold] + self.batch_size * n_batches
             self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].iloc[:n_limit_fold, :]
@@ -525,36 +523,19 @@ class DeepLearning(Metrics):
                 continue
             
             # define image generators
+            # parameters
             if (fold == 'train') & (self.mode == 'model_training'):
                 shuffle = True
                 data_augmentation = True
             else:
                 shuffle = False
                 data_augmentation = False
-            """
-            if (fold == 'train') & (self.mode == 'model_training'):
-                datagen = ImageDataGenerator(rotation_range=self.dict_rotation_ranges[self.organ],
-                                             width_shift_range=self.dict_shift_ranges[self.organ],
-                                             height_shift_range=self.dict_shift_ranges[self.organ],
-                                             rescale=1. / 255.)
-                shuffle = True
-            else:
-                datagen = ImageDataGenerator(rescale=1. / 255.)
-                shuffle = False
-            """
             # define batch size for testing: data is split between a part that fits in batches, and leftovers
             if self.mode == 'model_testing':
                 batch_size_fold = min(self.batch_size, len(DATA_FEATURES[fold].index))
             else:
                 batch_size_fold = self.batch_size
-            """
-            # define data generator
-            generator_fold = datagen.flow_from_dataframe(dataframe=DATA_FEATURES[fold], directory=self.images_directory,
-                                                         x_col='eid', y_col=self.target, color_mode='rgb',
-                                                         batch_size=batch_size_fold, seed=self.seed, shuffle=shuffle,
-                                                         class_mode='raw',
-                                                         target_size=(self.image_size, self.image_size))
-            """
+            # generator
             generator_fold = MyImageDataGenerator(target=self.target, field_id=self.field_id,
                                                   data_features=DATA_FEATURES[fold], batch_size=batch_size_fold,
                                                   shuffle=shuffle, dir_images=self.dir_images,
@@ -988,13 +969,12 @@ class PredictionsGenerate(DeepLearning):
             mean_train, std_train = None, None
         
         # Generate predictions
-        #for fold in self.folds: TODO
-        for fold in ['val', 'test']:
+        for fold in self.folds:
             print('Predicting samples from fold ' + fold)
             print('Predicting batches: ' + str(len(self.DATA_FEATURES_BATCH[fold].index)) + ' samples.')
             pred_batch = self.model.predict_generator(self.GENERATORS_BATCH[fold],
                                                       steps=self.GENERATORS_BATCH[fold].steps, verbose=1)
-            if fold in self.GENERATORS_LEFTOVERS.keys():  # TODO
+            if fold in self.GENERATORS_LEFTOVERS.keys():
                 print('Predicting leftovers: ' + str(len(self.DATA_FEATURES_LEFTOVERS[fold].index)) + ' samples.')
                 pred_leftovers = self.model.predict_generator(self.GENERATORS_LEFTOVERS[fold],
                                                               steps=self.GENERATORS_LEFTOVERS[fold].steps, verbose=1)
