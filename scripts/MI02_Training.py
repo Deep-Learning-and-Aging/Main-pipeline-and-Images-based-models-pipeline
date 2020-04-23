@@ -24,7 +24,7 @@ if len(sys.argv) != 10:
     sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
     sys.argv.append('0.0')  # dropout_rate
-    sys.argv.append('1')  # outer_fold
+    sys.argv.append('0')  # outer_fold
 
 # Compute results
 Model_Training = Training(target=sys.argv[1], organ_id_view=sys.argv[2], transformation=sys.argv[3],

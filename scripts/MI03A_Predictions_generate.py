@@ -2,8 +2,8 @@ from MI_Libraries import *
 from MI_Classes import PredictionsGenerate
 
 # options
-# debug mode: exclude train set
-debug_mode = False
+# debug mode
+debug_mode = True
 # save predictions
 save_predictions = True
 
@@ -12,9 +12,9 @@ if len(sys.argv) != 9:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Liver_20204_main')  # organ_id_view, e.g PhysicalActivity_90001_main, or Heart_20208_3chambers
+    sys.argv.append('EyeFundus_210156_right')  # organ_id_view, e.g PhysicalActivity_90001_main, or Heart_20208_3chambers
     sys.argv.append('raw')  # transformation
-    sys.argv.append('MobileNet')  # architecture
+    sys.argv.append('InceptionV3')  # architecture
     sys.argv.append('Adam')  # optimizer
     sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
@@ -31,3 +31,15 @@ if save_predictions:
 # Exit
 print('Done.')
 Predictions_Generate.clean_exit()
+
+
+self = Predictions_Generate
+fold = 'train'
+pred_batch = self.model.predict_generator(self.GENERATORS_BATCH[fold], steps=1, verbose=0)
+pred_leftovers = self.model.predict_generator(self.GENERATORS_LEFTOVERS[fold], steps=1, verbose=0)
+
+steps = math.ceil(len(self.list_ids)/self.batch_size)
+
+
+
+

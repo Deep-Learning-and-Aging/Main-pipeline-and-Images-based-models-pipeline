@@ -254,10 +254,10 @@ class PreprocessingFolds(Metrics):
         self._split_data()
 
 
-class MyImageDataGenerator(ImageDataGenerator, Sequence): #(ImageDataGenerator, Iterator)
+class MyImageDataGenerator(ImageDataGenerator, Sequence):
     
     def __init__(self, target=None, field_id=None, data_features=None, batch_size=None, shuffle=None, dir_images=None,
-                 images_width=None, images_height=None):
+                 images_width=None, images_height=None, data_augmentation=False, seed=None):
         # parameters
         self.target = target
         self.labels = data_features[self.target]
@@ -273,6 +273,8 @@ class MyImageDataGenerator(ImageDataGenerator, Sequence): #(ImageDataGenerator, 
         self.images_width = images_width
         self.images_height = images_height
         # Data augmentation
+        self.data_augmentation = data_augmentation
+        self.seed = seed
         self.dict_rotation_ranges = {'20227': 0, '210156': 0, '20204': 20, '20208': 20}
         self.dict_width_shift_ranges = {'20227': 0, '210156': 0, '20204': 0.1, '20208': 0.1}
         self.dict_height_shift_ranges = {'20227': 0, '210156': 0, '20204': 0.1, '20208': 0.1}
@@ -306,9 +308,10 @@ class MyImageDataGenerator(ImageDataGenerator, Sequence): #(ImageDataGenerator, 
             x = img_to_array(img)
             if hasattr(img, 'close'):
                 img.close()
-            params = self.get_random_transform(x.shape)
-            x = self.apply_transform(x, params)
-            x = self.standardize(x)
+            if self.data_augmentation:
+                params = self.get_random_transform(x.shape, seed=self.seed)
+                x = self.apply_transform(x, params)
+                x = self.standardize(x)
             X[i, ] = x
             y[i] = self.labels[ID]
         return X, y
@@ -368,7 +371,7 @@ class DeepLearning(Metrics):
         self.DATA_FEATURES = {}
         self.mode = None
         self.n_cpus = len(os.sched_getaffinity(0))
-        self.images_directory = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' \
+        self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' \
                                 + self.transformation + '/'
         # define dictionary to resize the images to the right size depending on the model
         self.input_size_models = dict.fromkeys(
@@ -524,8 +527,10 @@ class DeepLearning(Metrics):
             # define image generators
             if (fold == 'train') & (self.mode == 'model_training'):
                 shuffle = True
+                data_augmentation = True
             else:
                 shuffle = False
+                data_augmentation = False
             """
             if (fold == 'train') & (self.mode == 'model_training'):
                 datagen = ImageDataGenerator(rotation_range=self.dict_rotation_ranges[self.organ],
@@ -539,7 +544,7 @@ class DeepLearning(Metrics):
             """
             # define batch size for testing: data is split between a part that fits in batches, and leftovers
             if self.mode == 'model_testing':
-                batch_size_fold = min(self.batch_size, len(self.DATA_FEATURES[fold].index))
+                batch_size_fold = min(self.batch_size, len(DATA_FEATURES[fold].index))
             else:
                 batch_size_fold = self.batch_size
             """
@@ -551,9 +556,10 @@ class DeepLearning(Metrics):
                                                          target_size=(self.image_size, self.image_size))
             """
             generator_fold = MyImageDataGenerator(target=self.target, field_id=self.field_id,
-                                                  data_features=self.DATA_FEATURES[fold], batch_size=batch_size_fold,
-                                                  shuffle=shuffle, dir_images=self.images_directory,
-                                                  images_width=self.image_size, images_height=self.image_size)
+                                                  data_features=DATA_FEATURES[fold], batch_size=batch_size_fold,
+                                                  shuffle=shuffle, dir_images=self.dir_images,
+                                                  images_width=self.image_size, images_height=self.image_size,
+                                                  data_augmentation=data_augmentation, seed=self.seed)
             
             # assign variables to their names
             GENERATORS[fold] = generator_fold
@@ -971,6 +977,8 @@ class PredictionsGenerate(DeepLearning):
             else:
                 self.DATA_FEATURES_BATCH[fold] = self.DATA_FEATURES[fold]  # special case for syntax if no leftovers
     
+    #def _generate_predictions_leftovers(self, ):
+    
     def _generate_outerfolds_predictions(self):
         # prepare unscaling
         if self.target in self.targets_regression:
@@ -980,15 +988,20 @@ class PredictionsGenerate(DeepLearning):
             mean_train, std_train = None, None
         
         # Generate predictions
-        for fold in self.folds:
+        #for fold in self.folds: TODO
+        for fold in ['val', 'test']:
+            print('Predicting samples from fold ' + fold)
+            print('Predicting batches: ' + str(len(self.DATA_FEATURES_BATCH[fold].index)) + ' samples.')
             pred_batch = self.model.predict_generator(self.GENERATORS_BATCH[fold],
-                                                      steps=self.GENERATORS_BATCH[fold].steps, verbose=0)
-            if fold in self.GENERATORS_LEFTOVERS.keys():
+                                                      steps=self.GENERATORS_BATCH[fold].steps, verbose=1)
+            if fold in self.GENERATORS_LEFTOVERS.keys():  # TODO
+                print('Predicting leftovers: ' + str(len(self.DATA_FEATURES_LEFTOVERS[fold].index)) + ' samples.')
                 pred_leftovers = self.model.predict_generator(self.GENERATORS_LEFTOVERS[fold],
-                                                              steps=self.GENERATORS_LEFTOVERS[fold].steps, verbose=0)
+                                                              steps=self.GENERATORS_LEFTOVERS[fold].steps, verbose=1)
                 pred_full = np.concatenate((pred_batch, pred_leftovers)).squeeze()
             else:
                 pred_full = pred_batch.squeeze()
+            print('Predicted a total of ' + str(len(pred_full)) + ' samples.')
             # unscale predictions
             if self.target in self.targets_regression:
                 pred_full = pred_full * std_train + mean_train
@@ -2120,8 +2133,9 @@ class PlotsAttentionMaps(DeepLearning):
         DeepLearning.__init__(self, target, organ_id_view, transformation, self.parameters['architecture'],
                               self.parameters['optimizer'], self.parameters['learning_rate'],
                               self.parameters['weight_decay'], self.parameters['dropout_rate'], False)
-        
-        self.prediction_type = self.dict_prediction_types[target]
+        self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' + self.transformation\
+                          + '/'
+        self.prediction_type = self.dict_prediction_types[self.target]
         self.Residuals = None
         self.df_to_plot = None
         self.df_outer_fold = None
@@ -2216,12 +2230,11 @@ class PlotsAttentionMaps(DeepLearning):
         self.df_outer_fold = self.df_to_plot[self.df_to_plot['outer_fold'] == outer_fold]
         
         # generate the data generators
-        datagen = ImageDataGenerator(rescale=1. / 255.)
-        dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' + self.transformation + '/'
-        self.generator = datagen.flow_from_dataframe(dataframe=self.df_outer_fold, directory=dir_images, x_col='eid',
-                                                     y_col='res', color_mode='rgb', batch_size=self.batch_size,
-                                                     seed=self.seed, shuffle=False, class_mode='raw',
-                                                     target_size=(self.image_size, self.image_size))
+        self.generator = MyImageDataGenerator(target=self.target, field_id=self.field_id,
+                                              data_features=self.df_outer_fold, batch_size=self.batch_size,
+                                              shuffle=False, dir_images=self.dir_images,
+                                              images_width=self.image_size, images_height=self.image_size,
+                                              data_augmentation=False, seed=self.seed)
         
         # load the weights for the fold
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
