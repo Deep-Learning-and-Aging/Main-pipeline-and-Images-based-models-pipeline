@@ -4,7 +4,7 @@ from MI_Classes import Training
 # Options
 # Use a small subset of the data VS. run the actual full data pipeline to get accurate results
 # /!\ if True, path to save weights will be automatically modified to avoid rewriting them
-debug_mode = True
+debug_mode = False
 # Load weights from previous best training results, VS. start from scratch
 continue_training = True
 # Try to find a similar model among those already trained and evaluated to perform transfer learning
@@ -17,14 +17,14 @@ if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Brain_20227_sagittal')  # organ_id_view, e.g Heart_20208_3chambers.
+    sys.argv.append('Liver_20204_main')  # organ_id_view, e.g Heart_20208_3chambers.
     sys.argv.append('raw')  # transformation
-    sys.argv.append('MobileNet')  # architecture
+    sys.argv.append('VGG16')  # architecture
     sys.argv.append('Adam')  # optimizer
     sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
     sys.argv.append('0.0')  # dropout_rate
-    sys.argv.append('0')  # outer_fold
+    sys.argv.append('1')  # outer_fold
 
 # Compute results
 Model_Training = Training(target=sys.argv[1], organ_id_view=sys.argv[2], transformation=sys.argv[3],
@@ -36,3 +36,10 @@ Model_Training.data_preprocessing()
 Model_Training.build_model()
 Model_Training.train_model()
 Model_Training.clean_exit()
+
+
+self = Model_Training
+gen = self.GENERATORS['val']
+a, b, c = gen.__getitem__(0)
+
+

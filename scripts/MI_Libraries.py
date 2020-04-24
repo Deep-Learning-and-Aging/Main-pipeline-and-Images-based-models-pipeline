@@ -37,8 +37,8 @@ from keras import backend as k
 from keras_preprocessing.image import ImageDataGenerator, Iterator
 from keras_preprocessing.image.utils import load_img, img_to_array
 from keras.utils import Sequence
-from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D
-from keras.models import Model
+from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
+from keras.models import Model, Sequential
 from keras import regularizers
 from keras.optimizers import Adam, RMSprop, Adadelta
 from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger

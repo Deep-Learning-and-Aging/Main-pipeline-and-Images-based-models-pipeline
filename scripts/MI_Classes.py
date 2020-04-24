@@ -256,8 +256,9 @@ class PreprocessingFolds(Metrics):
 
 class MyImageDataGenerator(ImageDataGenerator, Sequence):
     
-    def __init__(self, target=None, field_id=None, data_features=None, batch_size=None, shuffle=None, dir_images=None,
-                 images_width=None, images_height=None, data_augmentation=False, seed=None):
+    def __init__(self, target=None, field_id=None, data_features=None, batch_size=None, shuffle=None,
+                 side_predictors=None, dir_images=None, images_width=None, images_height=None, data_augmentation=False,
+                 seed=None):
         # parameters
         self.target = target
         self.labels = data_features[self.target]
@@ -268,7 +269,8 @@ class MyImageDataGenerator(ImageDataGenerator, Sequence):
         self.steps = math.ceil(len(self.list_ids)/self.batch_size)
         self.shuffle = shuffle
         self.indices = None
-        self.on_epoch_end()  # initiate the indexes and shuffles the ids
+        self._on_epoch_end()  # initiate the indices and shuffle the ids
+        self.side_predictors = side_predictors
         self.dir_images = dir_images
         self.images_width = images_width
         self.images_height = images_height
@@ -288,33 +290,35 @@ class MyImageDataGenerator(ImageDataGenerator, Sequence):
     def __getitem__(self, index):
         indices = self.indices[index * self.batch_size:(index + 1) * self.batch_size]
         list_ids_batch = [self.list_ids[i] for i in indices]
-        X, y = self._data_generation(list_ids_batch)
-        return X, y
+        X, x, y = self._data_generation(list_ids_batch)
+        return [X, x], y
     
-    def on_epoch_end(self):
+    def _on_epoch_end(self):
         self.indices = np.arange(len(self.list_ids))
         if self.shuffle:
             np.random.shuffle(self.indices)
     
     def _data_generation(self, list_ids_batch):
-        # Initialization
+        # initialize empty matrices
         n_samples_batch = min(len(list_ids_batch), self.batch_size)
         X = np.empty((n_samples_batch, self.images_width, self.images_height, 3))
+        x = np.empty((n_samples_batch, len(self.side_predictors)))
         y = np.empty(n_samples_batch)
-        # Generate data
+        # fill the matrices sample by sample
         for i, ID in enumerate(list_ids_batch):
+            y[i] = self.labels[ID]
+            x[i] = self.data_features.loc[ID, self.side_predictors]
             path_image = self.dir_images + ID + '.jpg'
             img = load_img(path_image, target_size=(self.images_width, self.images_height), color_mode='rgb')
-            x = img_to_array(img)
+            Xi = img_to_array(img)
             if hasattr(img, 'close'):
                 img.close()
             if self.data_augmentation:
                 params = self.get_random_transform(x.shape, seed=self.seed)
-                x = self.apply_transform(x, params)
-                x = self.standardize(x)
-            X[i, ] = x
-            y[i] = self.labels[ID]
-        return X, y
+                Xi = self.apply_transform(Xi, params)
+                Xi = self.standardize(Xi)
+            X[i, ] = Xi
+        return X, x, y
 
 
 class MyModelCheckpoint(ModelCheckpoint):
@@ -365,6 +369,10 @@ class DeepLearning(Metrics):
         self.path_load_weights = None
         self.keras_weights = None
         
+        # Side NNet's predictors
+        self.dict_side_predictors = {'Age': ['Sex'], 'Sex': ['Age']}
+        self.side_predictors = self.dict_side_predictors[self.target]
+        
         # Generators
         self.debug_mode = debug_mode
         self.debug_fraction = 0.02
@@ -373,18 +381,11 @@ class DeepLearning(Metrics):
         self.n_cpus = len(os.sched_getaffinity(0))
         self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' \
                                 + self.transformation + '/'
-        # define dictionary to resize the images to the right size depending on the model
-        self.input_size_models = dict.fromkeys(
-            ['VGG16', 'VGG19', 'MobileNet', 'MobileNetV2', 'DenseNet121', 'DenseNet169', 'DenseNet201', 'NASNetMobile',
-             'ResNet50', 'ResNext50'], 224)
-        self.input_size_models.update(dict.fromkeys(['Xception', 'InceptionV3', 'InceptionResNetV2'], 299))
-        self.input_size_models.update(dict.fromkeys(['NASNetLarge'], 331))
-        self.input_size_models.update(dict.fromkeys(['EfficientNetB7'], 300))
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
-        self.dict_field_id_to_image_size = {'20204': 288, '20208': 200, '20227': 88, '210156': 300}
-        # for future v2: self.image_size = self.dict_field_id_to_image_size[self.field_id]
+        self.dict_field_id_to_image_size = {'20204': (288, 288), '20208': (200, 200), '20227': (88, 88),
+                                            '210156': (300, 300)}
+        self.image_width, self.image_height = self.dict_field_id_to_image_size[self.field_id]
         
-        self.image_size = self.input_size_models[self.architecture]
         # define dictionary of batch sizes to fit as many samples as the model's architecture allows
         self.dict_batch_sizes = dict.fromkeys(['NASNetMobile'], 128)
         self.dict_batch_sizes.update(dict.fromkeys(['MobileNet', 'MobileNetV2', 'ResNet50', 'ResNext50'], 64))
@@ -536,14 +537,12 @@ class DeepLearning(Metrics):
             else:
                 batch_size_fold = self.batch_size
             # generator
-            generator_fold = MyImageDataGenerator(target=self.target, field_id=self.field_id,
-                                                  data_features=DATA_FEATURES[fold], batch_size=batch_size_fold,
-                                                  shuffle=shuffle, dir_images=self.dir_images,
-                                                  images_width=self.image_size, images_height=self.image_size,
-                                                  data_augmentation=data_augmentation, seed=self.seed)
-            
-            # assign variables to their names
-            GENERATORS[fold] = generator_fold
+            GENERATORS[fold] = MyImageDataGenerator(target=self.target, field_id=self.field_id,
+                                                    data_features=DATA_FEATURES[fold], batch_size=batch_size_fold,
+                                                    shuffle=shuffle, side_predictors=self.side_predictors,
+                                                    dir_images=self.dir_images, images_width=self.image_width,
+                                                    images_height=self.image_height,
+                                                    data_augmentation=data_augmentation, seed=self.seed)
         return GENERATORS
     
     def _generate_class_weights(self):
@@ -553,101 +552,14 @@ class DeepLearning(Metrics):
             for i in counts.index.values:
                 self.class_weights[i] = 1 / counts.loc[i]
     
-    def _generate_base_model(self):
-        base_model = None
-        x = None
-        if self.architecture in ['VGG16', 'VGG19']:
-            if self.architecture == 'VGG16':
-                from keras.applications.vgg16 import VGG16
-                base_model = VGG16(include_top=False, weights=self.keras_weights, input_shape=(224, 224, 3))
-            elif self.architecture == 'VGG19':
-                from keras.applications.vgg19 import VGG19
-                base_model = VGG19(include_top=False, weights=self.keras_weights, input_shape=(224, 224, 3))
-            x = base_model.output
-            x = Flatten()(x)
-            x = Dense(4096, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
-            x = Dropout(self.dropout_rate)(x)
-            x = Dense(4096, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
-            x = Dropout(self.dropout_rate)(x)
-        elif self.architecture in ['MobileNet', 'MobileNetV2']:
-            if self.architecture == 'MobileNet':
-                from keras.applications.mobilenet import MobileNet
-                base_model = MobileNet(include_top=False, weights=self.keras_weights, input_shape=(224, 224, 3))
-            elif self.architecture == 'MobileNetV2':
-                from keras.applications.mobilenet_v2 import MobileNetV2
-                base_model = MobileNetV2(include_top=False, weights=self.keras_weights, input_shape=(224, 224, 3))
-            x = base_model.output
-            x = GlobalAveragePooling2D()(x)
-        elif self.architecture in ['DenseNet121', 'DenseNet169', 'DenseNet201']:
-            if self.architecture == 'DenseNet121':
-                from keras.applications.densenet import DenseNet121
-                base_model = DenseNet121(include_top=True, weights=self.keras_weights, input_shape=(224, 224, 3))
-            elif self.architecture == 'DenseNet169':
-                from keras.applications.densenet import DenseNet169
-                base_model = DenseNet169(include_top=True, weights=self.keras_weights, input_shape=(224, 224, 3))
-            elif self.architecture == 'DenseNet201':
-                from keras.applications.densenet import DenseNet201
-                base_model = DenseNet201(include_top=True, weights=self.keras_weights, input_shape=(224, 224, 3))
-            base_model = Model(base_model.inputs, base_model.layers[-2].output)
-            x = base_model.output
-        elif self.architecture in ['NASNetMobile', 'NASNetLarge']:
-            if self.architecture == 'NASNetMobile':
-                from keras.applications.nasnet import NASNetMobile
-                base_model = NASNetMobile(include_top=True, weights=self.keras_weights, input_shape=(224, 224, 3))
-            elif self.architecture == 'NASNetLarge':
-                from keras.applications.nasnet import NASNetLarge
-                base_model = NASNetLarge(include_top=True, weights=self.keras_weights, input_shape=(331, 331, 3))
-            base_model = Model(base_model.inputs, base_model.layers[-2].output)
-            x = base_model.output
-        elif self.architecture == 'Xception':
-            from keras.applications.xception import Xception
-            base_model = Xception(include_top=False, weights=self.keras_weights, input_shape=(299, 299, 3))
-            x = base_model.output
-            x = GlobalAveragePooling2D()(x)
-        elif self.architecture == 'InceptionV3':
-            from keras.applications.inception_v3 import InceptionV3
-            base_model = InceptionV3(include_top=False, weights=self.keras_weights, input_shape=(299, 299, 3))
-            x = base_model.output
-            x = GlobalAveragePooling2D()(x)
-        elif self.architecture == 'InceptionResNetV2':
-            from keras.applications.inception_resnet_v2 import InceptionResNetV2
-            base_model = InceptionResNetV2(include_top=False, weights=self.keras_weights, input_shape=(299, 299, 3))
-            x = base_model.output
-            x = GlobalAveragePooling2D()(x)
-        elif self.architecture in ['ResNet50V2', 'ResNet152V2', 'ResNext101']:
-            import keras
-            kwargs = {"backend": keras.backend, "layers": keras.layers, "models": keras.models, "utils": keras.utils}
-            model_builder = None
-            if self.architecture == 'ResNet50V2':
-                from keras_applications.resnet_v2 import ResNet50V2
-                model_builder = ResNet50V2
-            elif self.architecture == 'ResNet152V2':
-                from keras_applications.resnet_v2 import ResNet152V2
-                model_builder = ResNet152V2
-            elif self.architecture == 'ResNeXt101':
-                from keras_applications.resnext import ResNeXt101
-                model_builder = ResNeXt101
-            base_model = model_builder(include_top=False, weights=self.keras_weights, input_shape=(224, 224, 3),
-                                       **kwargs)
-            x = base_model.output
-            x = GlobalAveragePooling2D()(x)
-        elif self.architecture == 'EfficientNetB7':
-            from efficientnet.keras import EfficientNetB7
-            w = 'noisy-student' if self.keras_weights == 'imagenet' else self.keras_weights
-            base_model = EfficientNetB7(include_top=False, weights=w, input_shape=(300, 300, 3))
-            x = base_model.output
-            x = GlobalAveragePooling2D()(x)
-            x = Dropout(self.dropout_rate)(x)
-        return x, base_model.input
-    
-    def _generate_architecture_v2(self):
+    def _generate_cnn(self):
         # define the arguments
         # take special initial weights for EfficientNetB7 (better)
-        if self.architecture == 'EfficientNetB7' & self.keras_weights == 'imagenet':
+        if (self.architecture == 'EfficientNetB7') & (self.keras_weights == 'imagenet'):
             w = 'noisy-student'
         else:
             w = self.keras_weights
-        kwargs = {"include_top": False, "weights": w, "input_shape": (self.self.image_size, self.self.image_size, 3)}
+        kwargs = {"include_top": False, "weights": w, "input_shape": (self.image_width, self.image_height, 3)}
         if self.architecture in ['ResNet50V2', 'ResNet152V2', 'ResNext101']:
             import keras
             kwargs.update(
@@ -659,20 +571,12 @@ class DeepLearning(Metrics):
             from keras.applications.vgg16 import VGG16 as ModelBuilder
         elif self.architecture == 'VGG19':
             from keras.applications.vgg19 import VGG19 as ModelBuilder
-        elif self.architecture == 'MobileNet':
-            from keras.applications.mobilenet import MobileNet as ModelBuilder
-        elif self.architecture == 'MobileNetV2':
-            from keras.applications.mobilenet_v2 import MobileNetV2 as ModelBuilder
         elif self.architecture == 'DenseNet121':
             from keras.applications.densenet import DenseNet121 as ModelBuilder
         elif self.architecture == 'DenseNet169':
             from keras.applications.densenet import DenseNet169 as ModelBuilder
         elif self.architecture == 'DenseNet201':
             from keras.applications.densenet import DenseNet201 as ModelBuilder
-        if self.architecture == 'NASNetMobile':
-            from keras.applications.nasnet import NASNetMobile as ModelBuilder
-        elif self.architecture == 'NASNetLarge':
-            from keras.applications.nasnet import NASNetLarge as ModelBuilder
         elif self.architecture == 'Xception':
             from keras.applications.xception import Xception as ModelBuilder
         elif self.architecture == 'InceptionV3':
@@ -680,11 +584,11 @@ class DeepLearning(Metrics):
         elif self.architecture == 'InceptionResNetV2':
             from keras.applications.inception_resnet_v2 import InceptionResNetV2 as ModelBuilder
         elif self.architecture == 'ResNet50':
-            from keras_applications.resnet import ResNet50V2 as ModelBuilder
+            from keras_applications.resnet import ResNet50 as ModelBuilder
         elif self.architecture == 'ResNet101':
-            from keras_applications.resnet import ResNet101V2 as ModelBuilder
+            from keras_applications.resnet import ResNet101 as ModelBuilder
         elif self.architecture == 'ResNet152':
-            from keras_applications.resnet import ResNet152V2 as ModelBuilder
+            from keras_applications.resnet import ResNet152 as ModelBuilder
         elif self.architecture == 'ResNet50V2':
             from keras_applications.resnet_v2 import ResNet50V2 as ModelBuilder
         elif self.architecture == 'ResNet101V2':
@@ -697,10 +601,27 @@ class DeepLearning(Metrics):
             from keras_applications.resnext import ResNeXt101 as ModelBuilder
         elif self.architecture == 'EfficientNetB7':
             from efficientnet.keras import EfficientNetB7 as ModelBuilder
+        else:
+            #  Extra models, that do now allow resized input
+            if self.architecture == 'NASNetMobile':
+                from keras.applications.nasnet import NASNetMobile as ModelBuilder
+                size = 224  # input (224, 224)
+            elif self.architecture == 'NASNetLarge':
+                from keras.applications.nasnet import NASNetLarge as ModelBuilder
+                size = 331  # input (331, 331)
+            elif self.architecture == 'MobileNet':
+                from keras.applications.mobilenet import MobileNet as ModelBuilder
+                size = 224  # input (128, 128), (160, 160), (192, 192), or (224, 224)
+            elif self.architecture == 'MobileNetV2':
+                from keras.applications.mobilenet_v2 import MobileNetV2 as ModelBuilder
+                size = 224  # input (96, 96), (128, 128), (160, 160),(192, 192), or (224, 224))
+            self.image_width = size
+            self.image_height = size
+            kwargs["input_shape"] = (size, size, 3)
         
         # build the model's base
-        base_model = ModelBuilder(kwargs)
-        x = base_model.output
+        cnn = ModelBuilder(**kwargs)
+        x = cnn.output
         # complete the model's base
         if self.architecture in ['VGG16', 'VGG19']:
             x = Flatten()(x)
@@ -712,26 +633,33 @@ class DeepLearning(Metrics):
             x = GlobalAveragePooling2D()(x)
             if self.architecture == 'EfficientNetB7':
                 x = Dropout(self.dropout_rate)(x)
-        
-        return x, base_model.input
-    
-    def _complete_architecture_v2(self, x, input_shape):
+        x = Dense(1000, activation='selu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
+        cnn_output = Dropout(self.dropout_rate)(x)
+        return cnn.input, cnn_output
+
+    def _generate_side_nn(self):
+        side_nn = Sequential()
+        side_nn.add(Dense(24, input_dim=len(self.side_predictors), activation="selu",
+                          kernel_regularizer=regularizers.l2(self.weight_decay)))
+        # scale the dropout proportionally to the number of nodes in a layer
+        side_nn.add(Dropout(self.dropout_rate * 24/1024))
+        return side_nn.input, side_nn.output
+
+    def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
+        x = concatenate([cnn_output, side_nn_output])
         for n in [int(2 ** (10 - i)) for i in range(7)]:
             x = Dense(n, activation='selu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
-            x = Dropout(self.dropout_rate)(x)
+            # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
+            if n > 64:
+                x = Dropout(self.dropout_rate * n / 1024)(x)
         predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
-        self.model = Model(inputs=input_shape, outputs=predictions)
-    
-    def _complete_architecture(self, x, input_shape):
-        for n in [int(2 ** (10 - i)) for i in range(5)]:
-            x = Dense(n, activation='selu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
-            x = Dropout(self.dropout_rate)(x)
-        predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
-        self.model = Model(inputs=input_shape, outputs=predictions)
+        self.model = Model(inputs=[cnn_input, side_nn_input], outputs=predictions)
     
     def _generate_architecture(self):
-        x, base_model_input = self._generate_base_model()
-        self._complete_architecture(x=x, input_shape=base_model_input)
+        cnn_input, cnn_output = self._generate_cnn()
+        side_nn_input, side_nn_output = self._generate_side_nn()
+        self._complete_architecture(cnn_input=cnn_input, cnn_output=cnn_output, side_nn_input=side_nn_input,
+                                    side_nn_output=side_nn_output)
     
     def _load_model_weights(self):
         try:
@@ -1800,7 +1728,6 @@ class ResidualsCorrelations(Hyperparameters):
     def preprocessing(self):
         # load data
         Residuals = pd.read_csv(self.path_store + 'RESIDUALS_' + self.target + '_' + self.fold + '.csv')
-        
         # Format the dataframe
         Residuals_only = Residuals[[col_name for col_name in Residuals.columns.values if 'res_' in col_name]]
         Residuals_only.rename(columns=lambda x: x.replace('res_' + self.target + '_', ''), inplace=True)
@@ -2092,7 +2019,8 @@ class PlotsAttentionMaps(DeepLearning):
         
         self.fold = fold
         self.parameters = None
-        self.image_size = None
+        self.image_width = None
+        self.image_height = None
         self.batch_size = None
         self.N_samples_attentionmaps = 10  # needs to be > 1 for the script to work
         
@@ -2106,10 +2034,11 @@ class PlotsAttentionMaps(DeepLearning):
                                     & (Performances['transformation'] == self.transformation)]
         version = Performances['version'].values[0]
         del Performances
-        self.parameters = self._version_to_parameters(version)
-        self.image_size = self.input_size_models[self.parameters['architecture']]
-        self.batch_size = self.dict_batch_sizes[self.parameters['architecture']]
         
+        # other parameters
+        self.parameters = self._version_to_parameters(version)
+        self.image_width, self.image_height = self.dict_field_id_to_image_size[self.parameters['field_id']]
+        self.batch_size = self.dict_batch_sizes[self.parameters['architecture']]
         DeepLearning.__init__(self, target, organ_id_view, transformation, self.parameters['architecture'],
                               self.parameters['optimizer'], self.parameters['learning_rate'],
                               self.parameters['weight_decay'], self.parameters['dropout_rate'], False)
@@ -2212,9 +2141,10 @@ class PlotsAttentionMaps(DeepLearning):
         # generate the data generators
         self.generator = MyImageDataGenerator(target=self.target, field_id=self.field_id,
                                               data_features=self.df_outer_fold, batch_size=self.batch_size,
-                                              shuffle=False, dir_images=self.dir_images,
-                                              images_width=self.image_size, images_height=self.image_size,
-                                              data_augmentation=False, seed=self.seed)
+                                              shuffle=False, side_predictors=self.side_predictors,
+                                              dir_images=self.dir_images, images_width=self.image_width,
+                                              images_height=self.image_height, data_augmentation=False,
+                                              seed=self.seed)
         
         # load the weights for the fold
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
