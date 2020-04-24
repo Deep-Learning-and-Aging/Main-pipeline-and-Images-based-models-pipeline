@@ -278,6 +278,7 @@ class MyImageDataGenerator(Sequence, ImageDataGenerator):
         import numpy as np
         import math
         import random
+        from keras_preprocessing.image.utils import load_img, img_to_array
         
         # Parameters
         self.target = target
@@ -314,6 +315,7 @@ class MyImageDataGenerator(Sequence, ImageDataGenerator):
         return [X, x], y
     
     def _on_epoch_end(self):
+        _ = gc.collect()
         self.indices = np.arange(len(self.list_ids))
         if self.shuffle:
             np.random.shuffle(self.indices)
@@ -377,14 +379,13 @@ class DeepLearning(Metrics):
         from tensorflow import set_random_seed
         # keras
         from keras import backend as k
-        from keras_preprocessing.image import ImageDataGenerator, Iterator
-        from keras_preprocessing.image.utils import load_img, img_to_array
+        from keras import regularizers
         from keras.utils import Sequence
         from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
         from keras.models import Model, Sequential
-        from keras import regularizers
         from keras.optimizers import Adam, RMSprop, Adadelta
         from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
+        from keras_preprocessing.image import Iterator, ImageDataGenerator
         
         # Initialization
         Metrics.__init__(self)
@@ -896,7 +897,7 @@ class Training(DeepLearning):
     
     def train_model(self):
         # garbage collector
-        gc.collect()
+        _ = gc.collect()
         # train the model
         verbose = 1 if self.debug_mode else 2
         self.model.fit_generator(generator=self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
