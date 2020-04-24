@@ -1,4 +1,4 @@
-from MI_Libraries import *
+import sys
 from MI_Classes import PredictionsGenerate
 
 # options
@@ -31,15 +31,3 @@ if save_predictions:
 # Exit
 print('Done.')
 Predictions_Generate.clean_exit()
-
-
-self = Predictions_Generate
-fold = 'train'
-pred_batch = self.model.predict_generator(self.GENERATORS_BATCH[fold], steps=1, verbose=0)
-pred_leftovers = self.model.predict_generator(self.GENERATORS_LEFTOVERS[fold], steps=1, verbose=0)
-
-steps = math.ceil(len(self.list_ids)/self.batch_size)
-
-
-
-

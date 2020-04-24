@@ -1,10 +1,21 @@
-from MI_Libraries import *
-
-
 # CLASSES
 class Hyperparameters:
     
     def __init__(self):
+        # Libraries
+        import sys
+        import os
+        import numpy as np
+        import pandas as pd
+        import math
+        import random
+        import glob
+        import re
+        import fnmatch
+        import gc
+        import warnings
+        from sklearn.utils import resample
+        
         # seeds for reproducibility
         self.seed = 0
         os.environ['PYTHONHASHSEED'] = str(self.seed)
@@ -57,8 +68,12 @@ class Hyperparameters:
 class Metrics(Hyperparameters):
     
     def __init__(self):
-        Hyperparameters.__init__(self)
+        # Libraries
+        from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, \
+            precision_score, recall_score, confusion_matrix, average_precision_score
         
+        # Parameters
+        Hyperparameters.__init__(self)
         self.targets_regression = ['Age']
         self.targets_binary = ['Sex']
         self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
@@ -254,12 +269,17 @@ class PreprocessingFolds(Metrics):
         self._split_data()
 
 
-class MyImageDataGenerator(ImageDataGenerator, Sequence):
+class MyImageDataGenerator(Sequence, ImageDataGenerator):
     
     def __init__(self, target=None, field_id=None, data_features=None, batch_size=None, shuffle=None,
                  side_predictors=None, dir_images=None, images_width=None, images_height=None, data_augmentation=False,
                  seed=None):
-        # parameters
+        # Libraries
+        import numpy as np
+        import math
+        import random
+        
+        # Parameters
         self.target = target
         self.labels = data_features[self.target]
         self.field_id = field_id
@@ -324,6 +344,11 @@ class MyImageDataGenerator(ImageDataGenerator, Sequence):
 class MyModelCheckpoint(ModelCheckpoint):
     def __init__(self, filepath, monitor='val_loss', baseline=-np.Inf, verbose=0, save_best_only=False,
                  save_weights_only=False, mode='auto', period=1):
+        # Libraries
+        import sys
+        import numpy as np
+        
+        # Parameters
         ModelCheckpoint.__init__(self, filepath, monitor=monitor, verbose=verbose, save_best_only=save_best_only,
                                  save_weights_only=save_weights_only, mode=mode, period=period)
         if mode == 'min':
@@ -344,6 +369,24 @@ class DeepLearning(Metrics):
     def __init__(self, target=None, organ_id_view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
         
+        # Libraries
+        # GPUs
+        from GPUtil import GPUtil
+        # tensorflow
+        import tensorflow as tf
+        from tensorflow import set_random_seed
+        # keras
+        from keras import backend as k
+        from keras_preprocessing.image import ImageDataGenerator, Iterator
+        from keras_preprocessing.image.utils import load_img, img_to_array
+        from keras.utils import Sequence
+        from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
+        from keras.models import Model, Sequential
+        from keras import regularizers
+        from keras.optimizers import Adam, RMSprop, Adadelta
+        from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
+        
+        # Initialization
         Metrics.__init__(self)
         
         # Model's version
@@ -566,7 +609,6 @@ class DeepLearning(Metrics):
                 {"backend": keras.backend, "layers": keras.layers, "models": keras.models, "utils": keras.utils})
         
         # load the architecture builder
-        ModelBuilder = None
         if self.architecture == 'VGG16':
             from keras.applications.vgg16 import VGG16 as ModelBuilder
         elif self.architecture == 'VGG19':
@@ -615,6 +657,9 @@ class DeepLearning(Metrics):
             elif self.architecture == 'MobileNetV2':
                 from keras.applications.mobilenet_v2 import MobileNetV2 as ModelBuilder
                 size = 224  # input (96, 96), (128, 128), (160, 160),(192, 192), or (224, 224))
+            else:
+                print('Architecture does not exist.')
+                sys.exit(1)
             self.image_width = size
             self.image_height = size
             kwargs["input_shape"] = (size, size, 3)
@@ -852,7 +897,6 @@ class Training(DeepLearning):
     def train_model(self):
         # garbage collector
         gc.collect()
-        
         # train the model
         verbose = 1 if self.debug_mode else 2
         self.model.fit_generator(generator=self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
@@ -885,8 +929,6 @@ class PredictionsGenerate(DeepLearning):
                 self.DATA_FEATURES_LEFTOVERS[fold] = self.DATA_FEATURES[fold].tail(n_leftovers)
             else:
                 self.DATA_FEATURES_BATCH[fold] = self.DATA_FEATURES[fold]  # special case for syntax if no leftovers
-    
-    #def _generate_predictions_leftovers(self, ):
     
     def _generate_outerfolds_predictions(self):
         # prepare unscaling
@@ -995,6 +1037,7 @@ class PredictionsMerge(Hyperparameters):
     def _preprocess_data_features(self):
         # For the training set, each sample is predicted n_CV_outer_folds times, so prepare a larger dataframe
         if self.fold == 'train':
+            df_all_folds = None
             for outer_fold in self.outer_folds:
                 df_fold = self.data_features.copy()
                 df_fold['outer_fold'] = outer_fold
@@ -1464,7 +1507,9 @@ class EnsemblesPredictions(Metrics):
     
     def __init__(self, target=None):
         
-        # set parameters
+        # Libraries
+        import fnmatch
+        # Parameters
         Metrics.__init__(self)
         self.target = target
         self.ensembles_performance_cutoff_percent = 0
@@ -1672,6 +1717,11 @@ class EnsemblesPredictions(Metrics):
 class ResidualsGenerate(Hyperparameters):
     
     def __init__(self, target=None, fold=None, debug_mode=False):
+        
+        # Libraries
+        from sklearn import linear_model
+        
+        # Parameters
         Hyperparameters.__init__(self)
         self.target = target
         self.fold = fold
@@ -1844,10 +1894,21 @@ class SelectBest(Metrics):
             Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
 
 
-class PlotsCorrelations(Hyperparameters):
+class Plots(Hyperparameters):
+    
+    def __init__(self):
+        # Libraries
+        import matplotlib  # set up backend for ssh -x11 figures
+        matplotlib.use('Agg')
+        import seaborn as sns
+        import matplotlib.pyplot as plt
+        Hyperparameters.__init__(self)
+
+
+class PlotsCorrelations(Plots):
     
     def __init__(self, target=None, fold=None, save_figures=True):
-        Hyperparameters.__init__(self)
+        Plots.__init__(self)
         self.target = target
         self.fold = fold
         self.save_figures = save_figures
@@ -2014,9 +2075,16 @@ class PlotsScatter(Hyperparameters):
 class PlotsAttentionMaps(DeepLearning):
     
     def __init__(self, target=None, organ_id_view=None, transformation=None, fold=None):
-        # partial initialization with placeholders to get access to parameters and functions
+        
+        # Libraries
+        import innvestigate
+        from vis.utils import utils
+        from vis.visualization import visualize_cam
+        
+        # Partial initialization with placeholders to get access to parameters and functions
         DeepLearning.__init__(self, target, organ_id_view, transformation, 'VGG16', 'Adam', 0, 0, 0, False)
         
+        # Parameters
         self.fold = fold
         self.parameters = None
         self.image_width = None

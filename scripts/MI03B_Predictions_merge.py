@@ -1,4 +1,4 @@
-from MI_Libraries import *
+import sys
 from MI_Classes import PredictionsMerge
 
 # Default parameters
@@ -18,4 +18,3 @@ Predictions_Merge.save_merged_predictions()
 # Exit
 print('Done.')
 sys.exit(0)
-

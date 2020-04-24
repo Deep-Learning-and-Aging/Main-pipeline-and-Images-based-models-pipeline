@@ -1,4 +1,4 @@
-from MI_Libraries import *
+import sys
 from MI_Classes import Training
 
 # Options
@@ -36,10 +36,3 @@ Model_Training.data_preprocessing()
 Model_Training.build_model()
 Model_Training.train_model()
 Model_Training.clean_exit()
-
-
-self = Model_Training
-gen = self.GENERATORS['val']
-a, b, c = gen.__getitem__(0)
-
-
