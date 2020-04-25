@@ -1,4 +1,12 @@
 # CLASSES
+# Import Classes for inheritance
+from keras.callbacks import ModelCheckpoint
+from keras.utils import Sequence
+from keras_preprocessing.image import ImageDataGenerator
+
+import numpy as np
+
+
 class Hyperparameters:
     
     def __init__(self):
@@ -21,7 +29,6 @@ class Hyperparameters:
         os.environ['PYTHONHASHSEED'] = str(self.seed)
         np.random.seed(self.seed)
         random.seed(self.seed)
-        set_random_seed(self.seed)
         
         # other parameters
         self.path_store = '../data/'
@@ -39,7 +46,7 @@ class Hyperparameters:
             os.chdir('/n/groups/patel/Alan/Aging/Medical_Images/scripts/')
         gc.enable()  # garbage collector
         warnings.filterwarnings('ignore')
-        
+    
     def _version_to_parameters(self, model_name):
         parameters = {}
         parameters_list = model_name.split('_')
@@ -138,6 +145,9 @@ class Metrics(Hyperparameters):
 
 class PreprocessingMain(Hyperparameters):
     
+    def __init__(self):
+        Hyperparameters.__init__(self)
+    
     def generate_data(self):
         dict_UKB_fields_to_names = {'31-0.0': 'Sex', '21003-0.0': 'Age', '21003-2.0': 'Age_Imaging',
                                     '22414-2.0': 'Liver_images_quality'}
@@ -154,6 +164,7 @@ class PreprocessingFolds(Metrics):
     """
     Gather all the hyperparameters of the algorithm
     """
+    
     def __init__(self, target, image_field):
         Metrics.__init__(self)
         
@@ -287,7 +298,7 @@ class MyImageDataGenerator(Sequence, ImageDataGenerator):
         self.data_features = data_features
         self.list_ids = data_features.index.values
         self.batch_size = batch_size
-        self.steps = math.ceil(len(self.list_ids)/self.batch_size)
+        self.steps = math.ceil(len(self.list_ids) / self.batch_size)
         self.shuffle = shuffle
         self.indices = None
         self._on_epoch_end()  # initiate the indices and shuffle the ids
@@ -339,7 +350,7 @@ class MyImageDataGenerator(Sequence, ImageDataGenerator):
                 params = self.get_random_transform(x.shape, seed=self.seed)
                 Xi = self.apply_transform(Xi, params)
                 Xi = self.standardize(Xi)
-            X[i, ] = Xi
+            X[i,] = Xi
         return X, x, y
 
 
@@ -348,7 +359,6 @@ class MyModelCheckpoint(ModelCheckpoint):
                  save_weights_only=False, mode='auto', period=1):
         # Libraries
         import sys
-        import numpy as np
         
         # Parameters
         ModelCheckpoint.__init__(self, filepath, monitor=monitor, verbose=verbose, save_best_only=save_best_only,
@@ -368,6 +378,7 @@ class DeepLearning(Metrics):
     """
     Train models
     """
+    
     def __init__(self, target=None, organ_id_view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
         
@@ -380,15 +391,14 @@ class DeepLearning(Metrics):
         # keras
         from keras import backend as k
         from keras import regularizers
-        from keras.utils import Sequence
         from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
         from keras.models import Model, Sequential
         from keras.optimizers import Adam, RMSprop, Adadelta
-        from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
-        from keras_preprocessing.image import Iterator, ImageDataGenerator
+        from keras.callbacks import EarlyStopping, ReduceLROnPlateau, CSVLogger
         
         # Initialization
         Metrics.__init__(self)
+        set_random_seed(self.seed)
         
         # Model's version
         self.target = target
@@ -424,7 +434,7 @@ class DeepLearning(Metrics):
         self.mode = None
         self.n_cpus = len(os.sched_getaffinity(0))
         self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' \
-                                + self.transformation + '/'
+                          + self.transformation + '/'
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
         self.dict_field_id_to_image_size = {'20204': (288, 288), '20208': (200, 200), '20227': (88, 88),
                                             '210156': (300, 300)}
@@ -682,15 +692,15 @@ class DeepLearning(Metrics):
         x = Dense(1000, activation='selu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
         cnn_output = Dropout(self.dropout_rate)(x)
         return cnn.input, cnn_output
-
+    
     def _generate_side_nn(self):
         side_nn = Sequential()
         side_nn.add(Dense(24, input_dim=len(self.side_predictors), activation="selu",
                           kernel_regularizer=regularizers.l2(self.weight_decay)))
         # scale the dropout proportionally to the number of nodes in a layer
-        side_nn.add(Dropout(self.dropout_rate * 24/1024))
+        side_nn.add(Dropout(self.dropout_rate * 24 / 1024))
         return side_nn.input, side_nn.output
-
+    
     def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
         x = concatenate([cnn_output, side_nn_output])
         for n in [int(2 ** (10 - i)) for i in range(7)]:
@@ -740,6 +750,7 @@ class Training(DeepLearning):
     """
     Train models
     """
+    
     def __init__(self, target=None, organ_id_view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, outer_fold=None, debug_mode=False,
                  max_transfer_learning=False, continue_training=True, display_full_metrics=True):
@@ -920,7 +931,7 @@ class PredictionsGenerate(DeepLearning):
         self.GENERATORS_BATCH = None
         self.GENERATORS_LEFTOVERS = None
         self.PREDICTIONS = {}
-        
+    
     def _split_batch_leftovers(self):
         # split the samples into two groups: what can fit into the batch size, and the leftovers.
         for fold in self.folds:
@@ -1168,7 +1179,7 @@ class PerformancesGenerate(Metrics):
         self.data_features = None
         self.Predictions = None
         self.PERFORMANCES = None
-        
+    
     def _preprocess_data_features_predictions_for_performances(self):
         # load dataset
         data_features = pd.read_csv(self.path_store + 'data-features.csv', usecols=['eid', 'Sex', 'Age'])
@@ -1370,10 +1381,10 @@ class PerformancesMerge(Metrics):
     def merge_performances(self):
         # define parameters
         names_metrics = self.dict_metrics_names[self.dict_prediction_types[self.target]]
-
+        
         # initiate dataframe
         self._initiate_empty_performances_summary_df()
-
+        
         # Fill the Performance table row by row
         for i, model in enumerate(self.list_models):
             # load the performances subdataframe
@@ -1763,7 +1774,7 @@ class ResidualsGenerate(Hyperparameters):
 
 
 class ResidualsCorrelations(Hyperparameters):
-
+    
     def __init__(self, target=None, fold=None, debug_mode=False):
         Hyperparameters.__init__(self)
         self.target = target
@@ -1775,7 +1786,7 @@ class ResidualsCorrelations(Hyperparameters):
             self.n_bootstrap_iterations_correlations = 1000
         self.Residuals = None
         self.CORRELATIONS = {}
-
+    
     def preprocessing(self):
         # load data
         Residuals = pd.read_csv(self.path_store + 'RESIDUALS_' + self.target + '_' + self.fold + '.csv')
@@ -1917,7 +1928,7 @@ class PlotsCorrelations(Plots):
         self.fig_ysize = 16.54
         self.Correlations = None
         self.Correlations_bestmodels = None
-        
+    
     def preprocessing(self):
         Correlations = pd.read_csv(
             self.path_store + 'ResidualsCorrelations' + '_' + self.target + '_' + self.fold + '.csv',
@@ -2000,7 +2011,7 @@ class PlotsLoggers(Hyperparameters):
         
         # plot evolution of each metric during training, train and val values
         for m, metric in enumerate(metrics_names):
-            i = int(m/n_rows)
+            i = int(m / n_rows)
             j = m % n_rows
             for fold in ['train', 'val']:
                 axs[i, j].plot(logger['epoch'], logger[fold + '_' + metric])
@@ -2065,7 +2076,7 @@ class PlotsScatter(Hyperparameters):
                     df_allsets = df_version
                 else:
                     df_allsets = df_allsets.append(df_version)
-                
+            
             # generate the multi plot and save it
             multi_plot = sns.FacetGrid(df_allsets, col='set', hue='outer_fold')
             multi_plot.map(plt.scatter, 'Age', 'Prediction', alpha=.1)
@@ -2111,7 +2122,7 @@ class PlotsAttentionMaps(DeepLearning):
         DeepLearning.__init__(self, target, organ_id_view, transformation, self.parameters['architecture'],
                               self.parameters['optimizer'], self.parameters['learning_rate'],
                               self.parameters['weight_decay'], self.parameters['dropout_rate'], False)
-        self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' + self.transformation\
+        self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' + self.transformation \
                           + '/'
         self.prediction_type = self.dict_prediction_types[self.target]
         self.Residuals = None
@@ -2229,7 +2240,7 @@ class PlotsAttentionMaps(DeepLearning):
     # generate the saliency map transparent filter
     def _generate_saliency_map(self, saliency):
         saliency = saliency.sum(axis=2)
-        saliency *= 255/np.max(np.abs(saliency))
+        saliency *= 255 / np.max(np.abs(saliency))
         saliency = saliency.astype(int)
         r_ch = saliency.copy()
         r_ch[r_ch < 0] = 0
