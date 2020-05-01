@@ -1,29 +1,63 @@
-# CLASSES
-# Import Classes for inheritance
-from keras.callbacks import ModelCheckpoint
-from keras.utils import Sequence
-from keras_preprocessing.image import ImageDataGenerator
+# LIBRARIES
+# set up backend for ssh -x11 figures
+import matplotlib
+matplotlib.use('Agg')
 
+# read and write
+import os
+import sys
+import glob
+import re
+import fnmatch
+from datetime import datetime
+
+# maths
 import numpy as np
+import pandas as pd
+import math
+import random
+
+# miscellaneous
+import warnings
+import gc
+
+# sklearn
+from sklearn.utils import resample
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, \
+    precision_score, recall_score, confusion_matrix, average_precision_score
+from sklearn import linear_model
+
+# GPUs
+from GPUtil import GPUtil
+# tensorflow
+import tensorflow as tf
+from tensorflow import set_random_seed
+# keras
+from keras import backend as k
+from keras_preprocessing.image import ImageDataGenerator, Iterator
+from keras_preprocessing.image.utils import load_img, img_to_array
+from keras.utils import Sequence
+from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
+from keras.models import Model, Sequential
+from keras import regularizers
+from keras.optimizers import Adam, RMSprop, Adadelta
+from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
+
+# Model's attention
+import innvestigate
+from vis.utils import utils
+from vis.visualization import visualize_cam
+
+# plot figures
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
+# CLASSES
 class Hyperparameters:
     
     def __init__(self):
-        # Libraries
-        import sys
-        import os
-        import numpy as np
-        import pandas as pd
-        import math
-        import random
-        import glob
-        import re
-        import fnmatch
-        import gc
-        import warnings
-        from sklearn.utils import resample
-        
         # seeds for reproducibility
         self.seed = 0
         os.environ['PYTHONHASHSEED'] = str(self.seed)
@@ -37,9 +71,23 @@ class Hyperparameters:
         self.outer_folds = [str(x) for x in list(range(self.n_CV_outer_folds))]
         self.ensemble_types = ['*', ',', '?']
         self.modes = ['', '_sd', '_str']
+        self.id_vars = ['id', 'eid', 'instance']
+        self.ethnicities_vars = ['Ethnicity.White', 'Ethnicity.British', 'Ethnicity.Irish', 'Ethnicity.White_Other',
+                                 'Ethnicity.Mixed', 'Ethnicity.White_and_Black_Caribbean',
+                                 'Ethnicity.White_and_Black_African', 'Ethnicity.White_and_Asian',
+                                 'Ethnicity.Mixed_Other', 'Ethnicity.Asian', 'Ethnicity.Indian',
+                                 'Ethnicity.Pakistani', 'Ethnicity.Bangladeshi', 'Ethnicity.Asian_Other',
+                                 'Ethnicity.Black', 'Ethnicity.Caribbean', 'Ethnicity.African',
+                                 'Ethnicity.Black_Other', 'Ethnicity.Chinese', 'Ethnicity.Other_ethnicity',
+                                 'Ethnicity.Do_not_know', 'Ethnicity.Prefer_not_to_answer', 'Ethnicity.NA']
+        self.demographic_vars = ['Age', 'Sex'] + self.ethnicities_vars
         self.list_field_ids_in_instance_2 = ['20204', '20208', '20205', '20227']
         self.names_model_parameters = ['target', 'organ', 'field_id', 'view', 'transformation', 'architecture',
                                        'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate']
+        self.targets_regression = ['Age']
+        self.targets_binary = ['Sex']
+        self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
+        self.dict_side_predictors = {'Age': ['Sex'] + self.ethnicities_vars, 'Sex': ['Age'] + self.ethnicities_vars}
         if '/Users/Alan/' in os.getcwd():
             os.chdir('/Users/Alan/Desktop/Aging/Medical_Images/scripts/')
         else:
@@ -75,15 +123,8 @@ class Hyperparameters:
 class Metrics(Hyperparameters):
     
     def __init__(self):
-        # Libraries
-        from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, \
-            precision_score, recall_score, confusion_matrix, average_precision_score
-        
         # Parameters
         Hyperparameters.__init__(self)
-        self.targets_regression = ['Age']
-        self.targets_binary = ['Sex']
-        self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
         self.metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
         self.metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
         self.images_field_ids = ['20204', '20208', '20227', '210156']
@@ -147,17 +188,114 @@ class PreprocessingMain(Hyperparameters):
     
     def __init__(self):
         Hyperparameters.__init__(self)
+        self.data_raw = None
+        self.data_features = None
+    
+    def _compute_age(self):
+        # Recompute age with greater precision by leveraging the month of birth
+        self.data_raw['Year_of_birth'] = self.data_raw['Year_of_birth'].astype(int)
+        self.data_raw['Month_of_birth'] = self.data_raw['Month_of_birth'].astype(int)
+        self.data_raw['Date_of_birth'] = self.data_raw.apply(
+            lambda row: datetime(row.Year_of_birth, row.Month_of_birth, 15), axis=1)
+        for i in [str(i) for i in range(4)]:
+            self.data_raw['Date_attended_center_' + i] = \
+                self.data_raw['Date_attended_center_' + i].apply(
+                    lambda x: pd.NaT if pd.isna(x) else datetime.strptime(x, '%Y-%m-%d'))
+            self.data_raw['Age_' + i] = self.data_raw['Date_attended_center_' + i] - self.data_raw['Date_of_birth']
+            self.data_raw['Age_' + i] = self.data_raw['Age_' + i].dt.days / 365.25
+            self.data_raw = self.data_raw.drop(['Date_attended_center_' + i], axis=1)
+        self.data_raw = self.data_raw.drop(['Year_of_birth', 'Month_of_birth', 'Date_of_birth'], axis=1)
+    
+    def _encode_ethnicity(self):
+        # Fill NAs for ethnicity on instance 0 if available in other instances
+        eids_missing_ethnicity = self.data_raw['eid'][self.data_raw['Ethnicity'].isna()]
+        for eid in eids_missing_ethnicity:
+            sample = self.data_raw.loc[eid, :]
+            if not math.isnan(sample['Ethnicity_1']):
+                self.data_raw.loc[eid, 'Ethnicity'] = self.data_raw.loc[eid, 'Ethnicity_1']
+            elif not math.isnan(sample['Ethnicity_2']):
+                self.data_raw.loc[eid, 'Ethnicity'] = self.data_raw.loc[eid, 'Ethnicity_2']
+        self.data_raw.drop(['Ethnicity_1', 'Ethnicity_2'], axis=1, inplace=True)
+        
+        # One hot encode ethnicity
+        dict_ethnicity_codes = {'1': 'Ethnicity.White', '1001': 'Ethnicity.British', '1002': 'Ethnicity.Irish',
+                                '1003': 'Ethnicity.White_Other',
+                                '2': 'Ethnicity.Mixed', '2001': 'Ethnicity.White_and_Black_Caribbean',
+                                '2002': 'Ethnicity.White_and_Black_African',
+                                '2003': 'Ethnicity.White_and_Asian', '2004': 'Ethnicity.Mixed_Other',
+                                '3': 'Ethnicity.Asian', '3001': 'Ethnicity.Indian', '3002': 'Ethnicity.Pakistani',
+                                '3003': 'Ethnicity.Bangladeshi', '3004': 'Ethnicity.Asian_Other',
+                                '4': 'Ethnicity.Black', '4001': 'Ethnicity.Caribbean', '4002': 'Ethnicity.African',
+                                '4003': 'Ethnicity.Black_Other',
+                                '5': 'Ethnicity.Chinese',
+                                '6': 'Ethnicity.Other_ethnicity',
+                                '-1': 'Ethnicity.Do_not_know',
+                                '-3': 'Ethnicity.Prefer_not_to_answer',
+                                '-5': 'Ethnicity.NA'}
+        self.data_raw['Ethnicity'] = self.data_raw['Ethnicity'].fillna(-5).astype(int).astype(str)
+        ethnicities = pd.get_dummies(self.data_raw['Ethnicity'])
+        self.data_raw = self.data_raw.drop(['Ethnicity'], axis=1)
+        ethnicities.rename(columns=dict_ethnicity_codes, inplace=True)
+        ethnicities['Ethnicity.White'] = ethnicities['Ethnicity.White'] + ethnicities['Ethnicity.British'] +\
+                                         ethnicities['Ethnicity.Irish'] + ethnicities['Ethnicity.White_Other']
+        ethnicities['Ethnicity.Mixed'] = ethnicities['Ethnicity.Mixed'] + \
+                                         ethnicities['Ethnicity.White_and_Black_Caribbean'] + \
+                                         ethnicities['Ethnicity.White_and_Black_African'] + \
+                                         ethnicities['Ethnicity.White_and_Asian'] + \
+                                         ethnicities['Ethnicity.Mixed_Other']
+        ethnicities['Ethnicity.Asian'] = ethnicities['Ethnicity.Asian'] + ethnicities['Ethnicity.Indian'] + \
+                                         ethnicities['Ethnicity.Pakistani'] + ethnicities['Ethnicity.Bangladeshi'] + \
+                                         ethnicities['Ethnicity.Asian_Other']
+        ethnicities['Ethnicity.Black'] = ethnicities['Ethnicity.Black'] + ethnicities['Ethnicity.Caribbean'] + \
+                                         ethnicities['Ethnicity.African'] + ethnicities['Ethnicity.Black_Other']
+        ethnicities['Ethnicity.Other'] = ethnicities['Ethnicity.Other_ethnicity'] + \
+                                         ethnicities['Ethnicity.Do_not_know'] + \
+                                         ethnicities['Ethnicity.Prefer_not_to_answer'] + \
+                                         ethnicities['Ethnicity.NA']
+        self.data_raw = self.data_raw.join(ethnicities)
     
     def generate_data(self):
-        dict_UKB_fields_to_names = {'31-0.0': 'Sex', '21003-0.0': 'Age', '21003-2.0': 'Age_Imaging',
-                                    '22414-2.0': 'Liver_images_quality'}
-        # extract the relevant columns from the main UKB dataset
-        data_features = pd.read_csv('/n/groups/patel/uk_biobank/main_data_52887/ukb37397.csv',
-                                    usecols=['eid', '31-0.0', '21003-0.0', '21003-2.0', '22414-2.0'])
-        data_features.rename(columns=dict_UKB_fields_to_names, inplace=True)
-        data_features['eid'] = data_features['eid'].astype(str)
-        data_features = data_features.set_index('eid', drop=False)
-        data_features.to_csv(self.path_store + 'data-features.csv', index=False)
+        # Preprocessing
+        dict_UKB_fields_to_names = {'34-0.0': 'Year_of_birth', '52-0.0': 'Month_of_birth',
+                                    '53-0.0': 'Date_attended_center_0', '53-1.0': 'Date_attended_center_1',
+                                    '53-2.0': 'Date_attended_center_2', '53-3.0': 'Date_attended_center_3',
+                                    '31-0.0': 'Sex', '21000-0.0': 'Ethnicity', '21000-1.0': 'Ethnicity_1',
+                                    '21000-2.0': 'Ethnicity_2', '22414-2.0': 'Abdominal_images_quality'}
+        self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
+                                    usecols=['eid', '31-0.0', '21000-0.0', '21000-1.0', '21000-2.0', '34-0.0', '52-0.0',
+                                             '53-0.0', '53-1.0', '53-2.0', '53-3.0', '22414-2.0'])
+        
+        # Formatting
+        self.data_raw.rename(columns=dict_UKB_fields_to_names, inplace=True)
+        self.data_raw['eid'] = self.data_raw['eid'].astype(str)
+        self.data_raw = self.data_raw.set_index('eid', drop=False)
+        self.data_raw = self.data_raw.dropna(subset=['Sex'])
+        self._compute_age()
+        self.data_raw = self.data_raw.dropna(how='all', subset=['Age_0', 'Age_1', 'Age_2', 'Age_3'])
+        self._encode_ethnicity()
+        
+        # Concatenate the data from the different instances
+        self.data_features = None
+        for i in [str(i) for i in range(4)]:
+            print('Preparing the samples for instance ' + i)
+            df_i = self.data_raw[['eid', 'Sex', 'Age_' + i] + self.ethnicities_vars + ['Abdominal_images_quality']
+                                 ].dropna(subset=['Age_' + i])
+            print(str(len(df_i.index)) + ' samples found in instance ' + i)
+            df_i.rename(columns={'Age_' + i: 'Age'}, inplace=True)
+            df_i['instance'] = i
+            df_i['id'] = df_i['eid'] + '_' + df_i['instance']
+            df_i = df_i[self.id_vars + self.demographic_vars + ['Abdominal_images_quality']]
+            if i != '2':
+                df_i['Abdominal_images_quality'] = np.nan  # not defined for instance 3, not relevant for instances 0, 1
+            if self.data_features is None:
+                self.data_features = df_i
+            else:
+                self.data_features = self.data_features.append(df_i)
+            print('The size of the full concatenated dataframe is now ' + str(len(self.data_features.index)))
+        
+        # Shuffle the rows before saving the dataframe
+        self.data_features = self.data_features.sample(frac=1)
+        self.data_features.to_csv(self.path_store + 'data-features.csv', index=False)
 
 
 class PreprocessingFolds(Metrics):
@@ -167,35 +305,40 @@ class PreprocessingFolds(Metrics):
     
     def __init__(self, target, image_field):
         Metrics.__init__(self)
-        
         self.target = target
         self.image_field = image_field
         self.organ = self.image_field.split('_')[0]
         self.field_id = self.image_field.split('_')[1]
-        self.image_quality_ids = {'Liver': '22414-2.0'}
-        self.image_quality_ids.update(
+        self.side_predictors = self.dict_side_predictors[self.target]
+        self.variables_to_normalize = self.side_predictors
+        if self.target in self.targets_regression:
+            self.variables_to_normalize.append(self.target)
+        self.dict_image_quality_col = {'Liver': 'Abdominal_images_quality'}
+        self.dict_image_quality_col.update(
             dict.fromkeys(['Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid', 'ECG', 'ArterialStiffness', 'EyeFundus'],
                           None))
-        self.image_quality_id = self.image_quality_ids[self.organ]
+        self.image_quality_col = self.dict_image_quality_col[self.organ]
+        self.images_field_ids = ['20204', '20208', '20227', '210156']
         self.list_available_ids = None
         self.data = None
         self.IDS = None
-        
+        self.data_fold = None
         # dictionary of dir_images used to generate the IDs split during preprocessing
         self.dict_default_dir_images = {'Liver_20204': '../images/Liver/20204/main/raw/',
                                         'Heart_20208': '../images/Heart/20208/4chambers/raw/',
                                         'Brain_20227': '../images/Brain/20227/sagittal/raw/',
-                                        'EyeFundus_210156': '../images/EyeFundus/210156/right/raw/',
+                                        'EyeFundus_210156': '../images/EyeFundus/210156/main/raw/right',
                                         'PhysicalActivity_90001': '../images/PhysicalActivity/90001/main/raw/'}
-        self.dict_field_id_to_age_instance = dict.fromkeys(['Placeholder', '6025', '4205', '210156'], 'Age')
-        self.dict_field_id_to_age_instance.update(dict.fromkeys(['20204', '20208', '20205', '20227'],
-                                                                'Age_Imaging'))
-        self.dict_field_id_to_age_instance.update(dict.fromkeys(['90001'], 'Age_Accelerometer'))
     
     def _get_list_available_ids(self):
         # get the list of the ids available for the field_id
         if self.field_id in self.images_field_ids:
             list_images = os.listdir(self.dict_default_dir_images[self.image_field])
+            # For EyeFundus, take the unions of the right and left eyes eids
+            if self.field_id == '210156':
+                list_left = os.listdir(self.dict_default_dir_images[self.image_field].replace('right', 'left'))
+                list_images = np.unique(list_images + list_left)
+                list_images.sort()
             self.list_available_ids = [e.replace('.jpg', '') for e in list_images]
         else:
             list_available_ids_raw = pd.read_csv(self.path_store + 'IDs_' + self.field_id + '.csv')
@@ -205,17 +348,15 @@ class PreprocessingFolds(Metrics):
         """
         Clean the data before it can be split between the rows
         """
-        cols_data = ['eid', 'Sex', self.dict_field_id_to_age_instance[self.field_id]]
-        dict_rename_cols = {self.dict_field_id_to_age_instance[self.field_id]: 'Age'}
-        
-        if self.image_quality_id is not None:
-            cols_data.append(self.organ + '_images_quality')
-            dict_rename_cols[self.organ + '_images_quality'] = 'Data_quality'
+        cols_data = self.id_vars + self.demographic_vars
+        if self.image_quality_col is not None:
+            cols_data.append(self.dict_image_quality_col[self.organ])
         data = pd.read_csv(self.path_store + 'data-features.csv', usecols=cols_data)
-        data.rename(columns=dict_rename_cols, inplace=True)
-        data['eid'] = data['eid'].astype(str)
-        data = data.set_index('eid', drop=False)
-        if self.image_quality_id is not None:
+        data.rename(columns={self.dict_image_quality_col[self.organ]: 'Data_quality'}, inplace=True)
+        for col_name in self.id_vars:
+            data[col_name] = data[col_name].astype(str)
+        data = data.set_index('id', drop=False)
+        if self.image_quality_col is not None:
             data = data[data['Data_quality'] != np.nan]
             data = data.drop('Data_quality', axis=1)
         # get rid of samples with NAs
@@ -226,7 +367,8 @@ class PreprocessingFolds(Metrics):
     
     def _split_ids(self):
         # distribute the ids between the different outer and inner folds
-        ids = self.data.index.values.copy()
+        ids = self.data['eid'].unique()
+        random.shuffle(ids)
         n_samples = len(ids)
         n_samples_by_fold = n_samples / self.n_CV_outer_folds
         FOLDS_IDS = {}
@@ -250,28 +392,40 @@ class PreprocessingFolds(Metrics):
         self.IDS = {'train': TRAINING_IDS, 'val': VALIDATION_IDS, 'test': TEST_IDS}
     
     def _split_data(self):
-        # split ids
-        self._split_ids()
         # generate inner fold split for each outer fold
+        normalizing_values = {}
         for outer_fold in self.outer_folds:
             print('Splitting data for outer fold ' + outer_fold)
-            # compute values for scaling of regression targets
-            target_mean, target_std = np.nan, np.nan
-            if self.target in self.targets_regression:
-                data_train = self.data.loc[self.IDS['train'][outer_fold], :]
-                target_mean = data_train[self.target].mean()
-                target_std = data_train[self.target].std()
+            # compute values for scaling of variables
+            data_train = self.data.iloc[self.data['eid'].isin(self.IDS['train'][outer_fold]).values, :]
+            for var in self.variables_to_normalize:
+                var_mean = data_train[var].mean()
+                if len(data_train[var].unique()) < 2:
+                    print('Variable ' + var + ' has a single value in fold ' + outer_fold +
+                          '. Using 1 as std for normalization.')
+                    var_std = 1
+                else:
+                    var_std = data_train[var].std()
+                normalizing_values[var] = {'mean': var_mean, 'std': var_std}
             # generate folds
             for fold in self.folds:
-                data_fold = self.data.loc[self.IDS[fold][outer_fold], :]
+                data_fold = self.data.iloc[self.data['eid'].isin(self.IDS[fold][outer_fold]).values, :]
                 data_fold['outer_fold'] = outer_fold
-                data_fold = data_fold[['eid', 'outer_fold', 'Sex', 'Age']]
-                if self.target in self.targets_regression:
-                    data_fold[self.target + '_raw'] = data_fold[self.target]
-                    data_fold[self.target] = (data_fold[self.target] - target_mean) / target_std
-                data_fold.to_csv(
-                    self.path_store + 'data-features_' + self.image_field + '_' + self.target + '_' + fold + '_' +
-                    outer_fold + '.csv', index=False)
+                data_fold = data_fold[self.id_vars + ['outer_fold'] + self.demographic_vars]
+                # normalize the variables
+                for var in self.variables_to_normalize:
+                    data_fold[var + '_raw'] = data_fold[var]
+                    data_fold[var] = (data_fold[var] - normalizing_values[var]['mean']) / normalizing_values[var]['std']
+                # report issue if NAs were detected, which most likely comes from a sample whose id did not match
+                n_mismatching_samples = data_fold.isna().sum().max()
+                if n_mismatching_samples > 0:
+                    print('/!\\ WARNING! ' + str(n_mismatching_samples) + ' ' + fold + ' images ids out of ' +
+                          str(len(data_fold.index)) + ' did not match the dataframe!')
+                data_fold.to_csv(self.path_store + 'data-features_' + self.image_field + '_' + self.target + '_' + fold
+                                 + '_' + outer_fold + '.csv', index=False)
+                print('For outer_fold ' + outer_fold + ', the ' + fold + ' fold has a sample size of ' +
+                      str(len(data_fold.index)))
+                self.data_fold = data_fold
     
     def generate_folds(self):
         self._get_list_available_ids()
@@ -280,25 +434,25 @@ class PreprocessingFolds(Metrics):
         self._split_data()
 
 
-class MyImageDataGenerator(Sequence, ImageDataGenerator):
+class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
     
     def __init__(self, target=None, field_id=None, data_features=None, batch_size=None, shuffle=None,
                  side_predictors=None, dir_images=None, images_width=None, images_height=None, data_augmentation=False,
                  seed=None):
-        # Libraries
-        import numpy as np
-        import math
-        import random
-        from keras_preprocessing.image.utils import load_img, img_to_array
-        
         # Parameters
+        Hyperparameters.__init__(self)
         self.target = target
-        self.labels = data_features[self.target]
+        if self.target in self.targets_regression:
+            self.labels = data_features[self.target]
+        else:
+            self.labels = data_features[self.target + '_raw']
         self.field_id = field_id
         self.data_features = data_features
         self.list_ids = data_features.index.values
         self.batch_size = batch_size
-        self.steps = math.ceil(len(self.list_ids) / self.batch_size)
+        # for EyeFundus, take twice less ids since there are two images for each id
+        self.n_ids_batch = self.batch_size // 2 if self.field_id == '210156' else self.batch_size
+        self.steps = math.ceil(len(self.list_ids) / self.n_ids_batch)
         self.shuffle = shuffle
         self.indices = None
         self._on_epoch_end()  # initiate the indices and shuffle the ids
@@ -309,7 +463,7 @@ class MyImageDataGenerator(Sequence, ImageDataGenerator):
         # Data augmentation
         self.data_augmentation = data_augmentation
         self.seed = seed
-        self.dict_rotation_ranges = {'20227': 0, '210156': 0, '20204': 20, '20208': 20}
+        self.dict_rotation_ranges = {'20227': 0, '210156': 0, '20204': 10, '20208': 10}
         self.dict_width_shift_ranges = {'20227': 0, '210156': 0, '20204': 0.1, '20208': 0.1}
         self.dict_height_shift_ranges = {'20227': 0, '210156': 0, '20204': 0.1, '20208': 0.1}
         ImageDataGenerator.__init__(self, rotation_range=self.dict_rotation_ranges[self.field_id],
@@ -317,13 +471,7 @@ class MyImageDataGenerator(Sequence, ImageDataGenerator):
                                     height_shift_range=self.dict_height_shift_ranges[self.field_id], rescale=1. / 255.)
     
     def __len__(self):
-        return int(np.floor(len(self.list_ids) / self.batch_size))
-    
-    def __getitem__(self, index):
-        indices = self.indices[index * self.batch_size:(index + 1) * self.batch_size]
-        list_ids_batch = [self.list_ids[i] for i in indices]
-        X, x, y = self._data_generation(list_ids_batch)
-        return [X, x], y
+        return int(np.floor(len(self.list_ids) / self.n_ids_batch))
     
     def _on_epoch_end(self):
         _ = gc.collect()
@@ -331,35 +479,48 @@ class MyImageDataGenerator(Sequence, ImageDataGenerator):
         if self.shuffle:
             np.random.shuffle(self.indices)
     
+    def _generate_image(self, path_image):
+        img = load_img(path_image, target_size=(self.images_width, self.images_height), color_mode='rgb')
+        Xi = img_to_array(img)
+        if hasattr(img, 'close'):
+            img.close()
+        if self.data_augmentation:
+            params = self.get_random_transform(Xi.shape, seed=self.seed)
+            Xi = self.apply_transform(Xi, params)
+            Xi = self.standardize(Xi)
+        return Xi
+    
     def _data_generation(self, list_ids_batch):
         # initialize empty matrices
         n_samples_batch = min(len(list_ids_batch), self.batch_size)
-        X = np.empty((n_samples_batch, self.images_width, self.images_height, 3))
-        x = np.empty((n_samples_batch, len(self.side_predictors)))
-        y = np.empty(n_samples_batch)
+        X = np.empty((n_samples_batch, self.images_width, self.images_height, 3)) * np.nan
+        x = np.empty((n_samples_batch, len(self.side_predictors))) * np.nan
+        y = np.empty(n_samples_batch) * np.nan
         # fill the matrices sample by sample
         for i, ID in enumerate(list_ids_batch):
             y[i] = self.labels[ID]
             x[i] = self.data_features.loc[ID, self.side_predictors]
-            path_image = self.dir_images + ID + '.jpg'
-            img = load_img(path_image, target_size=(self.images_width, self.images_height), color_mode='rgb')
-            Xi = img_to_array(img)
-            if hasattr(img, 'close'):
-                img.close()
-            if self.data_augmentation:
-                params = self.get_random_transform(x.shape, seed=self.seed)
-                Xi = self.apply_transform(Xi, params)
-                Xi = self.standardize(Xi)
-            X[i,] = Xi
+            if self.field_id == '210156':
+                path = self.dir_images + 'right/' if i % 2 == 0 else self.dir_images + 'left/'
+                if not os.path.exists(path + ID + '.jpg'):
+                    path = path.replace('/right/', '/left/') if i % 2 == 0 else path.replace('/left/', '/right/')
+            else:
+                path = self.dir_images
+            X[i, ] = self._generate_image(path_image=path + ID + '.jpg')
         return X, x, y
+    
+    def __getitem__(self, index):
+        indices = self.indices[index * self.n_ids_batch: (index + 1) * self.n_ids_batch]
+        list_ids_batch = [self.list_ids[i] for i in indices]
+        if self.field_id == '210156':  # For EyeFundus, two images (left, right eyes) are selected for each id.
+            list_ids_batch = [ID for ID in list_ids_batch for _ in ('right', 'left')]
+        X, x, y = self._data_generation(list_ids_batch)
+        return [X, x], y
 
 
 class MyModelCheckpoint(ModelCheckpoint):
     def __init__(self, filepath, monitor='val_loss', baseline=-np.Inf, verbose=0, save_best_only=False,
                  save_weights_only=False, mode='auto', period=1):
-        # Libraries
-        import sys
-        
         # Parameters
         ModelCheckpoint.__init__(self, filepath, monitor=monitor, verbose=verbose, save_best_only=save_best_only,
                                  save_weights_only=save_weights_only, mode=mode, period=period)
@@ -379,33 +540,18 @@ class DeepLearning(Metrics):
     Train models
     """
     
-    def __init__(self, target=None, organ_id_view=None, transformation=None, architecture=None, optimizer=None,
+    def __init__(self, target=None, organ_id=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
-        
-        # Libraries
-        # GPUs
-        from GPUtil import GPUtil
-        # tensorflow
-        import tensorflow as tf
-        from tensorflow import set_random_seed
-        # keras
-        from keras import backend as k
-        from keras import regularizers
-        from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
-        from keras.models import Model, Sequential
-        from keras.optimizers import Adam, RMSprop, Adadelta
-        from keras.callbacks import EarlyStopping, ReduceLROnPlateau, CSVLogger
-        
         # Initialization
         Metrics.__init__(self)
         set_random_seed(self.seed)
         
         # Model's version
         self.target = target
-        self.organ_id_view = organ_id_view
-        self.organ = self.organ_id_view.split('_')[0]
-        self.field_id = self.organ_id_view.split('_')[1]
-        self.view = self.organ_id_view.split('_')[2]
+        self.organ_id = organ_id
+        self.organ = self.organ_id.split('_')[0]
+        self.field_id = self.organ_id.split('_')[1]
+        self.view = view
         self.transformation = transformation
         self.architecture = architecture
         self.optimizer = optimizer
@@ -418,18 +564,15 @@ class DeepLearning(Metrics):
                        + str(self.weight_decay) + '_' + str(self.dropout_rate)
         
         # NNet's architecture and weights
+        self.side_predictors = self.dict_side_predictors[self.target]
         self.dict_final_activations = {'regression': 'linear', 'binary': 'sigmoid', 'multiclass': 'softmax',
                                        'saliency': 'linear'}
         self.path_load_weights = None
         self.keras_weights = None
         
-        # Side NNet's predictors
-        self.dict_side_predictors = {'Age': ['Sex'], 'Sex': ['Age']}
-        self.side_predictors = self.dict_side_predictors[self.target]
-        
         # Generators
         self.debug_mode = debug_mode
-        self.debug_fraction = 0.02
+        self.debug_fraction = 0.005
         self.DATA_FEATURES = {}
         self.mode = None
         self.n_cpus = len(os.sched_getaffinity(0))
@@ -559,14 +702,15 @@ class DeepLearning(Metrics):
             self.DATA_FEATURES[fold] = pd.read_csv(
                 self.path_store + 'data-features_' + self.dict_image_field_to_ids[self.organ + '_' + self.field_id]
                 + '_' + self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
-            self.DATA_FEATURES[fold]['eid'] = self.DATA_FEATURES[fold]['eid'].astype(str)
-            self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].set_index('eid', drop=False)
+            for col_name in self.id_vars + ['outer_fold']:
+                self.DATA_FEATURES[fold][col_name] = self.DATA_FEATURES[fold][col_name].astype(str)
+            self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].set_index('id', drop=False)
     
     def _take_subset_to_debug(self):
         for fold in self.folds:
             # use +1 or +2 to test the leftovers pipeline
             leftovers_extra = {'train': 0, 'val': 1, 'test': 2}
-            n_batches = math.ceil(len(self.DATA_FEATURES[fold].index) / self.batch_size * self.debug_fraction)
+            n_batches = 2  # math.ceil(len(self.DATA_FEATURES[fold].index) / self.batch_size * self.debug_fraction)
             n_limit_fold = leftovers_extra[fold] + self.batch_size * n_batches
             self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].iloc[:n_limit_fold, :]
     
@@ -602,9 +746,11 @@ class DeepLearning(Metrics):
     def _generate_class_weights(self):
         if self.dict_prediction_types[self.target] == 'binary':
             self.class_weights = {}
-            counts = self.DATA_FEATURES['train'].value_counts()
+            counts = self.DATA_FEATURES['train'][self.target + '_raw'].value_counts()
+            n_total = counts.sum()
+            # weighting the samples for each class inversely proportional to their prevalence, with order of magnitude 1
             for i in counts.index.values:
-                self.class_weights[i] = 1 / counts.loc[i]
+                self.class_weights[i] = n_total / (counts.loc[i] * len(counts.index))
     
     def _generate_cnn(self):
         # define the arguments
@@ -695,10 +841,9 @@ class DeepLearning(Metrics):
     
     def _generate_side_nn(self):
         side_nn = Sequential()
-        side_nn.add(Dense(24, input_dim=len(self.side_predictors), activation="selu",
-                          kernel_regularizer=regularizers.l2(self.weight_decay)))
-        # scale the dropout proportionally to the number of nodes in a layer
-        side_nn.add(Dropout(self.dropout_rate * 24 / 1024))
+        side_nn.add(Dense(128, input_dim=len(self.side_predictors), activation="selu"))
+        side_nn.add(Dense(64, activation="selu"))
+        side_nn.add(Dense(24, activation="selu"))
         return side_nn.input, side_nn.output
     
     def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
@@ -751,12 +896,12 @@ class Training(DeepLearning):
     Train models
     """
     
-    def __init__(self, target=None, organ_id_view=None, transformation=None, architecture=None, optimizer=None,
+    def __init__(self, target=None, organ_id=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, outer_fold=None, debug_mode=False,
                  max_transfer_learning=False, continue_training=True, display_full_metrics=True):
         
         # parameters
-        DeepLearning.__init__(self, target, organ_id_view, transformation, architecture, optimizer, learning_rate,
+        DeepLearning.__init__(self, target, organ_id, view, transformation, architecture, optimizer, learning_rate,
                               weight_decay, dropout_rate, debug_mode)
         self.outer_fold = outer_fold
         self.version = self.version + '_' + str(self.outer_fold)
@@ -887,7 +1032,7 @@ class Training(DeepLearning):
                                              monitor='val_' + self.main_metric.__name__,
                                              baseline=self.baseline_performance, verbose=1, save_best_only=True,
                                              save_weights_only=True, mode=self.main_metric_mode)
-        reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=2, verbose=1, mode='min',
+        reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=3, verbose=1, mode='min',
                                                  min_delta=0, cooldown=0, min_lr=0)
         early_stopping = EarlyStopping(monitor='val_' + self.main_metric.__name__, min_delta=0, patience=10, verbose=0,
                                        mode=self.main_metric_mode, baseline=self.baseline_performance)
@@ -919,10 +1064,10 @@ class Training(DeepLearning):
 
 class PredictionsGenerate(DeepLearning):
     
-    def __init__(self, target=None, organ_id_view=None, transformation=None, architecture=None, optimizer=None,
+    def __init__(self, target=None, organ_id=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
         
-        DeepLearning.__init__(self, target, organ_id_view, transformation, architecture, optimizer, learning_rate,
+        DeepLearning.__init__(self, target, organ_id, view, transformation, architecture, optimizer, learning_rate,
                               weight_decay, dropout_rate, debug_mode)
         self.mode = 'model_testing'
         # Define dictionaries attributes for data, generators and predictions
@@ -974,7 +1119,7 @@ class PredictionsGenerate(DeepLearning):
             else:
                 self.PREDICTIONS[fold] = self.DATA_FEATURES[fold]
             # format the dataframe
-            self.PREDICTIONS[fold]['eid'] = [eid.replace('.jpg', '') for eid in self.PREDICTIONS[fold]['eid']]
+            self.PREDICTIONS[fold]['id'] = [ID.replace('.jpg', '') for ID in self.PREDICTIONS[fold]['id']]
     
     def _generate_and_concatenate_predictions(self):
         for outer_fold in self.outer_folds:
@@ -995,30 +1140,12 @@ class PredictionsGenerate(DeepLearning):
     def _format_predictions(self):
         for fold in self.folds:
             self.PREDICTIONS[fold].index.name = 'column_names'
-            self.PREDICTIONS[fold] = self.PREDICTIONS[fold][['eid', 'outer_fold', 'pred']]
-    
-    def _correct_age_instance(self):
-        data_features = pd.read_csv(self.path_store + 'data-features.csv')
-        data_features['eid'] = data_features['eid'].astype(str)
-        data_features['correction'] = data_features['Age'] - data_features['Age_Imaging']
-        data_features = data_features[['eid', 'correction']]
-        data_features.set_index('eid', drop=False, inplace=True)
-        data_features.index.name = 'column_names'
-        
-        for fold in self.folds:
-            self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(data_features, how='inner', on=['eid'])
-            self.PREDICTIONS[fold]['pred'] = self.PREDICTIONS[fold]['pred'] + self.PREDICTIONS[fold]['correction']
-            self.PREDICTIONS[fold] = self.PREDICTIONS[fold][['eid', 'outer_fold', 'pred']]
-    
-    def _postprocess_predictions(self):
-        self._format_predictions()
-        if (self.target == 'Age') & (self.field_id in self.list_field_ids_in_instance_2):
-            self._correct_age_instance()
+            self.PREDICTIONS[fold] = self.PREDICTIONS[fold][['id', 'outer_fold', 'pred']]
     
     def generate_predictions(self):
         self._generate_architecture()
         self._generate_and_concatenate_predictions()
-        self._postprocess_predictions()
+        self._format_predictions()
     
     def save_predictions(self):
         for fold in self.folds:
@@ -1041,9 +1168,10 @@ class PredictionsMerge(Hyperparameters):
     
     def _load_data_features(self):
         self.data_features = pd.read_csv(self.path_store + 'data-features.csv',
-                                         usecols=['eid', 'Sex', 'Age', 'Age_Imaging'])
-        self.data_features['eid'] = self.data_features['eid'].astype(str)
-        self.data_features = self.data_features.set_index('eid', drop=False)
+                                         usecols=self.id_vars + self.demographic_vars)
+        for var in self.id_vars:
+            self.data_features[var] = self.data_features[var].astype(str)
+        self.data_features = self.data_features.set_index('id', drop=False)
         self.data_features.index.name = 'column_names'
     
     def _preprocess_data_features(self):
@@ -1087,22 +1215,20 @@ class PredictionsMerge(Hyperparameters):
                 # load csv and format the predictions
                 prediction = pd.read_csv(self.path_store + file_name)
                 print('raw prediction\'s shape: ' + str(prediction.shape))
-                prediction['eid'] = prediction['eid'].apply(str)
-                prediction['outer_fold'] = prediction['outer_fold'].apply(str)
+                for var in ['id', 'outer_fold']:
+                    prediction[var] = prediction[var].apply(str)
                 version = '_'.join(file_name.split('_')[1:-1])
-                prediction['outer_fold_' + version] = prediction[
-                    'outer_fold']  # create an extra column for further merging purposes on fold == 'train'
+                prediction['outer_fold_' + version] = prediction['outer_fold']  # extra col to merge for fold == 'train'
                 prediction.rename(columns={'pred': 'pred_' + version}, inplace=True)
-                
                 # merge data frames
                 if Predictions_subgroup is None:
                     Predictions_subgroup = prediction
                 elif self.fold == 'train':
-                    Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['eid', 'outer_fold'])
+                    Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['id', 'outer_fold'])
                 else:
                     prediction = prediction.drop(['outer_fold'], axis=1)
                     # not supported for panda version > 0.23.4 for now
-                    Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['eid'])
+                    Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['id'])
                 # print('prediction\'s shape: ' + str(prediction.shape))
             
             # merge group predictions data frames
@@ -1110,31 +1236,31 @@ class PredictionsMerge(Hyperparameters):
                 self.Predictions_df = Predictions_subgroup
             elif self.fold == 'train':
                 self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer',
-                                                                on=['eid', 'outer_fold'])
+                                                                on=['id', 'outer_fold'])
             else:
                 Predictions_subgroup = Predictions_subgroup.drop(['outer_fold'], axis=1)
                 # not supported for panda version > 0.23.4 for now
-                self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer', on=['eid'])
+                self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer', on=['id'])
             print('Predictions_df\'s shape: ' + str(self.Predictions_df.shape))
             # garbage collector
             gc.collect()
     
     def postprocessing(self):
         # get rid of useless rows in data_features before merging to keep the memory requirements as low as possible
-        self.data_features = self.data_features[self.data_features['eid'].isin(self.Predictions_df['eid'].values)]
+        self.data_features = self.data_features[self.data_features['id'].isin(self.Predictions_df['id'].values)]
         # merge data_features and predictions
         if self.fold == 'train':
-            self.Predictions_df = self.data_features.merge(self.Predictions_df, how='outer', on=['eid', 'outer_fold'])
+            self.Predictions_df = self.data_features.merge(self.Predictions_df, how='outer', on=['id', 'outer_fold'])
         else:
             # not supported for panda version > 0.23.4 for now
-            self.Predictions_df = self.data_features.merge(self.Predictions_df, how='outer', on=['eid'])
+            self.Predictions_df = self.data_features.merge(self.Predictions_df, how='outer', on=['id'])
         
         # remove rows for which no prediction is available (should be none)
         subset_cols = [col for col in self.Predictions_df.columns if 'pred_' in col]
         self.Predictions_df.dropna(subset=subset_cols, how='all', inplace=True)
         
         # Format the dataframe
-        self.Predictions_df.drop(['Age_Imaging', 'outer_fold'], axis=1, inplace=True)
+        self.Predictions_df.drop(['outer_fold'], axis=1, inplace=True)
     
     def save_merged_predictions(self):
         self.Predictions_df.to_csv(
@@ -1182,21 +1308,21 @@ class PerformancesGenerate(Metrics):
     
     def _preprocess_data_features_predictions_for_performances(self):
         # load dataset
-        data_features = pd.read_csv(self.path_store + 'data-features.csv', usecols=['eid', 'Sex', 'Age'])
+        data_features = pd.read_csv(self.path_store + 'data-features.csv', usecols=['id', 'Sex', 'Age'])
         # format data_features to extract y
         data_features.rename(columns={self.target: 'y'}, inplace=True)
-        data_features = data_features[['eid', 'y']]
-        data_features['eid'] = data_features['eid'].astype(str)
-        data_features['eid'] = data_features['eid']
-        data_features = data_features.set_index('eid', drop=False)
+        data_features = data_features[['id', 'y']]
+        data_features['id'] = data_features['id'].astype(str)
+        data_features['id'] = data_features['id']
+        data_features = data_features.set_index('id', drop=False)
         data_features.index.name = 'columns_names'
         self.data_features = data_features
     
     def _preprocess_predictions_for_performances(self):
         Predictions = pd.read_csv(self.path_store + 'Predictions_' + self.version + '_' + self.fold + '.csv')
-        Predictions['eid'] = Predictions['eid'].astype(str)
+        Predictions['id'] = Predictions['id'].astype(str)
         Predictions.rename(columns={'Pred_' + self.version: 'pred'}, inplace=True)
-        self.Predictions = Predictions.merge(self.data_features, how='inner', on=['eid'])
+        self.Predictions = Predictions.merge(self.data_features, how='inner', on=['id'])
     
     # Initialize performances dataframes and compute sample sizes
     def _initiate_empty_performances_df(self):
@@ -1215,8 +1341,8 @@ class PerformancesGenerate(Metrics):
         performances['outer_fold'] = row_names
         # Convert float to int for sample sizes and some metrics.
         for col_name in col_names_sample_sizes:
-            performances[col_name] = performances[col_name].astype(
-                'Int64')  # need recent version of pandas to use this type. Otherwise nan cannot be int
+            # need recent version of pandas to use type below. Otherwise nan cannot be int
+            performances[col_name] = performances[col_name].astype('Int64')
         
         # compute sample sizes for the data frame
         performances.loc['all', 'N'] = len(self.Predictions.index)
@@ -1242,8 +1368,8 @@ class PerformancesGenerate(Metrics):
         # Convert float to int for sample sizes and some metrics.
         for col_name in self.PERFORMANCES[''].columns.values:
             if any(metric in col_name for metric in self.metrics_displayed_in_int):
-                self.PERFORMANCES[''][col_name] = self.PERFORMANCES[''][col_name].astype(
-                    'Int64')  # need recent version of pandas to use this type. Otherwise nan cannot be int
+                # need recent version of pandas to use type below. Otherwise nan cannot be int
+                self.PERFORMANCES[''][col_name] = self.PERFORMANCES[''][col_name].astype('Int64')
     
     def preprocessing(self):
         self._preprocess_data_features_predictions_for_performances()
@@ -1313,13 +1439,12 @@ class PerformancesMerge(Metrics):
     
     def __init__(self, target=None, fold=None, ensemble_models=False):
         
+        # Parameters
         Metrics.__init__(self)
-        
         self.target = target
         self.fold = fold
         self.ensemble_models = self.convert_string_to_boolean(ensemble_models)
         self.names_metrics = self.dict_metrics_names[self.dict_prediction_types[self.target]]
-        
         # list the models that need to be merged
         self.list_models = glob.glob(self.path_store + 'Performances_' + self.target + '_*_' + self.fold + '_str.csv')
         # get rid of ensemble models
@@ -1329,7 +1454,6 @@ class PerformancesMerge(Metrics):
         else:
             self.list_models = [model for model in self.list_models
                                 if not (('*' in model) | ('?' in model) | (',' in model))]
-        
         self.Performances = None
         self.Performances_alphabetical = None
         self.Performances_ranked = None
@@ -1518,9 +1642,6 @@ class PerformancesTuning(Metrics):
 class EnsemblesPredictions(Metrics):
     
     def __init__(self, target=None):
-        
-        # Libraries
-        import fnmatch
         # Parameters
         Metrics.__init__(self)
         self.target = target
@@ -1653,10 +1774,10 @@ class EnsemblesPredictions(Metrics):
                     
                     # Save all the ensemble models if available
                     if ensemble_level is None:
-                        df_outer_fold = PREDICTIONS_outerfold[fold][['eid', 'outer_fold_' + version, 'pred_' + version]]
+                        df_outer_fold = PREDICTIONS_outerfold[fold][['id', 'outer_fold_' + version, 'pred_' + version]]
                     else:
                         df_outer_fold = PREDICTIONS_outerfold[fold][
-                            ['eid', 'outer_fold_' + version, 'pred_' + version,
+                            ['id', 'outer_fold_' + version, 'pred_' + version,
                              'outer_fold_' + version.replace('*', ','),
                              'pred_' + version.replace('*', ','), 'outer_fold_' + version.replace('*', '?'),
                              'pred_' + version.replace('*', '?')]]
@@ -1671,11 +1792,11 @@ class EnsemblesPredictions(Metrics):
             for fold in self.folds:
                 if fold == 'train':
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(PREDICTIONS_ENSEMBLE[fold], how='outer',
-                                                                          on=['eid', 'outer_fold_' + version])
+                                                                          on=['id', 'outer_fold_' + version])
                 else:
                     PREDICTIONS_ENSEMBLE[fold].drop('outer_fold_' + version, axis=1, inplace=True)
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(PREDICTIONS_ENSEMBLE[fold], how='outer',
-                                                                          on=['eid'])
+                                                                          on=['id'])
         
         # build and save a dataset for this specific ensemble model
         for ensemble_type in ['*', ',', '?']:
@@ -1683,7 +1804,7 @@ class EnsemblesPredictions(Metrics):
             if 'pred_' + version_type in self.PREDICTIONS['test'].columns.values:
                 for fold in self.folds:
                     df_single_ensemble = self.PREDICTIONS[fold][
-                        ['eid', 'outer_fold_' + version, 'pred_' + version_type]]
+                        ['id', 'outer_fold_' + version, 'pred_' + version_type]]
                     df_single_ensemble.rename(
                         columns={'outer_fold_' + version: 'outer_fold', 'pred_' + version_type: 'pred'}, inplace=True)
                     df_single_ensemble.dropna(inplace=True, subset=['pred'])
@@ -1729,10 +1850,6 @@ class EnsemblesPredictions(Metrics):
 class ResidualsGenerate(Hyperparameters):
     
     def __init__(self, target=None, fold=None, debug_mode=False):
-        
-        # Libraries
-        from sklearn import linear_model
-        
         # Parameters
         Hyperparameters.__init__(self)
         self.target = target
@@ -1872,7 +1989,7 @@ class SelectBest(Metrics):
             self.best_models.append(Perf_organ['version'].values[0])
     
     def _take_subsets(self):
-        base_cols = ['eid', 'Sex', 'Age']
+        base_cols = self.id_vars + self.demographic_vars
         best_models_pred = ['pred_' + model for model in self.best_models]
         best_models_res = ['res_' + model for model in self.best_models]
         best_models_corr = ['_'.join(model.split('_')[1:]) for model in self.best_models]
@@ -1906,21 +2023,10 @@ class SelectBest(Metrics):
             Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
 
 
-class Plots(Hyperparameters):
-    
-    def __init__(self):
-        # Libraries
-        import matplotlib  # set up backend for ssh -x11 figures
-        matplotlib.use('Agg')
-        import seaborn as sns
-        import matplotlib.pyplot as plt
-        Hyperparameters.__init__(self)
-
-
-class PlotsCorrelations(Plots):
+class PlotsCorrelations(Hyperparameters):
     
     def __init__(self, target=None, fold=None, save_figures=True):
-        Plots.__init__(self)
+        Hyperparameters.__init__(self)
         self.target = target
         self.fold = fold
         self.save_figures = save_figures
@@ -2087,14 +2193,8 @@ class PlotsScatter(Hyperparameters):
 class PlotsAttentionMaps(DeepLearning):
     
     def __init__(self, target=None, organ_id_view=None, transformation=None, fold=None):
-        
-        # Libraries
-        import innvestigate
-        from vis.utils import utils
-        from vis.visualization import visualize_cam
-        
         # Partial initialization with placeholders to get access to parameters and functions
-        DeepLearning.__init__(self, target, organ_id_view, transformation, 'VGG16', 'Adam', 0, 0, 0, False)
+        DeepLearning.__init__(self, target, organ_id, view, transformation, 'VGG16', 'Adam', 0, 0, 0, False)
         
         # Parameters
         self.fold = fold
@@ -2119,11 +2219,11 @@ class PlotsAttentionMaps(DeepLearning):
         self.parameters = self._version_to_parameters(version)
         self.image_width, self.image_height = self.dict_field_id_to_image_size[self.parameters['field_id']]
         self.batch_size = self.dict_batch_sizes[self.parameters['architecture']]
-        DeepLearning.__init__(self, target, organ_id_view, transformation, self.parameters['architecture'],
+        DeepLearning.__init__(self, target, organ_id, view, transformation, self.parameters['architecture'],
                               self.parameters['optimizer'], self.parameters['learning_rate'],
                               self.parameters['weight_decay'], self.parameters['dropout_rate'], False)
-        self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' + self.transformation \
-                          + '/'
+        self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' + \
+                          self.transformation + '/'
         self.prediction_type = self.dict_prediction_types[self.target]
         self.Residuals = None
         self.df_to_plot = None
@@ -2151,15 +2251,15 @@ class PlotsAttentionMaps(DeepLearning):
     def _format_residuals(self):
         # Format the residuals
         Residuals_full = pd.read_csv(self.path_store + 'RESIDUALS_' + self.target + '_' + self.fold + '.csv')
-        Residuals = Residuals_full[['eid', 'Age', 'Sex', 'res_' + self.version, 'outer_fold_' + self.version]]
+        Residuals = Residuals_full[['id', 'Age', 'Sex', 'res_' + self.version, 'outer_fold_' + self.version]]
         del Residuals_full
         Residuals.dropna(inplace=True)
         Residuals.rename(columns={'res_' + self.version: 'res', 'outer_fold_' + self.version: 'outer_fold'},
                          inplace=True)
-        Residuals['eid'] = Residuals['eid'].astype(str).apply(self._append_ext)
+        Residuals['id'] = Residuals['id'].astype(str).apply(self._append_ext)
         Residuals['outer_fold'] = Residuals['outer_fold'].astype(int).astype(str)
         Residuals['res_abs'] = Residuals['res'].abs()
-        self.Residuals = Residuals[['eid', 'outer_fold', 'Sex', 'Age', 'res', 'res_abs']]
+        self.Residuals = Residuals[['id', 'outer_fold', 'Sex', 'Age', 'res', 'res_abs']]
     
     def _select_representative_samples(self):
         # Select with samples to plot

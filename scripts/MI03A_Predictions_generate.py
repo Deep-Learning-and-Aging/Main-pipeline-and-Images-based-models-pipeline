@@ -8,22 +8,24 @@ debug_mode = True
 save_predictions = True
 
 # Default parameters
-if len(sys.argv) != 9:
+if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('EyeFundus_210156_right')  # organ_id_view, Heart_20208_3chambers
+    sys.argv.append('Liver_20204')  # organ_id, Heart_20208
+    sys.argv.append('main')  # view
     sys.argv.append('raw')  # transformation
-    sys.argv.append('InceptionV3')  # architecture
+    sys.argv.append('VGG16')  # architecture
     sys.argv.append('Adam')  # optimizer
     sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
     sys.argv.append('0.0')  # dropout
 
 # Compute results
-Predictions_Generate = PredictionsGenerate(target=sys.argv[1], organ_id_view=sys.argv[2], transformation=sys.argv[3],
-                                           architecture=sys.argv[4], optimizer=sys.argv[5], learning_rate=sys.argv[6],
-                                           weight_decay=sys.argv[7], dropout_rate=sys.argv[8], debug_mode=debug_mode)
+Predictions_Generate = PredictionsGenerate(target=sys.argv[1], organ_id=sys.argv[2], view=sys.argv[3],
+                                           transformation=sys.argv[4], architecture=sys.argv[5], optimizer=sys.argv[6],
+                                           learning_rate=sys.argv[7], weight_decay=sys.argv[8],
+                                           dropout_rate=sys.argv[9], debug_mode=debug_mode)
 Predictions_Generate.generate_predictions()
 if save_predictions:
     Predictions_Generate.save_predictions()
