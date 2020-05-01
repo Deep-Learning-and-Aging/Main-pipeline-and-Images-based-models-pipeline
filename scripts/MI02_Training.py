@@ -18,7 +18,7 @@ if len(sys.argv) != 11:
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('EyeFundus_210156')  # organ_id, e.g Heart_20208.
-    sys.argv.append('main')
+    sys.argv.append('main')  # view
     sys.argv.append('raw')  # transformation
     sys.argv.append('VGG16')  # architecture
     sys.argv.append('Adam')  # optimizer
@@ -28,7 +28,7 @@ if len(sys.argv) != 11:
     sys.argv.append('0')  # outer_fold
 
 # Compute results
-Model_Training = Training(target=sys.argv[1], organ_id_view=sys.argv[2], view=sys.argv[3], transformation=sys.argv[4],
+Model_Training = Training(target=sys.argv[1], organ_id=sys.argv[2], view=sys.argv[3], transformation=sys.argv[4],
                           architecture=sys.argv[5], optimizer=sys.argv[6], learning_rate=sys.argv[7],
                           weight_decay=sys.argv[8], dropout_rate=sys.argv[9], outer_fold=sys.argv[10],
                           debug_mode=debug_mode, continue_training=continue_training,

@@ -449,14 +449,18 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.field_id = field_id
         self.data_features = data_features
         self.list_ids = data_features.index.values
+        self.side_predictors = side_predictors
         self.batch_size = batch_size
-        # for EyeFundus, take twice less ids since there are two images for each id
+        self.n_ids_batch = self.batch_size
+        # for EyeFundus, take twice less ids since there are two images for each id, and add eye_side as side predictor
+        if self.field_id == '210156':
+            self.data_features['eye_side'] = np.nan
+            self.n_ids_batch = self.n_ids_batch // 2
         self.n_ids_batch = self.batch_size // 2 if self.field_id == '210156' else self.batch_size
         self.steps = math.ceil(len(self.list_ids) / self.n_ids_batch)
         self.shuffle = shuffle
         self.indices = None
         self._on_epoch_end()  # initiate the indices and shuffle the ids
-        self.side_predictors = side_predictors
         self.dir_images = dir_images
         self.images_width = images_width
         self.images_height = images_height
@@ -501,9 +505,16 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             y[i] = self.labels[ID]
             x[i] = self.data_features.loc[ID, self.side_predictors]
             if self.field_id == '210156':
+                if i % 2 == 0:
+                    path = self.dir_images + 'right/'
+                    x[i][-1] = 0
+                else:
+                    path = self.dir_images + 'left/'
+                    x[i][-1] = 1
                 path = self.dir_images + 'right/' if i % 2 == 0 else self.dir_images + 'left/'
                 if not os.path.exists(path + ID + '.jpg'):
                     path = path.replace('/right/', '/left/') if i % 2 == 0 else path.replace('/left/', '/right/')
+                    x[i][-1] = 1 - x[i][-1]
             else:
                 path = self.dir_images
             X[i, ] = self._generate_image(path_image=path + ID + '.jpg')
@@ -559,12 +570,14 @@ class DeepLearning(Metrics):
         self.weight_decay = float(weight_decay)
         self.dropout_rate = float(dropout_rate)
         self.outer_fold = None
-        self.version = self.target + '_' + self.organ_id_view + '_' + self.transformation + '_' + self.architecture \
-                       + '_' + self.optimizer + '_' + np.format_float_positional(self.learning_rate) + '_' \
-                       + str(self.weight_decay) + '_' + str(self.dropout_rate)
+        self.version = self.target + '_' + self.organ_id + '_' + self.view + '_' + self.transformation + '_' + \
+                       self.architecture + '_' + self.optimizer + '_' + np.format_float_positional(self.learning_rate)\
+                       + '_' + str(self.weight_decay) + '_' + str(self.dropout_rate)
         
         # NNet's architecture and weights
         self.side_predictors = self.dict_side_predictors[self.target]
+        if self.field_id == '210156':
+            self.side_predictors.append('eye_side')
         self.dict_final_activations = {'regression': 'linear', 'binary': 'sigmoid', 'multiclass': 'softmax',
                                        'saliency': 'linear'}
         self.path_load_weights = None
@@ -2192,7 +2205,7 @@ class PlotsScatter(Hyperparameters):
 
 class PlotsAttentionMaps(DeepLearning):
     
-    def __init__(self, target=None, organ_id_view=None, transformation=None, fold=None):
+    def __init__(self, target=None, organ_id=None, view=None, transformation=None, fold=None):
         # Partial initialization with placeholders to get access to parameters and functions
         DeepLearning.__init__(self, target, organ_id, view, transformation, 'VGG16', 'Adam', 0, 0, 0, False)
         
@@ -2205,7 +2218,7 @@ class PlotsAttentionMaps(DeepLearning):
         self.N_samples_attentionmaps = 10  # needs to be > 1 for the script to work
         
         # Pick the best model based on the performances
-        organ, field_id, view = organ_id_view.split('_')
+        organ, field_id = organ_id.split('_')
         path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.target + '_' + self.fold + '.csv'
         Performances = pd.read_csv(path_perf).set_index('version', drop=False)
         Performances = Performances[(Performances['organ'] == organ)
@@ -2303,8 +2316,8 @@ class PlotsAttentionMaps(DeepLearning):
         df_to_plot['save_title'] = self.target + '_' + self.organ + '_' + self.field_id + '_' + self.view + '_' + \
                                    self.transformation + '_' + df_to_plot['Sex'] + '_' + df_to_plot['age_category'] + \
                                    '_' + df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
-        path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ_id_view + '_' \
-                    + self.transformation + '.csv'
+        path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ_id + '_' + self.view +\
+                    '_' + self.transformation + '.csv'
         df_to_plot.to_csv(path_save, index=False)
         self.df_to_plot = df_to_plot
     

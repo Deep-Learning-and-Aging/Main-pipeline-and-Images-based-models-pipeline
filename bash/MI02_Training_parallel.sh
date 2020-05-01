@@ -3,10 +3,12 @@
 targets=( "Age" )
 #organ_fields=( "EyeFundus_210156" "Liver_20204" "Brain_20227" )
 organs_fields=( "Liver_20204" "Heart_20208" )
-architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "ResNet152V2" "Xception" "InceptionV3" )
+organs_fields=( "Liver_20204" )
+#architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionResNetV2" )
+#architectures=( "EfficientNetB7" "DenseNet201" )
+#architectures=( "ResNext101" "Xception" "VGG19" )
+#architectures=( "VGG16" "DenseNet121" "DenseNet169" "ResNet152V2" "InceptionV3" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.000001" )
@@ -53,7 +55,7 @@ for target in "${targets[@]}"; do
 										#if trying to compare the effect of a parameter (eg learning rate, optimizer...) it might be better to request K80 for all jobs
 										if ! grep -q 'THE MODEL CONVERGED!' $out_file; then
 											echo Submitting model: $version
-											#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI02_Training.sh $target $organ_field $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $outer_fold
+											sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI02_Training.sh $target $organ_field $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $outer_fold
 										#else
 											#echo The model $version already converged.
 										fi
