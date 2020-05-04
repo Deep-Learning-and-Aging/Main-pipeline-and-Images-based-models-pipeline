@@ -32,26 +32,24 @@ from sklearn import linear_model
 from GPUtil import GPUtil
 # tensorflow
 import tensorflow as tf
-from tensorflow import set_random_seed
 # keras
-from keras import backend as k
 from keras_preprocessing.image import ImageDataGenerator, Iterator
 from keras_preprocessing.image.utils import load_img, img_to_array
-from keras.utils import Sequence
-from keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
-from keras.models import Model, Sequential
-from keras import regularizers
-from keras.optimizers import Adam, RMSprop, Adadelta
-from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
+from tensorflow.keras import backend as k
+from tensorflow.keras.losses import MeanSquaredError, BinaryCrossentropy
+from tensorflow.keras.metrics import RootMeanSquaredError, AUC, BinaryAccuracy, Precision, Recall, TruePositives, \
+    FalsePositives, FalseNegatives, TrueNegatives
+from tensorflow.keras.utils import Sequence
+from tensorflow.keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
+from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras import regularizers
+from tensorflow.keras.optimizers import Adam, RMSprop, Adadelta
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
 
 # Model's attention
 import innvestigate
 from vis.utils import utils
 from vis.visualization import visualize_cam
-
-# plot figures
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 
 # CLASSES
@@ -128,6 +126,11 @@ class Metrics(Hyperparameters):
         self.metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
         self.metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
         self.images_field_ids = ['20204', '20208', '20227', '210156']
+        self.dict_metrics_names_K = {'regression': ['RMSE'], 'binary': ['ROC-AUC', 'PR-AUC', 'Binary-Accuracy',
+                                                                        'Precision', 'Recall', 'True-Positives',
+                                                                        'False-Positives', 'False-Negatives',
+                                                                        'True-Negatives'],
+                                     'multiclass': ['Categorical-Accuracy']}
         self.dict_metrics_names = {'regression': ['RMSE', 'R-Squared'],
                                    'binary': ['ROC-AUC', 'F1-Score', 'PR-AUC', 'Binary-Accuracy', 'Sensitivity',
                                               'Specificity', 'Precision', 'Recall', 'True-Positives', 'False-Positives',
@@ -135,9 +138,11 @@ class Metrics(Hyperparameters):
                                    'multiclass': ['Categorical-Accuracy']}
         self.dict_losses_names = {'regression': 'MSE', 'binary': 'Binary-Crossentropy',
                                   'multiclass': 'categorical_crossentropy'}
+        self.dict_main_metrics_names_K = {'Age': 'RMSE', 'Sex': 'ROC-AUC',
+                                          'imbalanced_binary_placeholder': 'ROC-PR'}
         self.dict_main_metrics_names = {'Age': 'R-Squared', 'Sex': 'ROC-AUC',
                                         'imbalanced_binary_placeholder': 'F1-Score'}
-        self.main_metrics_modes = {'loss': 'min', 'R-Squared': 'max', 'ROC-AUC': 'max'}
+        self.main_metrics_modes = {'loss': 'min', 'RMSE': 'min', 'ROC-AUC': 'max'}
         
         def rmse(y_true, y_pred):
             return math.sqrt(mean_squared_error(y_true, y_pred))
@@ -457,7 +462,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             self.data_features['eye_side'] = np.nan
             self.n_ids_batch = self.n_ids_batch // 2
         self.n_ids_batch = self.batch_size // 2 if self.field_id == '210156' else self.batch_size
-        self.steps = math.ceil(len(self.list_ids) / self.n_ids_batch)
+        self.steps = len(self.list_ids) // self.n_ids_batch
         self.shuffle = shuffle
         self.indices = None
         self._on_epoch_end()  # initiate the indices and shuffle the ids
@@ -531,10 +536,10 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
 
 class MyModelCheckpoint(ModelCheckpoint):
     def __init__(self, filepath, monitor='val_loss', baseline=-np.Inf, verbose=0, save_best_only=False,
-                 save_weights_only=False, mode='auto', period=1):
+                 save_weights_only=False, mode='auto'):
         # Parameters
         ModelCheckpoint.__init__(self, filepath, monitor=monitor, verbose=verbose, save_best_only=save_best_only,
-                                 save_weights_only=save_weights_only, mode=mode, period=period)
+                                 save_weights_only=save_weights_only, mode=mode)
         if mode == 'min':
             self.monitor_op = np.less
             self.best = baseline
@@ -555,7 +560,7 @@ class DeepLearning(Metrics):
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
         # Initialization
         Metrics.__init__(self)
-        set_random_seed(self.seed)
+        tf.random.set_seed(self.seed)
         
         # Model's version
         self.target = target
@@ -608,11 +613,10 @@ class DeepLearning(Metrics):
         if len(GPUtil.getGPUs()) > 0:  # make sure GPUs are available (not truesometimes for debugging)
             if GPUtil.getGPUs()[0].memoryTotal > 20000:
                 self.batch_size *= 2
+                
         # dict to decide which field is used to generate the ids when several targets share the same ids
-        # (e.g Age and Sex)
         self.dict_target_to_ids = dict.fromkeys(['Age', 'Sex'], 'Age')
         # dict to decide which field is used to generate the ids when several organs/fields share the same ids
-        # (e.g Liver_20204 and Heart_20208)
         self.dict_image_field_to_ids = dict.fromkeys(['PhysicalActivity_90001'], 'PhysicalActivity_90001')
         self.dict_image_field_to_ids.update(dict.fromkeys(['Liver_20204'], 'Liver_20204'))
         self.dict_image_field_to_ids.update(dict.fromkeys(['Heart_20208'], 'Heart_20208'))
@@ -625,86 +629,19 @@ class DeepLearning(Metrics):
         # Model
         self.model = None
         
-        # Configure gpu(s)
-        config = tf.ConfigProto()
-        config.gpu_options.allow_growth = True
-        self.gpu_session = tf.Session(config=config)
-        k.set_session(session=self.gpu_session)
-        k.tensorflow_backend._get_available_gpus()
-        
-        def r2_k(y_true, y_pred):
-            SS_res = k.sum(k.square(y_true - y_pred))
-            SS_tot = k.sum(k.square(y_true - k.mean(y_true)))
-            return 1 - SS_res / (SS_tot + k.epsilon())
-        
-        def rmse_k(y_true, y_pred):
-            return k.sqrt(k.mean(k.square(y_pred - y_true)))
-        
-        def sensitivity_k(y_true, y_pred):
-            true_positives = k.sum(k.round(k.clip(y_true * y_pred, 0, 1)))
-            possible_positives = k.sum(k.round(k.clip(y_true, 0, 1)))
-            return true_positives / (possible_positives + k.epsilon())
-        
-        def specificity_k(y_true, y_pred):
-            true_negatives = k.sum(k.round(k.clip((1 - y_true) * (1 - y_pred), 0, 1)))
-            possible_negatives = k.sum(k.round(k.clip(1 - y_true, 0, 1)))
-            return true_negatives / (possible_negatives + k.epsilon())
-        
-        def roc_auc_k(y_true, y_pred):
-            auc = tf.metrics.auc(y_true, y_pred, curve='ROC')[1]
-            k.get_session().run(tf.local_variables_initializer())
-            return auc
-        
-        def recall_k(y_true, y_pred):
-            true_positives = k.sum(k.round(k.clip(y_true * y_pred, 0, 1)))
-            possible_positives = k.sum(k.round(k.clip(y_true, 0, 1)))
-            recall = true_positives / (possible_positives + k.epsilon())
-            return recall
-        
-        def precision_k(y_true, y_pred):
-            true_positives = k.sum(k.round(k.clip(y_true * y_pred, 0, 1)))
-            predicted_positives = k.sum(k.round(k.clip(y_pred, 0, 1)))
-            precision = true_positives / (predicted_positives + k.epsilon())
-            return precision
-        
-        def pr_auc_k(y_true, y_pred):
-            auc = tf.metrics.auc(y_true, y_pred, curve='PR', summation_method='careful_interpolation')[1]
-            k.get_session().run(tf.local_variables_initializer())
-            return auc
-        
-        def f1_k(y_true, y_pred):
-            precision = precision_k(y_true, y_pred)
-            recall = recall_k(y_true, y_pred)
-            return 2 * ((precision * recall) / (precision + recall + k.epsilon()))
-        
-        def true_positives_k(y_true, y_pred):
-            return k.sum(k.round(k.clip(y_true * y_pred, 0, 1)))
-        
-        def false_positives_k(y_true, y_pred):
-            return k.sum(k.round(k.clip((1 - y_true) * y_pred, 0, 1)))
-        
-        def false_negatives_k(y_true, y_pred):
-            return k.sum(k.round(k.clip(y_true * (1 - y_pred), 0, 1)))
-        
-        def true_negatives_k(y_true, y_pred):
-            return k.sum(k.round(k.clip((1 - y_true) * (1 - y_pred), 0, 1)))
-        
-        self.dict_metrics_K = {'MSE': 'mean_squared_error',
-                               'RMSE': rmse_k,
-                               'R-Squared': r2_k,
-                               'Binary-Crossentropy': 'binary_crossentropy',
-                               'ROC-AUC': roc_auc_k,
-                               'F1-Score': f1_k,
-                               'PR-AUC': pr_auc_k,
-                               'Binary-Accuracy': 'binary_accuracy',
-                               'Sensitivity': sensitivity_k,
-                               'Specificity': specificity_k,
-                               'Precision': precision_k,
-                               'Recall': recall_k,
-                               'True-Positives': true_positives_k,
-                               'False-Positives': false_positives_k,
-                               'False-Negatives': false_negatives_k,
-                               'True-Negatives': true_negatives_k}
+        # Note: R-Squared and F1-Score are not available, because their batch based values are misleading.
+        # For some reason, Sensitivity and Specificity are not available either. Might implement later.
+        self.dict_losses_K = {'MSE': MeanSquaredError(), 'Binary-Crossentropy': BinaryCrossentropy()}
+        self.dict_metrics_K = {'RMSE': RootMeanSquaredError(name='RMSE'),
+                               'ROC-AUC': AUC(curve='ROC', name='ROC-AUC'),
+                               'PR-AUC': AUC(curve='PR', name='PR-AUC'),
+                               'Binary-Accuracy': BinaryAccuracy(name='Binary-Accuracy'),
+                               'Precision': Precision(name='Precision'),
+                               'Recall': Recall(name='Recall'),
+                               'True-Positives': TruePositives(name='True-Positives'),
+                               'False-Positives': FalsePositives(name='False-Positives'),
+                               'False-Negatives': FalseNegatives(name='False-Negatives'),
+                               'True-Negatives': TrueNegatives(name='True-Negatives')}
     
     @staticmethod
     def _append_ext(fn):
@@ -733,15 +670,9 @@ class DeepLearning(Metrics):
             # do not generate a generator if there are no samples (can happen for leftovers generators)
             if fold not in DATA_FEATURES.keys():
                 continue
-            
-            # define image generators
             # parameters
-            if (fold == 'train') & (self.mode == 'model_training'):
-                shuffle = True
-                data_augmentation = True
-            else:
-                shuffle = False
-                data_augmentation = False
+            shuffle = True if self.mode == 'model_training' else False
+            data_augmentation = True if (fold == 'train') & (self.mode == 'model_training') else False
             # define batch size for testing: data is split between a part that fits in batches, and leftovers
             if self.mode == 'model_testing':
                 batch_size_fold = min(self.batch_size, len(DATA_FEATURES[fold].index))
@@ -780,21 +711,21 @@ class DeepLearning(Metrics):
         
         # load the architecture builder
         if self.architecture == 'VGG16':
-            from keras.applications.vgg16 import VGG16 as ModelBuilder
+            from tensorflow.keras.applications.vgg16 import VGG16 as ModelBuilder
         elif self.architecture == 'VGG19':
-            from keras.applications.vgg19 import VGG19 as ModelBuilder
+            from tensorflow.keras.applications.vgg19 import VGG19 as ModelBuilder
         elif self.architecture == 'DenseNet121':
-            from keras.applications.densenet import DenseNet121 as ModelBuilder
+            from tensorflow.keras.applications.densenet import DenseNet121 as ModelBuilder
         elif self.architecture == 'DenseNet169':
-            from keras.applications.densenet import DenseNet169 as ModelBuilder
+            from tensorflow.keras.applications.densenet import DenseNet169 as ModelBuilder
         elif self.architecture == 'DenseNet201':
-            from keras.applications.densenet import DenseNet201 as ModelBuilder
+            from tensorflow.keras.applications.densenet import DenseNet201 as ModelBuilder
         elif self.architecture == 'Xception':
-            from keras.applications.xception import Xception as ModelBuilder
+            from tensorflow.keras.applications.xception import Xception as ModelBuilder
         elif self.architecture == 'InceptionV3':
-            from keras.applications.inception_v3 import InceptionV3 as ModelBuilder
+            from tensorflow.keras.applications.inception_v3 import InceptionV3 as ModelBuilder
         elif self.architecture == 'InceptionResNetV2':
-            from keras.applications.inception_resnet_v2 import InceptionResNetV2 as ModelBuilder
+            from tensorflow.keras.applications.inception_resnet_v2 import InceptionResNetV2 as ModelBuilder
         elif self.architecture == 'ResNet50':
             from keras_applications.resnet import ResNet50 as ModelBuilder
         elif self.architecture == 'ResNet101':
@@ -816,16 +747,16 @@ class DeepLearning(Metrics):
         else:
             #  Extra models, that do now allow resized input
             if self.architecture == 'NASNetMobile':
-                from keras.applications.nasnet import NASNetMobile as ModelBuilder
+                from tensorflow.keras.applications.nasnet import NASNetMobile as ModelBuilder
                 size = 224  # input (224, 224)
             elif self.architecture == 'NASNetLarge':
-                from keras.applications.nasnet import NASNetLarge as ModelBuilder
+                from tensorflow.keras.applications.nasnet import NASNetLarge as ModelBuilder
                 size = 331  # input (331, 331)
             elif self.architecture == 'MobileNet':
-                from keras.applications.mobilenet import MobileNet as ModelBuilder
+                from tensorflow.keras.applications.mobilenet import MobileNet as ModelBuilder
                 size = 224  # input (128, 128), (160, 160), (192, 192), or (224, 224)
             elif self.architecture == 'MobileNetV2':
-                from keras.applications.mobilenet_v2 import MobileNetV2 as ModelBuilder
+                from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2 as ModelBuilder
                 size = 224  # input (96, 96), (128, 128), (160, 160),(192, 192), or (224, 224))
             else:
                 print('Architecture does not exist.')
@@ -912,7 +843,6 @@ class Training(DeepLearning):
     def __init__(self, target=None, organ_id=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, outer_fold=None, debug_mode=False,
                  max_transfer_learning=False, continue_training=True, display_full_metrics=True):
-        
         # parameters
         DeepLearning.__init__(self, target, organ_id, view, transformation, architecture, optimizer, learning_rate,
                               weight_decay, dropout_rate, debug_mode)
@@ -924,27 +854,27 @@ class Training(DeepLearning):
         self.list_parameters_to_match = ['organ', 'transformation', 'field_id', 'view']
         # dict to decide in which order targets should be used when trying to transfer weight from a similar model
         self.dict_alternative_targets_for_transfer_learning = {'Age': ['Age', 'Sex'], 'Sex': ['Sex', 'Age']}
-        
+
         # Generators
         self.folds = ['train', 'val']
         self.mode = 'model_training'
         self.class_weights = None
         self.GENERATORS = None
-        
+
         # Metrics
         self.loss_name = self.dict_losses_names[self.prediction_type]
-        self.loss_function = self.dict_metrics_K[self.loss_name]
-        self.main_metric_name = self.dict_main_metrics_names[self.target]
+        self.loss_function = self.dict_losses_K[self.loss_name]
+        self.main_metric_name = self.dict_main_metrics_names_K[self.target]
         self.main_metric_mode = self.main_metrics_modes[self.main_metric_name]
         self.main_metric = self.dict_metrics_K[self.main_metric_name]
         self.display_full_metrics = display_full_metrics
         if self.display_full_metrics:
-            self.metrics_names = self.dict_metrics_names[self.prediction_type]
+            self.metrics_names = self.dict_metrics_names_K[self.prediction_type]
         else:
             self.metrics_names = [self.main_metric_name]
         self.metrics = [self.dict_metrics_K[metric_name] for metric_name in self.metrics_names]
         self.baseline_performance = None
-        
+
         # Model
         self.path_load_weights = self.path_store + 'model-weights_' + self.version + '.h5'
         if self.debug_mode:
@@ -1017,7 +947,7 @@ class Training(DeepLearning):
         self.path_load_weights = None
         self.keras_weights = 'imagenet'
     
-    def _set_learning_rate(self):
+    def _compile_model(self):
         opt = self.optimizers[self.optimizer](lr=self.learning_rate, clipnorm=1.0)
         self.model.compile(optimizer=opt, loss=self.loss_function, metrics=self.metrics)
     
@@ -1025,7 +955,7 @@ class Training(DeepLearning):
         # calculate initial val_loss value
         if self.continue_training:
             idx_metric_name = ([self.loss_name] + self.metrics_names).index(self.main_metric_name)
-            baseline_perfs = self.model.evaluate_generator(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
+            baseline_perfs = self.model.evaluate(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
             self.baseline_performance = baseline_perfs[idx_metric_name]
         elif self.main_metric_mode == 'min':
             self.baseline_performance = np.Inf
@@ -1038,16 +968,16 @@ class Training(DeepLearning):
                                append=self.continue_training)
         model_checkpoint_backup = MyModelCheckpoint(self.path_save_weights.replace('model-weights',
                                                                                    'backup-model-weights'),
-                                                    monitor='val_' + self.main_metric.__name__,
+                                                    monitor='val_' + self.main_metric.name,
                                                     baseline=self.baseline_performance, verbose=1, save_best_only=True,
                                                     save_weights_only=True, mode=self.main_metric_mode)
         model_checkpoint = MyModelCheckpoint(self.path_save_weights,
-                                             monitor='val_' + self.main_metric.__name__,
-                                             baseline=self.baseline_performance, verbose=1, save_best_only=True,
-                                             save_weights_only=True, mode=self.main_metric_mode)
+                                             monitor='val_' + self.main_metric.name, baseline=self.baseline_performance,
+                                             verbose=1, save_best_only=True, save_weights_only=True,
+                                             mode=self.main_metric_mode)
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=3, verbose=1, mode='min',
                                                  min_delta=0, cooldown=0, min_lr=0)
-        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.__name__, min_delta=0, patience=10, verbose=0,
+        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=10, verbose=0,
                                        mode=self.main_metric_mode, baseline=self.baseline_performance)
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, reduce_lr_on_plateau, early_stopping]
     
@@ -1060,7 +990,7 @@ class Training(DeepLearning):
             # save imagenet weights as default, in case no better weights are found
             self.model.save_weights(self.path_save_weights.replace('model-weights', 'backup-model-weights'))
             self.model.save_weights(self.path_save_weights)
-        self._set_learning_rate()
+        self._compile_model()
         self._compute_baseline_performance()
         self._define_callbacks()
     
@@ -1069,10 +999,10 @@ class Training(DeepLearning):
         _ = gc.collect()
         # train the model
         verbose = 1 if self.debug_mode else 2
-        self.model.fit_generator(generator=self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
-                                 validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
-                                 use_multiprocessing=True, workers=self.n_cpus, epochs=self.n_epochs_max,
-                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
+        self.model.fit(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
+                       validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
+                       use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
+                       class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
 
 
 class PredictionsGenerate(DeepLearning):
