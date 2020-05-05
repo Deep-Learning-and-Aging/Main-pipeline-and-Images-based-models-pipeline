@@ -599,16 +599,28 @@ class DeepLearning(Metrics):
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
         self.dict_field_id_to_image_size = {'20204': (288, 288), '20208': (200, 200), '20227': (88, 88),
                                             '210156': (300, 300)}
+        self.dict_architecture_to_image_size = {'MobileNet': (224, 224), 'MobileNetV2': (224, 224),
+                                                'NASNetMobile': (224, 224), 'NASNetLarge': (331, 331)}
         self.image_width, self.image_height = self.dict_field_id_to_image_size[self.field_id]
+        if self.architecture in ['MobileNet', 'MobileNetV2', 'NASNetMobile', 'NASNetLarge']:
+            self.image_width, self.image_height = self.dict_architecture_to_image_size[self.architecture]
+        else:
+            self.image_width, self.image_height = self.dict_field_id_to_image_size[self.field_id]
         
         # define dictionary of batch sizes to fit as many samples as the model's architecture allows
-        self.dict_batch_sizes = dict.fromkeys(['NASNetMobile'], 128)
-        self.dict_batch_sizes.update(dict.fromkeys(['MobileNet', 'MobileNetV2', 'ResNet50', 'ResNext50'], 64))
-        self.dict_batch_sizes.update(dict.fromkeys(['InceptionV3', 'VGG19', 'DenseNet121', 'DenseNet169'], 32))
-        self.dict_batch_sizes.update(dict.fromkeys(['DenseNet201', 'VGG16', 'Xception'], 16))
-        self.dict_batch_sizes.update(dict.fromkeys(['InceptionResNetV2'], 8))
-        self.dict_batch_sizes.update(dict.fromkeys(['NASNetLarge', 'EfficientNetB7'], 4))
-        self.batch_size = self.dict_batch_sizes[self.architecture]
+        architectures = ['VGG16', 'VGG19', 'DenseNet121', 'DenseNet169', 'DenseNet201', 'Xception', 'InceptionV3',
+                         'InceptionResNetV2', 'ResNet50', 'ResNet101', 'ResNet152', 'ResNet50V2', 'ResNet101V2',
+                         'ResNet152V2', 'ResNeXt50', 'ResNeXt101', 'EfficientNetB7']
+        field_ids = ['20204', '20208', '210156']
+        self.dict_batch_sizes = pd.DataFrame(columns=field_ids, index=architectures)
+        self.dict_batch_sizes.loc[:, '20204'] = [64, 64, 32, 32, 16, 32, 128, 16, 32, 16, 16, 32, 16, 16, 4, 8, 4]
+        self.dict_batch_sizes.loc[:, '20208'] = [64, 128, 64, 64, 32, 64, 128, 64, 64, 32, 32, 64, 32, 32, 16, 8, 8]
+        self.dict_batch_sizes.loc[:, '210156'] = [64, 64, 32, 32, 16, 32, 64, 32, 32, 16, 16, 32, 16, 16, 4, 8, 4]
+        self.dict_batch_sizes.loc['MobileNet', :] = 128
+        self.dict_batch_sizes.loc['MobileNetV2', :] = 64
+        self.dict_batch_sizes.loc['NASNetMobile', :] = 64
+        self.dict_batch_sizes.loc['NASNetLarge', :] = 4
+        self.batch_size = self.dict_batch_sizes.loc[self.architecture, self.field_id]
         # double the batch size for the teslaM40 cores that have bigger memory
         if len(GPUtil.getGPUs()) > 0:  # make sure GPUs are available (not truesometimes for debugging)
             if GPUtil.getGPUs()[0].memoryTotal > 20000:
@@ -704,10 +716,12 @@ class DeepLearning(Metrics):
         else:
             w = self.keras_weights
         kwargs = {"include_top": False, "weights": w, "input_shape": (self.image_width, self.image_height, 3)}
-        if self.architecture in ['ResNet50V2', 'ResNet152V2', 'ResNext101']:
-            import keras
+        if self.architecture in ['ResNet50', 'ResNet101', 'ResNet152', 'ResNet50V2', 'ResNet101V2', 'ResNet152V2',
+                                 'ResNeXt50', 'ResNeXt101']:
+            import tensorflow.keras
             kwargs.update(
-                {"backend": keras.backend, "layers": keras.layers, "models": keras.models, "utils": keras.utils})
+                {"backend": tensorflow.keras.backend, "layers": tensorflow.keras.layers,
+                 "models": tensorflow.keras.models, "utils": tensorflow.keras.utils})
         
         # load the architecture builder
         if self.architecture == 'VGG16':
@@ -743,27 +757,19 @@ class DeepLearning(Metrics):
         elif self.architecture == 'ResNeXt101':
             from keras_applications.resnext import ResNeXt101 as ModelBuilder
         elif self.architecture == 'EfficientNetB7':
-            from efficientnet.keras import EfficientNetB7 as ModelBuilder
+            from efficientnet.tfkeras import EfficientNetB7 as ModelBuilder
+        # The following model have a fixed input size requirement
+        elif self.architecture == 'NASNetMobile':
+            from tensorflow.keras.applications.nasnet import NASNetMobile as ModelBuilder
+        elif self.architecture == 'NASNetLarge':
+            from tensorflow.keras.applications.nasnet import NASNetLarge as ModelBuilder
+        elif self.architecture == 'MobileNet':
+            from tensorflow.keras.applications.mobilenet import MobileNet as ModelBuilder
+        elif self.architecture == 'MobileNetV2':
+            from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2 as ModelBuilder
         else:
-            #  Extra models, that do now allow resized input
-            if self.architecture == 'NASNetMobile':
-                from tensorflow.keras.applications.nasnet import NASNetMobile as ModelBuilder
-                size = 224  # input (224, 224)
-            elif self.architecture == 'NASNetLarge':
-                from tensorflow.keras.applications.nasnet import NASNetLarge as ModelBuilder
-                size = 331  # input (331, 331)
-            elif self.architecture == 'MobileNet':
-                from tensorflow.keras.applications.mobilenet import MobileNet as ModelBuilder
-                size = 224  # input (128, 128), (160, 160), (192, 192), or (224, 224)
-            elif self.architecture == 'MobileNetV2':
-                from tensorflow.keras.applications.mobilenet_v2 import MobileNetV2 as ModelBuilder
-                size = 224  # input (96, 96), (128, 128), (160, 160),(192, 192), or (224, 224))
-            else:
-                print('Architecture does not exist.')
-                sys.exit(1)
-            self.image_width = size
-            self.image_height = size
-            kwargs["input_shape"] = (size, size, 3)
+            print('Architecture does not exist.')
+            sys.exit(1)
         
         # build the model's base
         cnn = ModelBuilder(**kwargs)
@@ -820,8 +826,6 @@ class DeepLearning(Metrics):
     def clean_exit(self):
         # exit
         print('\nTHE MODEL CONVERGED!\n')
-        print('Closing the GPU session before exiting...')
-        self.gpu_session.close()
         print('Killing JOB PID with kill...')
         os.system('touch ../eo/' + os.environ['SLURM_JOBID'])
         os.system('kill ' + str(os.getpid()))
@@ -955,7 +959,8 @@ class Training(DeepLearning):
         # calculate initial val_loss value
         if self.continue_training:
             idx_metric_name = ([self.loss_name] + self.metrics_names).index(self.main_metric_name)
-            baseline_perfs = self.model.evaluate(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
+            # tf 2.2 baseline_perfs = self.model.evaluate(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
+            baseline_perfs = self.model.evaluate_generator(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
             self.baseline_performance = baseline_perfs[idx_metric_name]
         elif self.main_metric_mode == 'min':
             self.baseline_performance = np.Inf
@@ -999,10 +1004,16 @@ class Training(DeepLearning):
         _ = gc.collect()
         # train the model
         verbose = 1 if self.debug_mode else 2
-        self.model.fit(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
+        ''' tf2.2
+                self.model.fit(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
                        validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
                        use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
                        class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
+                       '''
+        self.model.fit_generator(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
+                                 validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
+                                 use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
+                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
 
 
 class PredictionsGenerate(DeepLearning):
@@ -2161,7 +2172,7 @@ class PlotsAttentionMaps(DeepLearning):
         # other parameters
         self.parameters = self._version_to_parameters(version)
         self.image_width, self.image_height = self.dict_field_id_to_image_size[self.parameters['field_id']]
-        self.batch_size = self.dict_batch_sizes[self.parameters['architecture']]
+        self.batch_size = self.dict_batch_sizes.loc[self.parameters['architecture'], self.field_id]
         DeepLearning.__init__(self, target, organ_id, view, transformation, self.parameters['architecture'],
                               self.parameters['optimizer'], self.parameters['learning_rate'],
                               self.parameters['weight_decay'], self.parameters['dropout_rate'], False)
