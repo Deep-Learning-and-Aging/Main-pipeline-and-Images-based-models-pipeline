@@ -620,6 +620,7 @@ class DeepLearning(Metrics):
         self.dict_batch_sizes.loc['MobileNetV2', :] = 64
         self.dict_batch_sizes.loc['NASNetMobile', :] = 64
         self.dict_batch_sizes.loc['NASNetLarge', :] = 4
+        self.dict_batch_sizes = self.dict_batch_sizes.astype(int)
         self.batch_size = self.dict_batch_sizes.loc[self.architecture, self.field_id]
         # double the batch size for the teslaM40 cores that have bigger memory
         if len(GPUtil.getGPUs()) > 0:  # make sure GPUs are available (not truesometimes for debugging)
