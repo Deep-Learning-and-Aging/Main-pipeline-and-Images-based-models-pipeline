@@ -1,18 +1,19 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
-targets=( "Age" )
-#organ_fields=( "EyeFundus_210156" "Liver_20204" "Brain_20227" )
-organs_fields=( "Liver_20204" "Heart_20208" )
-organs_fields=( "Liver_20204" )
-#architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "InceptionResNetV2" )
+targets=( "Sex" "Age" )
+#organs_fields=( "Heart_20208" "Liver_20204" "EyeFundus_210156" ) # "Brain_20227" )
+#organs_fields=( "Liver_20204" "Heart_20208" )
+organs_fields=( "Heart_20208" )
+architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
+#architectures=( "InceptionResNetV2" )
 #architectures=( "EfficientNetB7" "DenseNet201" )
 #architectures=( "ResNext101" "Xception" "VGG19" )
 #architectures=( "VGG16" "DenseNet121" "DenseNet169" "ResNet152V2" "InceptionV3" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
-learning_rates=( "0.000001" )
-#learning_rates=( "0.000001" "0.0000001" "0.00000001" "0.000000001")
+#learning_rates=( "0.000001" )
+learning_rates=( "0.0000001" "0.00000001" "0.0000000001" )
+#learning_rates=( "0.000001" "0.0000001" "0.00000001" "0.000000001" "0.0000000001")
 weight_decays=( "0.0" )
 #weight_decays=( "0.0" "0.00001" "0.0001")
 dropout_rates=( "0.0" )
@@ -25,11 +26,12 @@ n_cpu_cores=1
 n_gpus=1
 time=600
 #time=900
-time=10
+#time=10
 for target in "${targets[@]}"; do
 	for organ_field in "${organs_fields[@]}"; do
 		if [ $organ_field == "Heart_20208" ]; then
 			views=( "2chambers" "3chambers" "4chambers" )
+            views=( "3chambers" )
 		elif [ $organ_field == "Brain_20227" ]; then
 			views=( "sagittal" "coronal" "transverse" )
 		else
@@ -37,6 +39,7 @@ for target in "${targets[@]}"; do
 		fi
 		if [ $organ_field == "Liver_20204" ] || [ $organ_field == "Heart_20208" ]; then
 			transformations=( "raw" "contrast" )
+            transformations=( "raw" )
 		else
 			transformations=( "raw" )
 		fi

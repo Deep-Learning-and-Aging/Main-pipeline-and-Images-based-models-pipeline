@@ -532,6 +532,15 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             list_ids_batch = [ID for ID in list_ids_batch for _ in ('right', 'left')]
         X, x, y = self._data_generation(list_ids_batch)
         return [X, x], y
+    
+    # TODO remove after debugging
+    def __getitem__(self, index):
+        indices = self.indices[index * self.n_ids_batch: (index + 1) * self.n_ids_batch]
+        list_ids_batch = [self.list_ids[i] for i in indices]
+        if self.field_id == '210156':  # For EyeFundus, two images (left, right eyes) are selected for each id.
+            list_ids_batch = [ID for ID in list_ids_batch for _ in ('right', 'left')]
+        X, x, y = self._data_generation(list_ids_batch)
+        return [X], y
 
 
 class MyModelCheckpoint(ModelCheckpoint):
@@ -613,9 +622,9 @@ class DeepLearning(Metrics):
                          'ResNet152V2', 'ResNeXt50', 'ResNeXt101', 'EfficientNetB7']
         field_ids = ['20204', '20208', '210156']
         self.dict_batch_sizes = pd.DataFrame(columns=field_ids, index=architectures)
-        self.dict_batch_sizes.loc[:, '20204'] = [64, 64, 32, 32, 16, 32, 128, 16, 32, 16, 16, 32, 16, 16, 4, 8, 4]
-        self.dict_batch_sizes.loc[:, '20208'] = [64, 128, 64, 64, 32, 64, 128, 64, 64, 32, 32, 64, 32, 32, 16, 8, 8]
-        self.dict_batch_sizes.loc[:, '210156'] = [64, 64, 32, 32, 16, 32, 64, 32, 32, 16, 16, 32, 16, 16, 4, 8, 4]
+        self.dict_batch_sizes.loc[:, '20204'] = [32, 64, 16, 16, 16, 32, 64, 16, 32, 16, 16, 32, 16, 16, 4, 8, 4]
+        self.dict_batch_sizes.loc[:, '20208'] = [64, 128, 64, 32, 32, 64, 128, 64, 64, 32, 32, 64, 32, 32, 16, 8, 8]
+        self.dict_batch_sizes.loc[:, '210156'] = [32, 32, 16, 16, 16, 32, 64, 16, 32, 16, 16, 32, 16, 16, 4, 8, 4]
         self.dict_batch_sizes.loc['MobileNet', :] = 128
         self.dict_batch_sizes.loc['MobileNetV2', :] = 64
         self.dict_batch_sizes.loc['NASNetMobile', :] = 64
@@ -807,6 +816,12 @@ class DeepLearning(Metrics):
         predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
         self.model = Model(inputs=[cnn_input, side_nn_input], outputs=predictions)
     
+    # TODO remove after debugging
+    def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
+        x = cnn_output
+        predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
+        self.model = Model(inputs=[cnn_input], outputs=predictions)
+    
     def _generate_architecture(self):
         cnn_input, cnn_output = self._generate_cnn()
         side_nn_input, side_nn_output = self._generate_side_nn()
@@ -886,7 +901,7 @@ class Training(DeepLearning):
             self.path_save_weights = self.path_store + 'mw-debug_' + self.version + '.h5'
         else:
             self.path_save_weights = self.path_store + 'model-weights_' + self.version + '.h5'
-        self.n_epochs_max = 1000
+        self.n_epochs_max = 100000
         self.callbacks = None
         self.optimizers = {'Adam': Adam, 'RMSprop': RMSprop, 'Adadelta': Adadelta}
     
@@ -972,6 +987,13 @@ class Training(DeepLearning):
     def _define_callbacks(self):
         csv_logger = CSVLogger(self.path_store + 'logger_' + self.version + '.csv', separator=',',
                                append=self.continue_training)
+        '''
+        model_checkpoint_train = ModelCheckpoint(self.path_save_weights.replace('model-weights',
+                                                                                   'model-weights-val'),
+                                             monitor=self.main_metric.name, baseline=self.baseline_performance,
+                                             verbose=1, save_best_only=True, save_weights_only=True,
+                                             mode=self.main_metric_mode)
+        '''
         model_checkpoint_backup = MyModelCheckpoint(self.path_save_weights.replace('model-weights',
                                                                                    'backup-model-weights'),
                                                     monitor='val_' + self.main_metric.name,
@@ -983,9 +1005,10 @@ class Training(DeepLearning):
                                              mode=self.main_metric_mode)
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=3, verbose=1, mode='min',
                                                  min_delta=0, cooldown=0, min_lr=0)
-        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=10, verbose=0,
+        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=30, verbose=0,
                                        mode=self.main_metric_mode, baseline=self.baseline_performance)
-        self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, reduce_lr_on_plateau, early_stopping]
+        self.callbacks = [csv_logger, model_checkpoint_backup,
+                          model_checkpoint, reduce_lr_on_plateau, early_stopping]
     
     def build_model(self):
         self._weights_for_transfer_learning()
@@ -1011,11 +1034,17 @@ class Training(DeepLearning):
                        use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
                        class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
                        '''
+        verbose = 1 #TODO debug
+        '''
         self.model.fit_generator(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
                                  validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
                                  use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
                                  class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
-
+        '''
+        self.model.fit_generator(self.GENERATORS['train'], steps_per_epoch=10,
+                                 validation_data=self.GENERATORS['val'], validation_steps=10,
+                                 use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
+                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
 
 class PredictionsGenerate(DeepLearning):
     

@@ -5,6 +5,7 @@ image_fields=( "ECG_6025" "ECG_20205" "ArterialStiffness_4205" "Brain_20227" "Ey
 image_fields=( "Liver_20204" "Heart_20208" )
 image_fields=( "EyeFundus_210156" )
 #image_fields=( "Brain_20227" "EyeFundus_210156" "Liver_20204" "Heart_20208" )
+image_fields=( "Liver_20204" )
 memory=8G
 n_cpu_cores=1
 time=5
