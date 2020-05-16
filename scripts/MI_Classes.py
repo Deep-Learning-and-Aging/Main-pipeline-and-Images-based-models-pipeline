@@ -320,34 +320,57 @@ class PreprocessingFolds(Metrics):
             self.variables_to_normalize.append(self.target)
         self.dict_image_quality_col = {'Liver': 'Abdominal_images_quality'}
         self.dict_image_quality_col.update(
-            dict.fromkeys(['Heart', 'Brain', 'DXA', 'Pancreas', 'Carotid', 'ECG', 'ArterialStiffness', 'EyeFundus'],
-                          None))
+            dict.fromkeys(['Brain', 'Carotid', 'EyeFundus', 'EyeOCT', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine',
+                           'Hip', 'Knee', 'PhysicalActivity', 'ECG', 'ArterialStiffness'], None))
         self.image_quality_col = self.dict_image_quality_col[self.organ]
-        self.images_field_ids = ['20204', '20208', '20227', '210156']
-        self.list_available_ids = None
+        self.images_field_ids = ['20227', '20223', '210156', '210178', '20208', '20204', '20259', '201580', '201581',
+                                 '201582', '201583', '90001']
+        self.left_right_images_field_ids = ['20223', '210156', '210178', '201582', '201583']
+        self.list_ids = None
         self.data = None
         self.IDS = None
         self.data_fold = None
-        # dictionary of dir_images used to generate the IDs split during preprocessing
-        self.dict_default_dir_images = {'Liver_20204': '../images/Liver/20204/main/raw/',
-                                        'Heart_20208': '../images/Heart/20208/4chambers/raw/',
-                                        'Brain_20227': '../images/Brain/20227/sagittal/raw/',
-                                        'EyeFundus_210156': '../images/EyeFundus/210156/main/raw/right',
-                                        'PhysicalActivity_90001': '../images/PhysicalActivity/90001/main/raw/'}
+        self.dict_image_fields_to_views = {'Brain_20227': ['sagittal', 'coronal', 'transverse'],
+                                           'Carotid_20223': ['longaxis', 'shortaxis', 'CIMT120', 'CIMT150', 'mixed'],
+                                           'EyeFundus_210156': ['main'],
+                                           'EyeOCT_210178': ['main'],
+                                           'Heart_20208': ['2chambers', '3chambers', '4chambers'],
+                                           'Liver_20204': ['main'],
+                                           'Pancreas_20259': ['main'],
+                                           'FullBody_201580': ['figure', 'skeleton', 'flesh', 'mixed'],
+                                           'Spine_201581': ['sagittal', 'coronal'],
+                                           'Hip_201582': ['main'],
+                                           'Knee_201583': ['main'],
+                                           'PhysicalActivity_90001': ['main']}
+        
+        # Helpful to code:
+        self.dict_field_id_to_organ = {'20227': 'Brain', '20223': 'Carotid', '210156': 'EyeFundus', '210178': 'EyeOCT',
+                                       '20208': 'Heart', '20204': 'Liver', '20259': 'Pancreas', '201580': 'FullBody',
+                                       '201581': 'Spine', '201582': 'Hip', '201583': 'Knee',
+                                       '90001': 'PhysicalActivity'}
     
-    def _get_list_available_ids(self):
+    def _get_list_ids(self):
         # get the list of the ids available for the field_id
         if self.field_id in self.images_field_ids:
-            list_images = os.listdir(self.dict_default_dir_images[self.image_field])
-            # For EyeFundus, take the unions of the right and left eyes eids
-            if self.field_id == '210156':
-                list_left = os.listdir(self.dict_default_dir_images[self.image_field].replace('right', 'left'))
-                list_images = np.unique(list_images + list_left)
-                list_images.sort()
-            self.list_available_ids = [e.replace('.jpg', '') for e in list_images]
+            list_ids = []
+            # if different views are available, take the union of the ids
+            for view in self.dict_image_fields_to_views[self.image_field]:
+                path = '../images/' + self.organ + '/' + self.field_id + '/' + view + '/' + 'raw' + '/'
+                list_ids_view = []
+                # for paired organs, take the unions of the ids available on the right and the left sides
+                if self.field_id in self.left_right_images_field_ids:
+                    for side in ['right', 'left']:
+                        list_ids_view += os.listdir(path + side + '/')
+                    list_ids_view = np.unique(list_ids_view).tolist()
+                else:
+                    list_ids_view += os.listdir(path)
+                list_ids += list_ids_view
+            list_ids = np.unique(list_ids).tolist()
+            list_ids.sort()
+            self.list_ids = [im.replace('.jpg', '') for im in list_ids]
         else:
-            list_available_ids_raw = pd.read_csv(self.path_store + 'IDs_' + self.field_id + '.csv')
-            self.list_available_ids = list_available_ids_raw.values.squeeze().astype(str)
+            list_ids_raw = pd.read_csv(self.path_store + 'IDs_' + self.field_id + '.csv')
+            self.list_ids = list_ids_raw.values.squeeze().astype(str)
     
     def _filter_and_format_data(self):
         """
@@ -367,7 +390,7 @@ class PreprocessingFolds(Metrics):
         # get rid of samples with NAs
         data.dropna(inplace=True)
         # list the samples' ids for which images are available
-        data = data.loc[self.list_available_ids]
+        data = data.loc[self.list_ids]
         self.data = data
     
     def _split_ids(self):
@@ -424,6 +447,7 @@ class PreprocessingFolds(Metrics):
                 # report issue if NAs were detected, which most likely comes from a sample whose id did not match
                 n_mismatching_samples = data_fold.isna().sum().max()
                 if n_mismatching_samples > 0:
+                    print(data_fold[data_fold.isna().any(axis=1)])
                     print('/!\\ WARNING! ' + str(n_mismatching_samples) + ' ' + fold + ' images ids out of ' +
                           str(len(data_fold.index)) + ' did not match the dataframe!')
                 data_fold.to_csv(self.path_store + 'data-features_' + self.image_field + '_' + self.target + '_' + fold
@@ -433,7 +457,7 @@ class PreprocessingFolds(Metrics):
                 self.data_fold = data_fold
     
     def generate_folds(self):
-        self._get_list_available_ids()
+        self._get_list_ids()
         self._filter_and_format_data()
         self._split_ids()
         self._split_data()
@@ -457,11 +481,12 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.side_predictors = side_predictors
         self.batch_size = batch_size
         self.n_ids_batch = self.batch_size
-        # for EyeFundus, take twice less ids since there are two images for each id, and add eye_side as side predictor
-        if self.field_id == '210156':
-            self.data_features['eye_side'] = np.nan
+        # for paired organs, take twice fewer ids (two images for each id), and add organ_side as side predictor
+        if self.field_id in self.left_right_images_field_ids:
+            self.data_features['organ_side'] = np.nan
             self.n_ids_batch = self.n_ids_batch // 2
-        self.n_ids_batch = self.batch_size // 2 if self.field_id == '210156' else self.batch_size
+        else:
+            self.n_ids_batch = self.batch_size
         self.steps = len(self.list_ids) // self.n_ids_batch
         self.shuffle = shuffle
         self.indices = None
@@ -472,12 +497,20 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         # Data augmentation
         self.data_augmentation = data_augmentation
         self.seed = seed
-        self.dict_rotation_ranges = {'20227': 0, '210156': 0, '20204': 10, '20208': 10}
-        self.dict_width_shift_ranges = {'20227': 0, '210156': 0, '20204': 0.1, '20208': 0.1}
-        self.dict_height_shift_ranges = {'20227': 0, '210156': 0, '20204': 0.1, '20208': 0.1}
-        ImageDataGenerator.__init__(self, rotation_range=self.dict_rotation_ranges[self.field_id],
-                                    width_shift_range=self.dict_width_shift_ranges[self.field_id],
-                                    height_shift_range=self.dict_height_shift_ranges[self.field_id], rescale=1. / 255.)
+        # the number of epochs is too small for data augmentation to be helpful for now
+        self.field_ids_not_to_augment = ['20227', '210156', '210178', '201580', '90001'] + \
+                                        ['20223', '20208', '20204', '20259', '201581', '201582', '201583']
+        self.field_ids_to_augment = []
+        # Parameters for data augmentation: (rotation range, width shift range, height shift range, zoom range)
+        self.dict_augmentation_parameters = {}
+        self.dict_augmentation_parameters.update(dict.fromkeys(self.field_ids_not_to_augment, (0, 0, 0, [0, 0])))
+        self.dict_augmentation_parameters.update(dict.fromkeys(self.field_ids_to_augment, (10, 0.1, 0.1, [0.9, 1.1])))
+        
+        ImageDataGenerator.__init__(self, rescale=1. / 255.,
+                                    rotation_range=self.dict_augmentation_parameters[self.field_id][0],
+                                    width_shift_range=self.dict_augmentation_parameters[self.field_id][1],
+                                    height_shift_range=self.dict_augmentation_parameters[self.field_id][2],
+                                    zoom_range=self.dict_augmentation_parameters[self.field_id][3])
     
     def __len__(self):
         return int(np.floor(len(self.list_ids) / self.n_ids_batch))
@@ -496,7 +529,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         if self.data_augmentation:
             params = self.get_random_transform(Xi.shape, seed=self.seed)
             Xi = self.apply_transform(Xi, params)
-            Xi = self.standardize(Xi)
+        Xi = self.standardize(Xi)
         return Xi
     
     def _data_generation(self, list_ids_batch):
@@ -509,14 +542,13 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         for i, ID in enumerate(list_ids_batch):
             y[i] = self.labels[ID]
             x[i] = self.data_features.loc[ID, self.side_predictors]
-            if self.field_id == '210156':
+            if self.field_id in self.left_right_images_field_ids:
                 if i % 2 == 0:
                     path = self.dir_images + 'right/'
                     x[i][-1] = 0
                 else:
                     path = self.dir_images + 'left/'
                     x[i][-1] = 1
-                path = self.dir_images + 'right/' if i % 2 == 0 else self.dir_images + 'left/'
                 if not os.path.exists(path + ID + '.jpg'):
                     path = path.replace('/right/', '/left/') if i % 2 == 0 else path.replace('/left/', '/right/')
                     x[i][-1] = 1 - x[i][-1]
@@ -528,27 +560,19 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
     def __getitem__(self, index):
         indices = self.indices[index * self.n_ids_batch: (index + 1) * self.n_ids_batch]
         list_ids_batch = [self.list_ids[i] for i in indices]
-        if self.field_id == '210156':  # For EyeFundus, two images (left, right eyes) are selected for each id.
+        # For paired organs, two images (left, right eyes) are selected for each id.
+        if self.field_id in self.left_right_images_field_ids:
             list_ids_batch = [ID for ID in list_ids_batch for _ in ('right', 'left')]
         X, x, y = self._data_generation(list_ids_batch)
         return [X, x], y
-    
-    # TODO remove after debugging
-    def __getitem__(self, index):
-        indices = self.indices[index * self.n_ids_batch: (index + 1) * self.n_ids_batch]
-        list_ids_batch = [self.list_ids[i] for i in indices]
-        if self.field_id == '210156':  # For EyeFundus, two images (left, right eyes) are selected for each id.
-            list_ids_batch = [ID for ID in list_ids_batch for _ in ('right', 'left')]
-        X, x, y = self._data_generation(list_ids_batch)
-        return [X], y
 
 
 class MyModelCheckpoint(ModelCheckpoint):
     def __init__(self, filepath, monitor='val_loss', baseline=-np.Inf, verbose=0, save_best_only=False,
-                 save_weights_only=False, mode='auto'):
+                 save_weights_only=False, mode='auto', save_freq='epoch'):
         # Parameters
         ModelCheckpoint.__init__(self, filepath, monitor=monitor, verbose=verbose, save_best_only=save_best_only,
-                                 save_weights_only=save_weights_only, mode=mode)
+                                 save_weights_only=save_weights_only, mode=mode, save_freq=save_freq)
         if mode == 'min':
             self.monitor_op = np.less
             self.best = baseline
@@ -590,8 +614,8 @@ class DeepLearning(Metrics):
         
         # NNet's architecture and weights
         self.side_predictors = self.dict_side_predictors[self.target]
-        if self.field_id == '210156':
-            self.side_predictors.append('eye_side')
+        if self.field_id in self.left_right_images_field_ids:
+            self.side_predictors.append('organ_side')
         self.dict_final_activations = {'regression': 'linear', 'binary': 'sigmoid', 'multiclass': 'softmax',
                                        'saliency': 'linear'}
         self.path_load_weights = None
@@ -605,45 +629,99 @@ class DeepLearning(Metrics):
         self.n_cpus = len(os.sched_getaffinity(0))
         self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' \
                           + self.transformation + '/'
+        
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
-        self.dict_field_id_to_image_size = {'20204': (288, 288), '20208': (200, 200), '20227': (88, 88),
-                                            '210156': (300, 300)}
+        self.dict_field_id_to_image_size = {
+            # Brain
+            '20227_main': (88, 88),  # Brain, initial size (88, 88)
+            # Carotid
+            '20222_shortaxis': (337, 291),  # initial size (505, 436)
+            '20222_longaxis': (337, 291),  # initial size (505, 436)
+            '20222_CIMT120': (337, 291),  # initial size (505, 436)
+            '20222_CIMT150': (337, 291),  # initial size (505, 436)
+            '20222_mixed': (337, 291),  # initial size (505, 436)
+            # EyeFundus
+            '210156_main': (300, 300),  # initial size (1388, 1388)
+            # Heart
+            '20208_2chambers': (200, 200),  # initial size (200, 200)
+            '20208_3chambers': (200, 200),  # initial size (200, 200)
+            '20208_4chambers': (200, 200),  # initial size (200, 200)
+            # Liver
+            '20204_main': (288, 364),  # initial size (364, 288)
+            # Pancreas
+            '20259_main': (288, 350),  # initial size (350, 288)
+            # FullBody
+            '201580_figure': (541, 181),  # FullBody, initial size (811, 272)
+            '201580_skeleton': (541, 181),  # FullBody, initial size (811, 272)
+            '201580_flesh': (541, 181),  # FullBody, initial size (811, 272)
+            '201580_mixed': (541, 181),  # FullBody, initial size (811, 272)
+            # Spine
+            '201581_coronal': (315, 313),  # Spine, initial size (724, 720)
+            '201581_sagittal': (466, 211),  # Spine, initial size (1513, 684)
+            # Hip
+            '201582_main': (329, 303),  # Hip, initial size (626, 680)
+            # Knee
+            '201583_main': (347, 286)  # Knee, initial size (851, 700)
+        }
         self.dict_architecture_to_image_size = {'MobileNet': (224, 224), 'MobileNetV2': (224, 224),
                                                 'NASNetMobile': (224, 224), 'NASNetLarge': (331, 331)}
-        self.image_width, self.image_height = self.dict_field_id_to_image_size[self.field_id]
         if self.architecture in ['MobileNet', 'MobileNetV2', 'NASNetMobile', 'NASNetLarge']:
             self.image_width, self.image_height = self.dict_architecture_to_image_size[self.architecture]
         else:
-            self.image_width, self.image_height = self.dict_field_id_to_image_size[self.field_id]
+            self.image_width, self.image_height = self.dict_field_id_to_image_size[self.field_id + '_' + self.view]
         
         # define dictionary of batch sizes to fit as many samples as the model's architecture allows
-        architectures = ['VGG16', 'VGG19', 'DenseNet121', 'DenseNet169', 'DenseNet201', 'Xception', 'InceptionV3',
-                         'InceptionResNetV2', 'ResNet50', 'ResNet101', 'ResNet152', 'ResNet50V2', 'ResNet101V2',
-                         'ResNet152V2', 'ResNeXt50', 'ResNeXt101', 'EfficientNetB7']
-        field_ids = ['20204', '20208', '210156']
-        self.dict_batch_sizes = pd.DataFrame(columns=field_ids, index=architectures)
-        self.dict_batch_sizes.loc[:, '20204'] = [32, 64, 16, 16, 16, 32, 64, 16, 32, 16, 16, 32, 16, 16, 4, 8, 4]
-        self.dict_batch_sizes.loc[:, '20208'] = [64, 128, 64, 32, 32, 64, 128, 64, 64, 32, 32, 64, 32, 32, 16, 8, 8]
-        self.dict_batch_sizes.loc[:, '210156'] = [32, 32, 16, 16, 16, 32, 64, 16, 32, 16, 16, 32, 16, 16, 4, 8, 4]
-        self.dict_batch_sizes.loc['MobileNet', :] = 128
-        self.dict_batch_sizes.loc['MobileNetV2', :] = 64
-        self.dict_batch_sizes.loc['NASNetMobile', :] = 64
-        self.dict_batch_sizes.loc['NASNetLarge', :] = 4
-        self.dict_batch_sizes = self.dict_batch_sizes.astype(int)
-        self.batch_size = self.dict_batch_sizes.loc[self.architecture, self.field_id]
+        self.dict_batch_sizes = {
+            # Default, applies to all images with resized input ~100,000 pixels
+            'Default': {'VGG16': 32, 'VGG19': 32, 'DenseNet121': 16, 'DenseNet169': 16, 'DenseNet201': 16,
+                        'Xception': 32, 'InceptionV3': 64, 'InceptionResNetV2': 16, 'ResNet50': 32, 'ResNet101': 16,
+                        'ResNet152': 16, 'ResNet50V2': 32, 'ResNet101V2': 16, 'ResNet152V2': 16, 'ResNeXt50': 4,
+                        'ResNeXt101': 8, 'EfficientNetB7': 4,
+                        'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
+            # Brain
+            '20227_main': {'VGG16': 512, 'VGG19': 512, 'DenseNet121': 256, 'DenseNet169': 256, 'DenseNet201': 256,
+                           'Xception': 512, 'InceptionV3': 1024, 'InceptionResNetV2': 256, 'ResNet50': 512,
+                           'ResNet101': 256, 'ResNet152': 256, 'ResNet50V2': 512, 'ResNet101V2': 256,
+                           'ResNet152V2': 256, 'ResNeXt50': 64, 'ResNeXt101': 128, 'EfficientNetB7': 64,
+                           'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
+            # EyeFundus
+            '210156_main': {'VGG16': 32, 'VGG19': 32, 'DenseNet121': 16, 'DenseNet169': 16, 'DenseNet201': 16,
+                            'Xception': 32, 'InceptionV3': 64, 'InceptionResNetV2': 16, 'ResNet50': 32, 'ResNet101': 16,
+                            'ResNet152': 16, 'ResNet50V2': 32, 'ResNet101V2': 16, 'ResNet152V2': 16, 'ResNeXt50': 4,
+                            'ResNeXt101': 8, 'EfficientNetB7': 4,
+                            'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
+            # Heart
+            '20204_2chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
+                                'Xception': 64, 'InceptionV3': 128, 'InceptionResNetV2': 64, 'ResNet50': 64,
+                                'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
+                                'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
+                                'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
+        
+            '20204_3chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
+                                'Xception': 64, 'InceptionV3': 128, 'InceptionResNetV2': 64, 'ResNet50': 64,
+                                'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
+                                'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
+                                'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
+        
+            '20204_4chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
+                                'Xception': 64, 'InceptionV3': 128, 'InceptionResNetV2': 64, 'ResNet50': 64,
+                                'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
+                                'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
+                                'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4}
+        
+        }
+        # Define batch size
+        if self.field_id + '_' + self.view in self.dict_batch_sizes.keys:
+            self.batch_size = self.dict_batch_sizes[self.field_id + '_' + self.view][self.architecture]
+        else:
+            self.batch_size = self.dict_batch_sizes['Default'][self.architecture]
         # double the batch size for the teslaM40 cores that have bigger memory
         if len(GPUtil.getGPUs()) > 0:  # make sure GPUs are available (not truesometimes for debugging)
             if GPUtil.getGPUs()[0].memoryTotal > 20000:
                 self.batch_size *= 2
-                
+        
         # dict to decide which field is used to generate the ids when several targets share the same ids
         self.dict_target_to_ids = dict.fromkeys(['Age', 'Sex'], 'Age')
-        # dict to decide which field is used to generate the ids when several organs/fields share the same ids
-        self.dict_image_field_to_ids = dict.fromkeys(['PhysicalActivity_90001'], 'PhysicalActivity_90001')
-        self.dict_image_field_to_ids.update(dict.fromkeys(['Liver_20204'], 'Liver_20204'))
-        self.dict_image_field_to_ids.update(dict.fromkeys(['Heart_20208'], 'Heart_20208'))
-        self.dict_image_field_to_ids.update(dict.fromkeys(['Brain_20227'], 'Brain_20227'))
-        self.dict_image_field_to_ids.update(dict.fromkeys(['EyeFundus_210156'], 'EyeFundus_210156'))
         
         # Metrics
         self.prediction_type = self.dict_prediction_types[self.target]
@@ -672,8 +750,8 @@ class DeepLearning(Metrics):
     def _load_data_features(self):
         for fold in self.folds:
             self.DATA_FEATURES[fold] = pd.read_csv(
-                self.path_store + 'data-features_' + self.dict_image_field_to_ids[self.organ + '_' + self.field_id]
-                + '_' + self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
+                self.path_store + 'data-features_' + self.organ + '_' + self.field_id + '_' +
+                self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
             for col_name in self.id_vars + ['outer_fold']:
                 self.DATA_FEATURES[fold][col_name] = self.DATA_FEATURES[fold][col_name].astype(str)
             self.DATA_FEATURES[fold] = self.DATA_FEATURES[fold].set_index('id', drop=False)
@@ -694,7 +772,10 @@ class DeepLearning(Metrics):
                 continue
             # parameters
             shuffle = True if self.mode == 'model_training' else False
-            data_augmentation = True if (fold == 'train') & (self.mode == 'model_training') else False
+            if (fold == 'train') & (self.mode == 'model_training') & (self.field_id in self.field_ids_to_augment):
+                data_augmentation = True
+            else:
+                data_augmentation = False
             # define batch size for testing: data is split between a part that fits in batches, and leftovers
             if self.mode == 'model_testing':
                 batch_size_fold = min(self.batch_size, len(DATA_FEATURES[fold].index))
@@ -816,12 +897,6 @@ class DeepLearning(Metrics):
         predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
         self.model = Model(inputs=[cnn_input, side_nn_input], outputs=predictions)
     
-    # TODO remove after debugging
-    def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
-        x = cnn_output
-        predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
-        self.model = Model(inputs=[cnn_input], outputs=predictions)
-    
     def _generate_architecture(self):
         cnn_input, cnn_output = self._generate_cnn()
         side_nn_input, side_nn_output = self._generate_side_nn()
@@ -838,8 +913,9 @@ class DeepLearning(Metrics):
             except FileNotFoundError:
                 print('Error. No file was found. imagenet weights should have been used. Bug somewhere.')
                 sys.exit(1)
-    
-    def clean_exit(self):
+
+    @staticmethod
+    def clean_exit():
         # exit
         print('\nTHE MODEL CONVERGED!\n')
         print('Killing JOB PID with kill...')
@@ -874,10 +950,11 @@ class Training(DeepLearning):
         self.list_parameters_to_match = ['organ', 'transformation', 'field_id', 'view']
         # dict to decide in which order targets should be used when trying to transfer weight from a similar model
         self.dict_alternative_targets_for_transfer_learning = {'Age': ['Age', 'Sex'], 'Sex': ['Sex', 'Age']}
-
+        
         # Generators
         self.folds = ['train', 'val']
         self.mode = 'model_training'
+        self.n_samples_per_subepoch = 16384
         self.class_weights = None
         self.GENERATORS = None
 
@@ -987,28 +1064,21 @@ class Training(DeepLearning):
     def _define_callbacks(self):
         csv_logger = CSVLogger(self.path_store + 'logger_' + self.version + '.csv', separator=',',
                                append=self.continue_training)
-        '''
-        model_checkpoint_train = ModelCheckpoint(self.path_save_weights.replace('model-weights',
-                                                                                   'model-weights-val'),
-                                             monitor=self.main_metric.name, baseline=self.baseline_performance,
-                                             verbose=1, save_best_only=True, save_weights_only=True,
-                                             mode=self.main_metric_mode)
-        '''
         model_checkpoint_backup = MyModelCheckpoint(self.path_save_weights.replace('model-weights',
                                                                                    'backup-model-weights'),
                                                     monitor='val_' + self.main_metric.name,
                                                     baseline=self.baseline_performance, verbose=1, save_best_only=True,
-                                                    save_weights_only=True, mode=self.main_metric_mode)
+                                                    save_weights_only=True, mode=self.main_metric_mode,
+                                                    save_freq='epoch')
         model_checkpoint = MyModelCheckpoint(self.path_save_weights,
                                              monitor='val_' + self.main_metric.name, baseline=self.baseline_performance,
                                              verbose=1, save_best_only=True, save_weights_only=True,
-                                             mode=self.main_metric_mode)
-        reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=3, verbose=1, mode='min',
+                                             mode=self.main_metric_mode, save_freq='epoch')
+        reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=10, verbose=1, mode='min',
                                                  min_delta=0, cooldown=0, min_lr=0)
         early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=30, verbose=0,
                                        mode=self.main_metric_mode, baseline=self.baseline_performance)
-        self.callbacks = [csv_logger, model_checkpoint_backup,
-                          model_checkpoint, reduce_lr_on_plateau, early_stopping]
+        self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, early_stopping, reduce_lr_on_plateau]
     
     def build_model(self):
         self._weights_for_transfer_learning()
@@ -1026,31 +1096,28 @@ class Training(DeepLearning):
     def train_model(self):
         # garbage collector
         _ = gc.collect()
+        
+        # Split each epoch into several smaller epochs
+        steps_per_epoch = self.n_samples_per_subepoch // self.batch_size
+        
         # train the model
-        verbose = 1 if self.debug_mode else 2
         ''' tf2.2
                 self.model.fit(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
                        validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
                        use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
                        class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
                        '''
-        verbose = 1 #TODO debug
-        '''
-        self.model.fit_generator(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
+        self.model.fit_generator(self.GENERATORS['train'], steps_per_epoch=steps_per_epoch,
                                  validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
                                  use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
-                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
-        '''
-        self.model.fit_generator(self.GENERATORS['train'], steps_per_epoch=10,
-                                 validation_data=self.GENERATORS['val'], validation_steps=10,
-                                 use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
-                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
+                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=1)
+
 
 class PredictionsGenerate(DeepLearning):
     
     def __init__(self, target=None, organ_id=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
-        
+        # Initialize parameters
         DeepLearning.__init__(self, target, organ_id, view, transformation, architecture, optimizer, learning_rate,
                               weight_decay, dropout_rate, debug_mode)
         self.mode = 'model_testing'
@@ -1762,9 +1829,8 @@ class EnsemblesPredictions(Metrics):
                     else:
                         df_outer_fold = PREDICTIONS_outerfold[fold][
                             ['id', 'outer_fold_' + version, 'pred_' + version,
-                             'outer_fold_' + version.replace('*', ','),
-                             'pred_' + version.replace('*', ','), 'outer_fold_' + version.replace('*', '?'),
-                             'pred_' + version.replace('*', '?')]]
+                             'outer_fold_' + version.replace('*', ','), 'pred_' + version.replace('*', ','),
+                             'outer_fold_' + version.replace('*', '?'), 'pred_' + version.replace('*', '?')]]
                     
                     # Initiate, or append if some previous outerfolds have already been concatenated
                     if fold not in PREDICTIONS_ENSEMBLE.keys():
@@ -2201,8 +2267,6 @@ class PlotsAttentionMaps(DeepLearning):
         
         # other parameters
         self.parameters = self._version_to_parameters(version)
-        self.image_width, self.image_height = self.dict_field_id_to_image_size[self.parameters['field_id']]
-        self.batch_size = self.dict_batch_sizes.loc[self.parameters['architecture'], self.field_id]
         DeepLearning.__init__(self, target, organ_id, view, transformation, self.parameters['architecture'],
                               self.parameters['optimizer'], self.parameters['learning_rate'],
                               self.parameters['weight_decay'], self.parameters['dropout_rate'], False)

@@ -1,18 +1,19 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
-targets=( "Sex" "Age" )
+targets=( "Age" )
 #organs_fields=( "Heart_20208" "Liver_20204" "EyeFundus_210156" ) # "Brain_20227" )
 #organs_fields=( "Liver_20204" "Heart_20208" )
-organs_fields=( "Heart_20208" )
-architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
-#architectures=( "InceptionResNetV2" )
-#architectures=( "EfficientNetB7" "DenseNet201" )
+organs_fields=( "EyeFundus_210156" )
+#architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
+#architectures=( "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
+architectures=( "InceptionResNetV2" )
+architectures=( "EfficientNetB7" "DenseNet201" )
 #architectures=( "ResNext101" "Xception" "VGG19" )
 #architectures=( "VGG16" "DenseNet121" "DenseNet169" "ResNet152V2" "InceptionV3" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
-#learning_rates=( "0.000001" )
-learning_rates=( "0.0000001" "0.00000001" "0.0000000001" )
+learning_rates=( "0.000001" )
+#learning_rates=( "0.0000001" "0.00000001" "0.0000000001" )
 #learning_rates=( "0.000001" "0.0000001" "0.00000001" "0.000000001" "0.0000000001")
 weight_decays=( "0.0" )
 #weight_decays=( "0.0" "0.00001" "0.0001")
@@ -20,12 +21,12 @@ dropout_rates=( "0.0" )
 #dropout_rates=( "0.0" "0.1" "0.2" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
 #outer_folds=( "1" "2" "3" "4" "5" "6" "7" "8" "9" )
-outer_folds=( "0" )
+#outer_folds=( "0" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
 time=600
-#time=900
+time=900
 #time=10
 for target in "${targets[@]}"; do
 	for organ_field in "${organs_fields[@]}"; do

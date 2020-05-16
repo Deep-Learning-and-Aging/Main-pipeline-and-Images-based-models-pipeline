@@ -1,12 +1,7 @@
 #!/bin/bash
 targets=( "Age" )
-#DO NOT RERUN. KEPT SAME INDEX AS WRONGAGE TO ALLOW TRANSFER LEARNING image_fields=( "Liver_20204" "Heart_20208" )
-image_fields=( "ECG_6025" "ECG_20205" "ArterialStiffness_4205" "Brain_20227" "EyeFundus_210156" "Liver_20204" "Heart_20208" ) #"PhysicalActivity_90001" )
-image_fields=( "Liver_20204" "Heart_20208" )
-image_fields=( "EyeFundus_210156" )
-#image_fields=( "Brain_20227" "EyeFundus_210156" "Liver_20204" "Heart_20208" )
-image_fields=( "Liver_20204" )
-memory=8G
+#image_fields=( "ECG_6025" "ECG_20205" "ArterialStiffness_4205" "Brain_20227" "EyeFundus_210156" "Liver_20204" "Heart_20208" ) #"PhysicalActivity_90001" )
+image_fields=( "Liver_20204" "Heart_20208" "EyeFundus_210156" )
 n_cpu_cores=1
 time=5
 for target in "${targets[@]}"; do

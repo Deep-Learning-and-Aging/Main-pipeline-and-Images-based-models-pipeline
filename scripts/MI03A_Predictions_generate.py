@@ -7,17 +7,18 @@ debug_mode = True
 # save predictions
 save_predictions = True
 
+
 # Default parameters
 if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Liver_20204')  # organ_id, Heart_20208
-    sys.argv.append('main')  # view
+    sys.argv.append('Heart_20208')  # organ_id, Heart_20208
+    sys.argv.append('3chambers')  # view
     sys.argv.append('raw')  # transformation
-    sys.argv.append('VGG16')  # architecture
+    sys.argv.append('InceptionResNetV2')  # architecture
     sys.argv.append('Adam')  # optimizer
-    sys.argv.append('0.000001')  # learning_rate
+    sys.argv.append('0.0000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
     sys.argv.append('0.0')  # dropout
 

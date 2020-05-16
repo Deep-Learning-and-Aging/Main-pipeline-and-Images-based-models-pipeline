@@ -6,7 +6,7 @@ from MI_Classes import Training
 # /!\ if True, path to save weights will be automatically modified to avoid rewriting them
 debug_mode = False
 # Load weights from previous best training results, VS. start from scratch
-continue_training = False
+continue_training = True
 # Try to find a similar model among those already trained and evaluated to perform transfer learning
 max_transfer_learning = False
 # Compute the metrics during training on the train and val sets VS. only compute loss (faster)
@@ -16,13 +16,13 @@ display_full_metrics = False
 if len(sys.argv) != 11:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
-    sys.argv.append('Sex')  # target
+    sys.argv.append('Age')  # target
     sys.argv.append('Heart_20208')  # organ_id, e.g Heart_20208.  EyeFundus_210156
     sys.argv.append('3chambers')  # view
     sys.argv.append('raw')  # transformation
-    sys.argv.append('InceptionV3')  # architecture
+    sys.argv.append('InceptionResNetV2')  # architecture
     sys.argv.append('Adam')  # optimizer
-    sys.argv.append('0.0000000001')  # learning_rate
+    sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
     sys.argv.append('0.0')  # dropout_rate
     sys.argv.append('0')  # outer_fold
