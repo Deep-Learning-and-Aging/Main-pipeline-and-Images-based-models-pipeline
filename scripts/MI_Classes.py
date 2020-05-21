@@ -1,6 +1,7 @@
 # LIBRARIES
 # set up backend for ssh -x11 figures
 import matplotlib
+
 matplotlib.use('Agg')
 
 # read and write
@@ -35,24 +36,120 @@ import tensorflow as tf
 # keras
 from keras_preprocessing.image import ImageDataGenerator, Iterator
 from keras_preprocessing.image.utils import load_img, img_to_array
-from tensorflow.keras import backend as k
-from tensorflow.keras.losses import MeanSquaredError, BinaryCrossentropy
-from tensorflow.keras.metrics import RootMeanSquaredError, AUC, BinaryAccuracy, Precision, Recall, TruePositives, \
-    FalsePositives, FalseNegatives, TrueNegatives
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras import regularizers
 from tensorflow.keras.optimizers import Adam, RMSprop, Adadelta
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
+from tensorflow.keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
+from tensorflow.keras.losses import MeanSquaredError, BinaryCrossentropy
+from tensorflow.keras.metrics import RootMeanSquaredError, AUC, BinaryAccuracy, Precision, Recall, TruePositives, \
+    FalsePositives, FalseNegatives, TrueNegatives
+from tensorflow_addons.metrics import RSquare, F1Score
 
 # Model's attention
 import innvestigate
 from vis.utils import utils
 from vis.visualization import visualize_cam
 
+# Necessary to define MyCSVLogger
+import collections
+import csv
+import io
+import six
+from tensorflow.python.lib.io import file_io
+from tensorflow.python.util.compat import collections_abc
+from tensorflow.keras.backend import eval
+
 
 # CLASSES
+class MyCSVLogger(Callback):
+    """Callback that streams epoch results to a csv file.
+  Supports all values that can be represented as a string,
+  including 1D iterables such as np.ndarray.
+  Example:
+  ```python
+  csv_logger = CSVLogger('training.log')
+  model.fit(X_train, Y_train, callbacks=[csv_logger])
+  ```
+  Arguments:
+      filename: filename of the csv file, e.g. 'run/log.csv'.
+      separator: string used to separate elements in the csv file.
+      append: True: append if file exists (useful for continuing
+          training). False: overwrite existing file,
+  """
+    
+    def __init__(self, filename, separator=',', append=False):
+        self.sep = separator
+        self.filename = filename
+        self.append = append
+        self.writer = None
+        self.keys = None
+        self.append_header = True
+        self.csv_file = None
+        if six.PY2:
+            self.file_flags = 'b'
+            self._open_args = {}
+        else:
+            self.file_flags = ''
+            self._open_args = {'newline': '\n'}
+        Callback.__init__(self)
+    
+    def on_train_begin(self, logs=None):
+        if self.append:
+            if file_io.file_exists(self.filename):
+                with open(self.filename, 'r' + self.file_flags) as f:
+                    self.append_header = not bool(len(f.readline()))
+            mode = 'a'
+        else:
+            mode = 'w'
+        self.csv_file = io.open(self.filename, mode + self.file_flags, **self._open_args)
+    
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        
+        def handle_value(k):
+            is_zero_dim_ndarray = isinstance(k, np.ndarray) and k.ndim == 0
+            if isinstance(k, six.string_types):
+                return k
+            elif isinstance(k, collections_abc.Iterable) and not is_zero_dim_ndarray:
+                return '"[%s]"' % (', '.join(map(str, k)))
+            else:
+                return k
+        
+        if self.keys is None:
+            self.keys = sorted(logs.keys())
+        
+        if self.model.stop_training:
+            # We set NA so that csv parsers do not fail for this last epoch.
+            logs = dict([(k, logs[k]) if k in logs else (k, 'NA') for k in self.keys])
+        
+        if not self.writer:
+            
+            class CustomDialect(csv.excel):
+                delimiter = self.sep
+            
+            fieldnames = ['epoch', 'learning_rate'] + self.keys
+            if six.PY2:
+                fieldnames = [unicode(x) for x in fieldnames]
+            
+            self.writer = csv.DictWriter(
+                self.csv_file,
+                fieldnames=fieldnames,
+                dialect=CustomDialect)
+            if self.append_header:
+                self.writer.writeheader()
+        
+        row_dict = collections.OrderedDict({'epoch': epoch, 'learning_rate': eval(self.model.optimizer.lr)})
+        row_dict.update((key, handle_value(logs[key])) for key in self.keys)
+        self.writer.writerow(row_dict)
+        self.csv_file.flush()
+    
+    def on_train_end(self, logs=None):
+        self.csv_file.close()
+        self.writer = None
+
+
 class Hyperparameters:
     
     def __init__(self):
@@ -86,6 +183,32 @@ class Hyperparameters:
         self.targets_binary = ['Sex']
         self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
         self.dict_side_predictors = {'Age': ['Sex'] + self.ethnicities_vars, 'Sex': ['Age'] + self.ethnicities_vars}
+        self.images_field_ids = ['20227', '202223', '210156', '210178', '20208', '20204', '20259', '201580', '201581',
+                                 '201582', '201583', '90001']
+        self.left_right_images_field_ids = ['202223', '210156', '210178', '201582', '201583']
+        self.dict_image_fields_to_views = {'Brain_20227': ['sagittal', 'coronal', 'transverse'],
+                                           'Carotid_202223': ['longaxis', 'shortaxis', 'CIMT120', 'CIMT150', 'mixed'],
+                                           'EyeFundus_210156': ['main'],
+                                           'EyeOCT_210178': ['main'],
+                                           'Heart_20208': ['2chambers', '3chambers', '4chambers'],
+                                           'Liver_20204': ['main'],
+                                           'Pancreas_20259': ['main'],
+                                           'FullBody_201580': ['figure', 'skeleton', 'flesh', 'mixed'],
+                                           'Spine_201581': ['sagittal', 'coronal'],
+                                           'Hip_201582': ['main'],
+                                           'Knee_201583': ['main'],
+                                           'PhysicalActivity_90001': ['main']}
+        # the number of epochs is too small for data augmentation to be helpful for now
+        self.field_ids_not_to_augment = ['20227', '210156', '210178', '201580', '90001'] + \
+                                        ['202223', '20208', '20204', '20259', '201581', '201582', '201583']
+        self.field_ids_to_augment = []
+        # Helpful to code:
+        self.dict_field_id_to_organ = {'20227': 'Brain', '202223': 'Carotid', '210156': 'EyeFundus', '210178': 'EyeOCT',
+                                       '20208': 'Heart', '20204': 'Liver', '20259': 'Pancreas', '201580': 'FullBody',
+                                       '201581': 'Spine', '201582': 'Hip', '201583': 'Knee',
+                                       '90001': 'PhysicalActivity'}
+        
+        # Others
         if '/Users/Alan/' in os.getcwd():
             os.chdir('/Users/Alan/Desktop/Aging/Medical_Images/scripts/')
         else:
@@ -125,11 +248,12 @@ class Metrics(Hyperparameters):
         Hyperparameters.__init__(self)
         self.metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
         self.metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
-        self.images_field_ids = ['20204', '20208', '20227', '210156']
-        self.dict_metrics_names_K = {'regression': ['RMSE'], 'binary': ['ROC-AUC', 'PR-AUC', 'Binary-Accuracy',
-                                                                        'Precision', 'Recall', 'True-Positives',
-                                                                        'False-Positives', 'False-Negatives',
-                                                                        'True-Negatives'],
+        self.images_field_ids = ['20227', '202223', '210156', '20208', '20204', '20259', '201580', '201581', '201582',
+                                 '201583', '90001']
+        self.dict_metrics_names_K = {'regression': ['RMSE'],  # For now, RSquare is buggy. Try again in a few months.
+                                     'binary': ['ROC-AUC', 'PR-AUC', 'F1-Score', 'Binary-Accuracy', 'Precision',
+                                                'Recall', 'True-Positives', 'False-Positives', 'False-Negatives',
+                                                'True-Negatives'],
                                      'multiclass': ['Categorical-Accuracy']}
         self.dict_metrics_names = {'regression': ['RMSE', 'R-Squared'],
                                    'binary': ['ROC-AUC', 'F1-Score', 'PR-AUC', 'Binary-Accuracy', 'Sensitivity',
@@ -138,11 +262,12 @@ class Metrics(Hyperparameters):
                                    'multiclass': ['Categorical-Accuracy']}
         self.dict_losses_names = {'regression': 'MSE', 'binary': 'Binary-Crossentropy',
                                   'multiclass': 'categorical_crossentropy'}
-        self.dict_main_metrics_names_K = {'Age': 'RMSE', 'Sex': 'ROC-AUC',
-                                          'imbalanced_binary_placeholder': 'ROC-PR'}
+        self.dict_main_metrics_names_K = {'Age': 'RMSE', 'Sex': 'PR-AUC',
+                                          'imbalanced_binary_placeholder': 'PR-AUC'}
         self.dict_main_metrics_names = {'Age': 'R-Squared', 'Sex': 'ROC-AUC',
-                                        'imbalanced_binary_placeholder': 'F1-Score'}
-        self.main_metrics_modes = {'loss': 'min', 'RMSE': 'min', 'ROC-AUC': 'max'}
+                                        'imbalanced_binary_placeholder': 'PR-AUC'}
+        self.main_metrics_modes = {'loss': 'min', 'R-Squared': 'max', 'RMSE': 'min', 'ROC-AUC': 'max', 'PR-AUC': 'max',
+                                   'F1-Score': 'max'}
         
         def rmse(y_true, y_pred):
             return math.sqrt(mean_squared_error(y_true, y_pred))
@@ -241,7 +366,7 @@ class PreprocessingMain(Hyperparameters):
         ethnicities = pd.get_dummies(self.data_raw['Ethnicity'])
         self.data_raw = self.data_raw.drop(['Ethnicity'], axis=1)
         ethnicities.rename(columns=dict_ethnicity_codes, inplace=True)
-        ethnicities['Ethnicity.White'] = ethnicities['Ethnicity.White'] + ethnicities['Ethnicity.British'] +\
+        ethnicities['Ethnicity.White'] = ethnicities['Ethnicity.White'] + ethnicities['Ethnicity.British'] + \
                                          ethnicities['Ethnicity.Irish'] + ethnicities['Ethnicity.White_Other']
         ethnicities['Ethnicity.Mixed'] = ethnicities['Ethnicity.Mixed'] + \
                                          ethnicities['Ethnicity.White_and_Black_Caribbean'] + \
@@ -323,38 +448,20 @@ class PreprocessingFolds(Metrics):
             dict.fromkeys(['Brain', 'Carotid', 'EyeFundus', 'EyeOCT', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine',
                            'Hip', 'Knee', 'PhysicalActivity', 'ECG', 'ArterialStiffness'], None))
         self.image_quality_col = self.dict_image_quality_col[self.organ]
-        self.images_field_ids = ['20227', '20223', '210156', '210178', '20208', '20204', '20259', '201580', '201581',
-                                 '201582', '201583', '90001']
-        self.left_right_images_field_ids = ['20223', '210156', '210178', '201582', '201583']
+        self.views = self.dict_image_fields_to_views[self.image_field]
         self.list_ids = None
+        self.list_ids_per_view = {}
         self.data = None
-        self.IDS = None
+        self.EIDS = None
+        self.EIDS_per_view = {'train': {}, 'val': {}, 'test': {}}
         self.data_fold = None
-        self.dict_image_fields_to_views = {'Brain_20227': ['sagittal', 'coronal', 'transverse'],
-                                           'Carotid_20223': ['longaxis', 'shortaxis', 'CIMT120', 'CIMT150', 'mixed'],
-                                           'EyeFundus_210156': ['main'],
-                                           'EyeOCT_210178': ['main'],
-                                           'Heart_20208': ['2chambers', '3chambers', '4chambers'],
-                                           'Liver_20204': ['main'],
-                                           'Pancreas_20259': ['main'],
-                                           'FullBody_201580': ['figure', 'skeleton', 'flesh', 'mixed'],
-                                           'Spine_201581': ['sagittal', 'coronal'],
-                                           'Hip_201582': ['main'],
-                                           'Knee_201583': ['main'],
-                                           'PhysicalActivity_90001': ['main']}
-        
-        # Helpful to code:
-        self.dict_field_id_to_organ = {'20227': 'Brain', '20223': 'Carotid', '210156': 'EyeFundus', '210178': 'EyeOCT',
-                                       '20208': 'Heart', '20204': 'Liver', '20259': 'Pancreas', '201580': 'FullBody',
-                                       '201581': 'Spine', '201582': 'Hip', '201583': 'Knee',
-                                       '90001': 'PhysicalActivity'}
     
     def _get_list_ids(self):
         # get the list of the ids available for the field_id
         if self.field_id in self.images_field_ids:
             list_ids = []
             # if different views are available, take the union of the ids
-            for view in self.dict_image_fields_to_views[self.image_field]:
+            for view in self.views:
                 path = '../images/' + self.organ + '/' + self.field_id + '/' + view + '/' + 'raw' + '/'
                 list_ids_view = []
                 # for paired organs, take the unions of the ids available on the right and the left sides
@@ -364,10 +471,10 @@ class PreprocessingFolds(Metrics):
                     list_ids_view = np.unique(list_ids_view).tolist()
                 else:
                     list_ids_view += os.listdir(path)
-                list_ids += list_ids_view
-            list_ids = np.unique(list_ids).tolist()
-            list_ids.sort()
-            self.list_ids = [im.replace('.jpg', '') for im in list_ids]
+                self.list_ids_per_view[view] = [im.replace('.jpg', '') for im in list_ids_view]
+                list_ids += self.list_ids_per_view[view]
+            self.list_ids = np.unique(list_ids).tolist()
+            self.list_ids.sort()
         else:
             list_ids_raw = pd.read_csv(self.path_store + 'IDs_' + self.field_id + '.csv')
             self.list_ids = list_ids_raw.values.squeeze().astype(str)
@@ -393,81 +500,99 @@ class PreprocessingFolds(Metrics):
         data = data.loc[self.list_ids]
         self.data = data
     
-    def _split_ids(self):
-        # distribute the ids between the different outer and inner folds
-        ids = self.data['eid'].unique()
-        random.shuffle(ids)
-        n_samples = len(ids)
+    def _split_eids(self):
+        # distribute the eids between the different outer and inner folds
+        eids = self.data['eid'].unique()
+        random.shuffle(eids)
+        n_samples = len(eids)
         n_samples_by_fold = n_samples / self.n_CV_outer_folds
-        FOLDS_IDS = {}
+        FOLDS_EIDS = {}
         for outer_fold in self.outer_folds:
-            FOLDS_IDS[outer_fold] = np.ndarray.tolist(
-                ids[int((int(outer_fold)) * n_samples_by_fold):int((int(outer_fold) + 1) * n_samples_by_fold)])
-        TRAINING_IDS = {}
-        VALIDATION_IDS = {}
-        TEST_IDS = {}
+            FOLDS_EIDS[outer_fold] = np.ndarray.tolist(
+                eids[int((int(outer_fold)) * n_samples_by_fold):int((int(outer_fold) + 1) * n_samples_by_fold)])
+        TRAINING_EIDS = {}
+        VALIDATION_EIDS = {}
+        TEST_EIDS = {}
         for i in self.outer_folds:
-            TRAINING_IDS[i] = []
-            VALIDATION_IDS[i] = []
-            TEST_IDS[i] = []
+            TRAINING_EIDS[i] = []
+            VALIDATION_EIDS[i] = []
+            TEST_EIDS[i] = []
             for j in self.outer_folds:
                 if j == i:
-                    VALIDATION_IDS[i].extend(FOLDS_IDS[j])
+                    VALIDATION_EIDS[i].extend(FOLDS_EIDS[j])
                 elif ((int(i) + 1) % self.n_CV_outer_folds) == int(j):
-                    TEST_IDS[i].extend(FOLDS_IDS[j])
+                    TEST_EIDS[i].extend(FOLDS_EIDS[j])
                 else:
-                    TRAINING_IDS[i].extend(FOLDS_IDS[j])
-        self.IDS = {'train': TRAINING_IDS, 'val': VALIDATION_IDS, 'test': TEST_IDS}
+                    TRAINING_EIDS[i].extend(FOLDS_EIDS[j])
+        self.EIDS = {'train': TRAINING_EIDS, 'val': VALIDATION_EIDS, 'test': TEST_EIDS}
+        
+        # Take subset of eids for each view, after splitting. (allows the split to be shared between views)
+        for view in self.views:
+            eids_view = self.data.loc[self.list_ids_per_view[view], 'eid'].unique()
+            self.EIDS_per_view[view] = {}
+            for fold in self.folds:
+                self.EIDS_per_view[view][fold] = {}
+                for outer_fold in self.outer_folds:
+                    self.EIDS_per_view[view][fold][outer_fold] = \
+                        list(set(self.EIDS[fold][outer_fold]).intersection(eids_view))
+                    self.EIDS_per_view[view][fold][outer_fold].sort()
     
     def _split_data(self):
         # generate inner fold split for each outer fold
-        normalizing_values = {}
-        for outer_fold in self.outer_folds:
-            print('Splitting data for outer fold ' + outer_fold)
-            # compute values for scaling of variables
-            data_train = self.data.iloc[self.data['eid'].isin(self.IDS['train'][outer_fold]).values, :]
-            for var in self.variables_to_normalize:
-                var_mean = data_train[var].mean()
-                if len(data_train[var].unique()) < 2:
-                    print('Variable ' + var + ' has a single value in fold ' + outer_fold +
-                          '. Using 1 as std for normalization.')
-                    var_std = 1
-                else:
-                    var_std = data_train[var].std()
-                normalizing_values[var] = {'mean': var_mean, 'std': var_std}
-            # generate folds
-            for fold in self.folds:
-                data_fold = self.data.iloc[self.data['eid'].isin(self.IDS[fold][outer_fold]).values, :]
-                data_fold['outer_fold'] = outer_fold
-                data_fold = data_fold[self.id_vars + ['outer_fold'] + self.demographic_vars]
-                # normalize the variables
+        for view in self.views:
+            print('Splitting data for view ' + view)
+            normalizing_values = {}
+            for outer_fold in self.outer_folds:
+                print('Splitting data for outer fold ' + outer_fold)
+                # compute values for scaling of variables
+                data_train = \
+                    self.data.iloc[self.data['eid'].isin(self.EIDS_per_view[view]['train'][outer_fold]).values, :]
                 for var in self.variables_to_normalize:
-                    data_fold[var + '_raw'] = data_fold[var]
-                    data_fold[var] = (data_fold[var] - normalizing_values[var]['mean']) / normalizing_values[var]['std']
-                # report issue if NAs were detected, which most likely comes from a sample whose id did not match
-                n_mismatching_samples = data_fold.isna().sum().max()
-                if n_mismatching_samples > 0:
-                    print(data_fold[data_fold.isna().any(axis=1)])
-                    print('/!\\ WARNING! ' + str(n_mismatching_samples) + ' ' + fold + ' images ids out of ' +
-                          str(len(data_fold.index)) + ' did not match the dataframe!')
-                data_fold.to_csv(self.path_store + 'data-features_' + self.image_field + '_' + self.target + '_' + fold
-                                 + '_' + outer_fold + '.csv', index=False)
-                print('For outer_fold ' + outer_fold + ', the ' + fold + ' fold has a sample size of ' +
-                      str(len(data_fold.index)))
-                self.data_fold = data_fold
+                    var_mean = data_train[var].mean()
+                    if len(data_train[var].unique()) < 2:
+                        print('Variable ' + var + ' has a single value in fold ' + outer_fold +
+                              '. Using 1 as std for normalization.')
+                        var_std = 1
+                    else:
+                        var_std = data_train[var].std()
+                    normalizing_values[var] = {'mean': var_mean, 'std': var_std}
+                # generate folds
+                for fold in self.folds:
+                    data_fold = \
+                        self.data.iloc[self.data['eid'].isin(self.EIDS_per_view[view][fold][outer_fold]).values, :]
+                    data_fold['outer_fold'] = outer_fold
+                    data_fold = data_fold[self.id_vars + ['outer_fold'] + self.demographic_vars]
+                    # normalize the variables
+                    for var in self.variables_to_normalize:
+                        data_fold[var + '_raw'] = data_fold[var]
+                        data_fold[var] = (data_fold[var] - normalizing_values[var]['mean']) \
+                                         / normalizing_values[var]['std']
+                    # report issue if NAs were detected, which most likely comes from a sample whose id did not match
+                    n_mismatching_samples = data_fold.isna().sum().max()
+                    if n_mismatching_samples > 0:
+                        print(data_fold[data_fold.isna().any(axis=1)])
+                        print('/!\\ WARNING! ' + str(n_mismatching_samples) + ' ' + fold + ' images ids out of ' +
+                              str(len(data_fold.index)) + ' did not match the dataframe!')
+                    data_fold.to_csv(self.path_store + 'data-features_' + self.image_field + '_' + view + '_' +
+                                     self.target + '_' + fold + '_' + outer_fold + '.csv', index=False)
+                    print('For outer_fold ' + outer_fold + ', the ' + fold + ' fold has a sample size of ' +
+                          str(len(data_fold.index)))
+                    self.data_fold = data_fold
     
     def generate_folds(self):
         self._get_list_ids()
         self._filter_and_format_data()
-        self._split_ids()
+        self._split_eids()
         self._split_data()
 
 
 class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
     
-    def __init__(self, target=None, field_id=None, data_features=None, batch_size=None, shuffle=None,
-                 side_predictors=None, dir_images=None, images_width=None, images_height=None, data_augmentation=False,
-                 seed=None):
+    def __init__(self, target=None, field_id=None, data_features=None, n_samples_per_subepoch=None, batch_size=None,
+                 training_mode=None, seed=None, side_predictors=None, dir_images=None, images_width=None,
+                 images_height=None, data_augmentation=False):
+        print('\n\n\n\n\nHERE\n\n\n\n\n This is for training mode =')
+        print(training_mode)
         # Parameters
         Hyperparameters.__init__(self)
         self.target = target
@@ -476,31 +601,34 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         else:
             self.labels = data_features[self.target + '_raw']
         self.field_id = field_id
+        self.training_mode = training_mode
         self.data_features = data_features
         self.list_ids = data_features.index.values
-        self.side_predictors = side_predictors
         self.batch_size = batch_size
-        self.n_ids_batch = self.batch_size
         # for paired organs, take twice fewer ids (two images for each id), and add organ_side as side predictor
         if self.field_id in self.left_right_images_field_ids:
             self.data_features['organ_side'] = np.nan
-            self.n_ids_batch = self.n_ids_batch // 2
+            self.n_ids_batch = self.batch_size // 2
         else:
             self.n_ids_batch = self.batch_size
-        self.steps = len(self.list_ids) // self.n_ids_batch
-        self.shuffle = shuffle
-        self.indices = None
-        self._on_epoch_end()  # initiate the indices and shuffle the ids
+        if self.training_mode & (n_samples_per_subepoch is not None):  # during training, 1 epoch = number of samples
+            self.steps = math.ceil(n_samples_per_subepoch / self.batch_size)
+        else:  # during prediction and other tasks, an epoch is defined as all the samples being seen once and only once
+            self.steps = math.ceil(len(self.list_ids) / self.n_ids_batch)
+        # initiate the indices and shuffle the ids
+        self.shuffle = training_mode  # Only shuffle if the model is being trained. Otherwise no need.
+        self.indices = np.arange(len(self.list_ids))
+        self.idx_end = 0  # Keep track of last indice to permute indices accordingly at the end of epoch.
+        if self.shuffle:
+            np.random.shuffle(self.list_ids)
+        # Input for side NN and CNN
+        self.side_predictors = side_predictors
         self.dir_images = dir_images
         self.images_width = images_width
         self.images_height = images_height
         # Data augmentation
         self.data_augmentation = data_augmentation
         self.seed = seed
-        # the number of epochs is too small for data augmentation to be helpful for now
-        self.field_ids_not_to_augment = ['20227', '210156', '210178', '201580', '90001'] + \
-                                        ['20223', '20208', '20204', '20259', '201581', '201582', '201583']
-        self.field_ids_to_augment = []
         # Parameters for data augmentation: (rotation range, width shift range, height shift range, zoom range)
         self.dict_augmentation_parameters = {}
         self.dict_augmentation_parameters.update(dict.fromkeys(self.field_ids_not_to_augment, (0, 0, 0, [0, 0])))
@@ -511,15 +639,14 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
                                     width_shift_range=self.dict_augmentation_parameters[self.field_id][1],
                                     height_shift_range=self.dict_augmentation_parameters[self.field_id][2],
                                     zoom_range=self.dict_augmentation_parameters[self.field_id][3])
+        print(self.indices)
     
     def __len__(self):
-        return int(np.floor(len(self.list_ids) / self.n_ids_batch))
+        return self.steps
     
-    def _on_epoch_end(self):
+    def on_epoch_end(self):
         _ = gc.collect()
-        self.indices = np.arange(len(self.list_ids))
-        if self.shuffle:
-            np.random.shuffle(self.indices)
+        self.indices = np.concatenate([self.indices[self.idx_end:], self.indices[:self.idx_end]])
     
     def _generate_image(self, path_image):
         img = load_img(path_image, target_size=(self.images_width, self.images_height), color_mode='rgb')
@@ -537,7 +664,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         n_samples_batch = min(len(list_ids_batch), self.batch_size)
         X = np.empty((n_samples_batch, self.images_width, self.images_height, 3)) * np.nan
         x = np.empty((n_samples_batch, len(self.side_predictors))) * np.nan
-        y = np.empty(n_samples_batch) * np.nan
+        y = np.empty((n_samples_batch, 1)) * np.nan
         # fill the matrices sample by sample
         for i, ID in enumerate(list_ids_batch):
             y[i] = self.labels[ID]
@@ -555,16 +682,49 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             else:
                 path = self.dir_images
             X[i, ] = self._generate_image(path_image=path + ID + '.jpg')
-        return X, x, y
+        return [X, x], y
     
     def __getitem__(self, index):
-        indices = self.indices[index * self.n_ids_batch: (index + 1) * self.n_ids_batch]
+        # Select the indices
+        print('\nPrinting indices in __getitem__()\n')
+        print(self.indices)
+        print('\n Now printinds the corresponding ids')
+        print(self.list_ids)
+        print('done printing what is above')
+        idx_start = (index * self.n_ids_batch) % len(self.list_ids)
+        idx_end = ((index + 1) * self.n_ids_batch) % len(self.list_ids)
+        print('\nINDEX')
+        print(index)
+        print('start, end')
+        print(idx_start)
+        print(idx_end)
+        if idx_start > idx_end:
+            # If this happens outside of training, that is a mistake
+            if not self.training_mode:
+                print('\nERROR: Outside of training, every sample should only be predicted once!')
+                sys.exit(1)
+            # Select part of the indices from the end of the epoch
+            indices = self.indices[idx_start:]
+            # Generate a new set of indices
+            print('\nThe end of the data was reached within this batch, looping.')
+            self.indices = np.arange(len(self.list_ids))
+            if self.shuffle:
+                np.random.shuffle(self.list_ids)
+            # Complete the batch with samples from the new indices
+            indices = np.concatenate([indices, self.indices[:idx_end]])
+            print('the new ids are now:')
+            print(self.list_ids)
+            print('\nThe end of the data was reached within this batch, looping.')
+        else:
+            indices = self.indices[idx_start: idx_end]
+        # Keep track of last indice for end of subepoch
+        self.idx_end = idx_end
+        # Select the corresponding ids
         list_ids_batch = [self.list_ids[i] for i in indices]
         # For paired organs, two images (left, right eyes) are selected for each id.
         if self.field_id in self.left_right_images_field_ids:
             list_ids_batch = [ID for ID in list_ids_batch for _ in ('right', 'left')]
-        X, x, y = self._data_generation(list_ids_batch)
-        return [X, x], y
+        return self._data_generation(list_ids_batch)
 
 
 class MyModelCheckpoint(ModelCheckpoint):
@@ -609,7 +769,7 @@ class DeepLearning(Metrics):
         self.dropout_rate = float(dropout_rate)
         self.outer_fold = None
         self.version = self.target + '_' + self.organ_id + '_' + self.view + '_' + self.transformation + '_' + \
-                       self.architecture + '_' + self.optimizer + '_' + np.format_float_positional(self.learning_rate)\
+                       self.architecture + '_' + self.optimizer + '_' + np.format_float_positional(self.learning_rate) \
                        + '_' + str(self.weight_decay) + '_' + str(self.dropout_rate)
         
         # NNet's architecture and weights
@@ -627,6 +787,12 @@ class DeepLearning(Metrics):
         self.DATA_FEATURES = {}
         self.mode = None
         self.n_cpus = len(os.sched_getaffinity(0))
+        if self.debug_mode:
+            self.n_samples_per_subepoch = self.batch_size * 4
+        else:
+            self.n_samples_per_subepoch = 32768
+        if self.field_id in self.left_right_images_field_ids:
+            self.n_samples_per_subepoch //= 2
         self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' \
                           + self.transformation + '/'
         
@@ -635,11 +801,11 @@ class DeepLearning(Metrics):
             # Brain
             '20227_main': (88, 88),  # Brain, initial size (88, 88)
             # Carotid
-            '20222_shortaxis': (337, 291),  # initial size (505, 436)
-            '20222_longaxis': (337, 291),  # initial size (505, 436)
-            '20222_CIMT120': (337, 291),  # initial size (505, 436)
-            '20222_CIMT150': (337, 291),  # initial size (505, 436)
-            '20222_mixed': (337, 291),  # initial size (505, 436)
+            '202223_shortaxis': (337, 291),  # initial size (505, 436)
+            '202223_longaxis': (337, 291),  # initial size (505, 436)
+            '202223_CIMT120': (337, 291),  # initial size (505, 436)
+            '202223_CIMT150': (337, 291),  # initial size (505, 436)
+            '202223_mixed': (337, 291),  # initial size (505, 436)
             # EyeFundus
             '210156_main': (300, 300),  # initial size (1388, 1388)
             # Heart
@@ -696,22 +862,20 @@ class DeepLearning(Metrics):
                                 'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
                                 'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
                                 'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
-        
+            
             '20204_3chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
                                 'Xception': 64, 'InceptionV3': 128, 'InceptionResNetV2': 64, 'ResNet50': 64,
                                 'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
                                 'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
                                 'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
-        
+            
             '20204_4chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
                                 'Xception': 64, 'InceptionV3': 128, 'InceptionResNetV2': 64, 'ResNet50': 64,
                                 'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
                                 'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
-                                'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4}
-        
-        }
+                                'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4}}
         # Define batch size
-        if self.field_id + '_' + self.view in self.dict_batch_sizes.keys:
+        if self.field_id + '_' + self.view in self.dict_batch_sizes.keys():
             self.batch_size = self.dict_batch_sizes[self.field_id + '_' + self.view][self.architecture]
         else:
             self.batch_size = self.dict_batch_sizes['Default'][self.architecture]
@@ -719,6 +883,10 @@ class DeepLearning(Metrics):
         if len(GPUtil.getGPUs()) > 0:  # make sure GPUs are available (not truesometimes for debugging)
             if GPUtil.getGPUs()[0].memoryTotal > 20000:
                 self.batch_size *= 2
+        # Define number of ids per batch (twice fewer for paired organs, because left and right samples)
+        self.n_ids_batch = self.batch_size
+        if self.field_id in self.left_right_images_field_ids:
+            self.n_ids_batch //= 2
         
         # dict to decide which field is used to generate the ids when several targets share the same ids
         self.dict_target_to_ids = dict.fromkeys(['Age', 'Sex'], 'Age')
@@ -731,8 +899,11 @@ class DeepLearning(Metrics):
         
         # Note: R-Squared and F1-Score are not available, because their batch based values are misleading.
         # For some reason, Sensitivity and Specificity are not available either. Might implement later.
-        self.dict_losses_K = {'MSE': MeanSquaredError(), 'Binary-Crossentropy': BinaryCrossentropy()}
-        self.dict_metrics_K = {'RMSE': RootMeanSquaredError(name='RMSE'),
+        self.dict_losses_K = {'MSE': MeanSquaredError(name='MSE'),
+                              'Binary-Crossentropy': BinaryCrossentropy(name='Binary-Crossentropy')}
+        self.dict_metrics_K = {'R-Squared': RSquare(name='R-Squared', y_shape=(1,)),
+                               'RMSE': RootMeanSquaredError(name='RMSE'),
+                               'F1-Score': F1Score(name='F1-Score', num_classes=1, dtype=tf.float32),
                                'ROC-AUC': AUC(curve='ROC', name='ROC-AUC'),
                                'PR-AUC': AUC(curve='PR', name='PR-AUC'),
                                'Binary-Accuracy': BinaryAccuracy(name='Binary-Accuracy'),
@@ -750,7 +921,7 @@ class DeepLearning(Metrics):
     def _load_data_features(self):
         for fold in self.folds:
             self.DATA_FEATURES[fold] = pd.read_csv(
-                self.path_store + 'data-features_' + self.organ + '_' + self.field_id + '_' +
+                self.path_store + 'data-features_' + self.organ + '_' + self.field_id + '_' + self.view + '_' +
                 self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
             for col_name in self.id_vars + ['outer_fold']:
                 self.DATA_FEATURES[fold][col_name] = self.DATA_FEATURES[fold][col_name].astype(str)
@@ -771,7 +942,7 @@ class DeepLearning(Metrics):
             if fold not in DATA_FEATURES.keys():
                 continue
             # parameters
-            shuffle = True if self.mode == 'model_training' else False
+            training_mode = True if self.mode == 'model_training' else False
             if (fold == 'train') & (self.mode == 'model_training') & (self.field_id in self.field_ids_to_augment):
                 data_augmentation = True
             else:
@@ -779,15 +950,23 @@ class DeepLearning(Metrics):
             # define batch size for testing: data is split between a part that fits in batches, and leftovers
             if self.mode == 'model_testing':
                 batch_size_fold = min(self.batch_size, len(DATA_FEATURES[fold].index))
+                if self.field_id in self.left_right_images_field_ids:
+                    batch_size_fold *= 2
             else:
                 batch_size_fold = self.batch_size
+            if (fold == 'train') & (self.mode == 'model_training'):
+                n_samples_per_subepoch = self.n_samples_per_subepoch
+            else:
+                n_samples_per_subepoch = None
             # generator
             GENERATORS[fold] = MyImageDataGenerator(target=self.target, field_id=self.field_id,
-                                                    data_features=DATA_FEATURES[fold], batch_size=batch_size_fold,
-                                                    shuffle=shuffle, side_predictors=self.side_predictors,
-                                                    dir_images=self.dir_images, images_width=self.image_width,
-                                                    images_height=self.image_height,
-                                                    data_augmentation=data_augmentation, seed=self.seed)
+                                                    data_features=DATA_FEATURES[fold],
+                                                    n_samples_per_subepoch=n_samples_per_subepoch,
+                                                    batch_size=batch_size_fold,
+                                                    training_mode=training_mode, seed=self.seed,
+                                                    side_predictors=self.side_predictors, dir_images=self.dir_images,
+                                                    images_width=self.image_width, images_height=self.image_height,
+                                                    data_augmentation=data_augmentation)
         return GENERATORS
     
     def _generate_class_weights(self):
@@ -913,7 +1092,7 @@ class DeepLearning(Metrics):
             except FileNotFoundError:
                 print('Error. No file was found. imagenet weights should have been used. Bug somewhere.')
                 sys.exit(1)
-
+    
     @staticmethod
     def clean_exit():
         # exit
@@ -954,10 +1133,9 @@ class Training(DeepLearning):
         # Generators
         self.folds = ['train', 'val']
         self.mode = 'model_training'
-        self.n_samples_per_subepoch = 16384
         self.class_weights = None
         self.GENERATORS = None
-
+        
         # Metrics
         self.loss_name = self.dict_losses_names[self.prediction_type]
         self.loss_function = self.dict_losses_K[self.loss_name]
@@ -971,11 +1149,11 @@ class Training(DeepLearning):
             self.metrics_names = [self.main_metric_name]
         self.metrics = [self.dict_metrics_K[metric_name] for metric_name in self.metrics_names]
         self.baseline_performance = None
-
+        
         # Model
         self.path_load_weights = self.path_store + 'model-weights_' + self.version + '.h5'
         if self.debug_mode:
-            self.path_save_weights = self.path_store + 'mw-debug_' + self.version + '.h5'
+            self.path_save_weights = self.path_store + 'model-weights-debug.h5'
         else:
             self.path_save_weights = self.path_store + 'model-weights_' + self.version + '.h5'
         self.n_epochs_max = 100000
@@ -1045,25 +1223,42 @@ class Training(DeepLearning):
         self.keras_weights = 'imagenet'
     
     def _compile_model(self):
-        opt = self.optimizers[self.optimizer](lr=self.learning_rate, clipnorm=1.0)
-        self.model.compile(optimizer=opt, loss=self.loss_function, metrics=self.metrics)
+        # if learning rate was reduced with success according to logger, start with this reduced learning rate
+        path_logger = self.path_store + 'logger_' + self.version + '.csv'
+        if os.path.exists(path_logger):
+            try:
+                logger = pd.read_csv(path_logger)
+                best_log = \
+                    logger[logger['val_' + self.main_metric_name] == logger['val_' + self.main_metric_name].max()]
+                lr = best_log['learning_rate'].values[0]
+            except pd.errors.EmptyDataError:
+                os.remove(path_logger)
+                lr = self.learning_rate
+        else:
+            lr = self.learning_rate
+        self.model.compile(optimizer=self.optimizers[self.optimizer](lr=lr, clipnorm=1.0),
+                           loss=self.loss_function, metrics=self.metrics)
     
     def _compute_baseline_performance(self):
         # calculate initial val_loss value
         if self.continue_training:
             idx_metric_name = ([self.loss_name] + self.metrics_names).index(self.main_metric_name)
-            # tf 2.2 baseline_perfs = self.model.evaluate(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
-            baseline_perfs = self.model.evaluate_generator(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
+            baseline_perfs = self.model.evaluate(self.GENERATORS['val'], steps=self.GENERATORS['val'].steps)
             self.baseline_performance = baseline_perfs[idx_metric_name]
         elif self.main_metric_mode == 'min':
             self.baseline_performance = np.Inf
         else:
             self.baseline_performance = -np.Inf
-        print('Baseline validation performance is: ' + str(self.baseline_performance))
+        print('Baseline validation ' + self.main_metric_name + ' = ' + str(self.baseline_performance))
     
     def _define_callbacks(self):
-        csv_logger = CSVLogger(self.path_store + 'logger_' + self.version + '.csv', separator=',',
-                               append=self.continue_training)
+        if self.debug_mode:
+            path_logger = self.path_store + 'logger-debug.csv'
+            append = False
+        else:
+            path_logger = self.path_store + 'logger_' + self.version + '.csv'
+            append = self.continue_training
+        csv_logger = MyCSVLogger(path_logger, separator=',', append=append)
         model_checkpoint_backup = MyModelCheckpoint(self.path_save_weights.replace('model-weights',
                                                                                    'backup-model-weights'),
                                                     monitor='val_' + self.main_metric.name,
@@ -1074,8 +1269,9 @@ class Training(DeepLearning):
                                              monitor='val_' + self.main_metric.name, baseline=self.baseline_performance,
                                              verbose=1, save_best_only=True, save_weights_only=True,
                                              mode=self.main_metric_mode, save_freq='epoch')
-        reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=10, verbose=1, mode='min',
-                                                 min_delta=0, cooldown=0, min_lr=0)
+        patience_reduce_lr = 2 + self.GENERATORS['train'].steps
+        reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=patience_reduce_lr, verbose=1,
+                                                 mode='min', min_delta=0, cooldown=0, min_lr=0)
         early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=30, verbose=0,
                                        mode=self.main_metric_mode, baseline=self.baseline_performance)
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, early_stopping, reduce_lr_on_plateau]
@@ -1097,21 +1293,11 @@ class Training(DeepLearning):
         # garbage collector
         _ = gc.collect()
         
-        # Split each epoch into several smaller epochs
-        steps_per_epoch = self.n_samples_per_subepoch // self.batch_size
-        
         # train the model
-        ''' tf2.2
-                self.model.fit(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
+        self.model.fit(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
                        validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
                        use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
-                       class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
-                       '''
-        self.model.fit_generator(self.GENERATORS['train'], steps_per_epoch=steps_per_epoch,
-                                 validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
-                                 use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
-                                 class_weight=self.class_weights, callbacks=self.callbacks, verbose=1)
-
+                       class_weight=self.class_weights, callbacks=self.callbacks, verbose=1)
 
 class PredictionsGenerate(DeepLearning):
     
@@ -1131,7 +1317,7 @@ class PredictionsGenerate(DeepLearning):
     def _split_batch_leftovers(self):
         # split the samples into two groups: what can fit into the batch size, and the leftovers.
         for fold in self.folds:
-            n_leftovers = len(self.DATA_FEATURES[fold].index) % self.batch_size
+            n_leftovers = len(self.DATA_FEATURES[fold].index) % self.n_ids_batch
             if n_leftovers > 0:
                 self.DATA_FEATURES_BATCH[fold] = self.DATA_FEATURES[fold].iloc[:-n_leftovers]
                 self.DATA_FEATURES_LEFTOVERS[fold] = self.DATA_FEATURES[fold].tail(n_leftovers)
@@ -1160,6 +1346,9 @@ class PredictionsGenerate(DeepLearning):
             else:
                 pred_full = pred_batch.squeeze()
             print('Predicted a total of ' + str(len(pred_full)) + ' samples.')
+            # take the average between left and right predictions for paired organs
+            if self.field_id in self.left_right_images_field_ids:
+                pred_full = np.mean(pred_full.reshape(-1, 2), axis=1)
             # unscale predictions
             if self.target in self.targets_regression:
                 pred_full = pred_full * std_train + mean_train
@@ -2351,7 +2540,7 @@ class PlotsAttentionMaps(DeepLearning):
         df_to_plot['save_title'] = self.target + '_' + self.organ + '_' + self.field_id + '_' + self.view + '_' + \
                                    self.transformation + '_' + df_to_plot['Sex'] + '_' + df_to_plot['age_category'] + \
                                    '_' + df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
-        path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ_id + '_' + self.view +\
+        path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ_id + '_' + self.view + \
                     '_' + self.transformation + '.csv'
         df_to_plot.to_csv(path_save, index=False)
         self.df_to_plot = df_to_plot
@@ -2368,11 +2557,12 @@ class PlotsAttentionMaps(DeepLearning):
         
         # generate the data generators
         self.generator = MyImageDataGenerator(target=self.target, field_id=self.field_id,
-                                              data_features=self.df_outer_fold, batch_size=self.batch_size,
-                                              shuffle=False, side_predictors=self.side_predictors,
-                                              dir_images=self.dir_images, images_width=self.image_width,
-                                              images_height=self.image_height, data_augmentation=False,
-                                              seed=self.seed)
+                                              data_features=self.df_outer_fold,
+                                              n_samples_per_subepoch=self.n_samples_per_subepoch,
+                                              batch_size=self.batch_size, shuffle=False, seed=self.seed,
+                                              side_predictors=self.side_predictors, dir_images=self.dir_images,
+                                              images_width=self.image_width, images_height=self.image_height,
+                                              data_augmentation=False)
         
         # load the weights for the fold
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')

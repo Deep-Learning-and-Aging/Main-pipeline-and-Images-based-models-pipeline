@@ -1,15 +1,18 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-#organs_fields=( "Heart_20208" "Liver_20204" "EyeFundus_210156" ) # "Brain_20227" )
+#organs_fields=( "Brain_20227" "Carotid_202223" "EyeFundus_210156" "EyeOCT_210178" "Heart_20208" "Liver_20204" "Pancreas_20259" "FullBody_201580" "Spine_201581" "Hip_201582" "Knee_201583" )
+organs_fields=( "Brain_20227" "Carotid_202223" "EyeFundus_210156" "Heart_20208" "Liver_20204" "Pancreas_20259" "FullBody_201580" "Spine_201581" "Hip_201582" "Knee_201583" )
 #organs_fields=( "Liver_20204" "Heart_20208" )
-organs_fields=( "EyeFundus_210156" )
+#organs_fields=( "EyeFundus_210156" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 #architectures=( "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "InceptionResNetV2" )
-architectures=( "EfficientNetB7" "DenseNet201" )
+#architectures=( "InceptionResNetV2" )
+#architectures=( "EfficientNetB7" "DenseNet201" )
 #architectures=( "ResNext101" "Xception" "VGG19" )
 #architectures=( "VGG16" "DenseNet121" "DenseNet169" "ResNet152V2" "InceptionV3" )
+#architectures=( "InceptionResNetV2" "InceptionV3" )
+architectures=( "InceptionV3" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.000001" )
@@ -21,20 +24,30 @@ dropout_rates=( "0.0" )
 #dropout_rates=( "0.0" "0.1" "0.2" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
 #outer_folds=( "1" "2" "3" "4" "5" "6" "7" "8" "9" )
-#outer_folds=( "0" )
+outer_folds=( "0" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
 time=600
-time=900
+#time=900
 #time=10
 for target in "${targets[@]}"; do
 	for organ_field in "${organs_fields[@]}"; do
 		if [ $organ_field == "Heart_20208" ]; then
 			views=( "2chambers" "3chambers" "4chambers" )
-            views=( "3chambers" )
+            views=( "4chambers" )
 		elif [ $organ_field == "Brain_20227" ]; then
 			views=( "sagittal" "coronal" "transverse" )
+			views=( "sagittal" )
+        elif [ $organ_field == "Carotid_202223" ]; then
+			views=( "longaxis" "shortaxis" "CIMT120" "CIMT150" "mixed" )
+			views=( "longaxis" )
+		elif [ $organ_field == "FullBody_201580" ]; then
+			views=( "figure" "skeleton" "flesh" "mixed" )
+			views=( "mixed" )
+		elif [ $organ_field == "Spine_201581" ]; then
+			views=( "sagittal" "coronal" )
+			views=( "coronal" )
 		else
 			views=( "main" )
 		fi
