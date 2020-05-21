@@ -591,8 +591,6 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
     def __init__(self, target=None, field_id=None, data_features=None, n_samples_per_subepoch=None, batch_size=None,
                  training_mode=None, seed=None, side_predictors=None, dir_images=None, images_width=None,
                  images_height=None, data_augmentation=False):
-        print('\n\n\n\n\nHERE\n\n\n\n\n This is for training mode =')
-        print(training_mode)
         # Parameters
         Hyperparameters.__init__(self)
         self.target = target
@@ -639,7 +637,6 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
                                     width_shift_range=self.dict_augmentation_parameters[self.field_id][1],
                                     height_shift_range=self.dict_augmentation_parameters[self.field_id][2],
                                     zoom_range=self.dict_augmentation_parameters[self.field_id][3])
-        print(self.indices)
     
     def __len__(self):
         return self.steps
@@ -686,18 +683,8 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
     
     def __getitem__(self, index):
         # Select the indices
-        print('\nPrinting indices in __getitem__()\n')
-        print(self.indices)
-        print('\n Now printinds the corresponding ids')
-        print(self.list_ids)
-        print('done printing what is above')
         idx_start = (index * self.n_ids_batch) % len(self.list_ids)
         idx_end = ((index + 1) * self.n_ids_batch) % len(self.list_ids)
-        print('\nINDEX')
-        print(index)
-        print('start, end')
-        print(idx_start)
-        print(idx_end)
         if idx_start > idx_end:
             # If this happens outside of training, that is a mistake
             if not self.training_mode:
@@ -707,14 +694,10 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             indices = self.indices[idx_start:]
             # Generate a new set of indices
             print('\nThe end of the data was reached within this batch, looping.')
-            self.indices = np.arange(len(self.list_ids))
             if self.shuffle:
                 np.random.shuffle(self.list_ids)
             # Complete the batch with samples from the new indices
             indices = np.concatenate([indices, self.indices[:idx_end]])
-            print('the new ids are now:')
-            print(self.list_ids)
-            print('\nThe end of the data was reached within this batch, looping.')
         else:
             indices = self.indices[idx_start: idx_end]
         # Keep track of last indice for end of subepoch
@@ -1296,8 +1279,9 @@ class Training(DeepLearning):
         # train the model
         self.model.fit(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
                        validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
-                       use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
+                       shuffle=False, use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
                        class_weight=self.class_weights, callbacks=self.callbacks, verbose=1)
+
 
 class PredictionsGenerate(DeepLearning):
     
