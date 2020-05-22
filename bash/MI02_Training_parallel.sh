@@ -1,8 +1,10 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
-targets=( "Age" )
+#targets=( "Age" )
+targets=( "Sex" )
 #organs_fields=( "Brain_20227" "Carotid_202223" "EyeFundus_210156" "EyeOCT_210178" "Heart_20208" "Liver_20204" "Pancreas_20259" "FullBody_201580" "Spine_201581" "Hip_201582" "Knee_201583" )
 organs_fields=( "Brain_20227" "Carotid_202223" "EyeFundus_210156" "Heart_20208" "Liver_20204" "Pancreas_20259" "FullBody_201580" "Spine_201581" "Hip_201582" "Knee_201583" )
+#organs_fields=( "Carotid_202223" )
 #organs_fields=( "Liver_20204" "Heart_20208" )
 #organs_fields=( "EyeFundus_210156" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
@@ -25,7 +27,7 @@ dropout_rates=( "0.0" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
 #outer_folds=( "1" "2" "3" "4" "5" "6" "7" "8" "9" )
 outer_folds=( "0" )
-memory=8G
+memory=16G
 n_cpu_cores=1
 n_gpus=1
 time=600

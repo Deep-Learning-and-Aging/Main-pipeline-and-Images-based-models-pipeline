@@ -525,17 +525,6 @@ class PreprocessingFolds(Metrics):
                 else:
                     TRAINING_EIDS[i].extend(FOLDS_EIDS[j])
         self.EIDS = {'train': TRAINING_EIDS, 'val': VALIDATION_EIDS, 'test': TEST_EIDS}
-        
-        # Take subset of eids for each view, after splitting. (allows the split to be shared between views)
-        for view in self.views:
-            eids_view = self.data.loc[self.list_ids_per_view[view], 'eid'].unique()
-            self.EIDS_per_view[view] = {}
-            for fold in self.folds:
-                self.EIDS_per_view[view][fold] = {}
-                for outer_fold in self.outer_folds:
-                    self.EIDS_per_view[view][fold][outer_fold] = \
-                        list(set(self.EIDS[fold][outer_fold]).intersection(eids_view))
-                    self.EIDS_per_view[view][fold][outer_fold].sort()
     
     def _split_data(self):
         # generate inner fold split for each outer fold
@@ -545,8 +534,8 @@ class PreprocessingFolds(Metrics):
             for outer_fold in self.outer_folds:
                 print('Splitting data for outer fold ' + outer_fold)
                 # compute values for scaling of variables
-                data_train = \
-                    self.data.iloc[self.data['eid'].isin(self.EIDS_per_view[view]['train'][outer_fold]).values, :]
+                data_train = self.data.iloc[self.data['eid'].isin(self.EIDS['train'][outer_fold]).values &
+                                            self.data['id'].isin(self.list_ids_per_view[view]).values, :]
                 for var in self.variables_to_normalize:
                     var_mean = data_train[var].mean()
                     if len(data_train[var].unique()) < 2:
@@ -559,7 +548,7 @@ class PreprocessingFolds(Metrics):
                 # generate folds
                 for fold in self.folds:
                     data_fold = \
-                        self.data.iloc[self.data['eid'].isin(self.EIDS_per_view[view][fold][outer_fold]).values, :]
+                        self.data.iloc[self.data['eid'].isin(self.EIDS[fold][outer_fold]).values, :]
                     data_fold['outer_fold'] = outer_fold
                     data_fold = data_fold[self.id_vars + ['outer_fold'] + self.demographic_vars]
                     # normalize the variables
@@ -602,7 +591,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.training_mode = training_mode
         self.data_features = data_features
         self.list_ids = data_features.index.values
-        self.batch_size = batch_size
+        self.batch_size = 1 # TODO batch_size
         # for paired organs, take twice fewer ids (two images for each id), and add organ_side as side predictor
         if self.field_id in self.left_right_images_field_ids:
             self.data_features['organ_side'] = np.nan
@@ -614,7 +603,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         else:  # during prediction and other tasks, an epoch is defined as all the samples being seen once and only once
             self.steps = math.ceil(len(self.list_ids) / self.n_ids_batch)
         # initiate the indices and shuffle the ids
-        self.shuffle = training_mode  # Only shuffle if the model is being trained. Otherwise no need.
+        self.shuffle = n_samples_per_subepoch is None # TODO training_mode  # Only shuffle if the model is being trained. Otherwise no need.
         self.indices = np.arange(len(self.list_ids))
         self.idx_end = 0  # Keep track of last indice to permute indices accordingly at the end of epoch.
         if self.shuffle:
@@ -693,7 +682,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             # Select part of the indices from the end of the epoch
             indices = self.indices[idx_start:]
             # Generate a new set of indices
-            print('\nThe end of the data was reached within this batch, looping.')
+            # print('\nThe end of the data was reached within this batch, looping.')
             if self.shuffle:
                 np.random.shuffle(self.list_ids)
             # Complete the batch with samples from the new indices
@@ -782,7 +771,9 @@ class DeepLearning(Metrics):
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
         self.dict_field_id_to_image_size = {
             # Brain
-            '20227_main': (88, 88),  # Brain, initial size (88, 88)
+            '20227_coronal': (88, 88),  # Brain, initial size (88, 88)
+            '20227_sagittal': (88, 88),  # Brain, initial size (88, 88)
+            '20227_transverse': (88, 88),  # Brain, initial size (88, 88)
             # Carotid
             '202223_shortaxis': (337, 291),  # initial size (505, 436)
             '202223_longaxis': (337, 291),  # initial size (505, 436)

@@ -2,8 +2,10 @@
 targets=( "Age" )
 image_fields=( "Brain_20227" "Carotid_202223" "EyeFundus_210156" "EyeOCT_210178" "Heart_20208" "Liver_20204" "Pancreas_20259" "FullBody_201580" "Spine_201581" "Hip_201582" "Knee_201583" ) #"PhysicalActivity_90001" )
 image_fields=( "Brain_20227" "Carotid_202223" "EyeFundus_210156" "Heart_20208" "Liver_20204" "Pancreas_20259" "FullBody_201580" "Spine_201581" "Hip_201582" "Knee_201583" )
+image_fields=( "Liver_20204" )
 n_cpu_cores=1
 time=5
+memory=8G
 for target in "${targets[@]}"; do
 	for image_field in "${image_fields[@]}"; do
 		version=MI01B_${target}_${image_field}

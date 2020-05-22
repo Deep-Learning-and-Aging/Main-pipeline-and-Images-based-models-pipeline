@@ -16,9 +16,9 @@ display_full_metrics = False
 if len(sys.argv) != 11:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
-    sys.argv.append('Age')  # target
-    sys.argv.append('Carotid_202223')  # organ_id, e.g Heart_20208.  EyeFundus_210156
-    sys.argv.append('longaxis')  # view
+    sys.argv.append('Sex')  # target
+    sys.argv.append('Heart_20208')  # organ_id, e.g Heart_20208.  EyeFundus_210156
+    sys.argv.append('4chambers')  # view
     sys.argv.append('raw')  # transformation
     sys.argv.append('InceptionV3')  # architecture
     sys.argv.append('Adam')  # optimizer
@@ -36,4 +36,29 @@ Model_Training = Training(target=sys.argv[1], organ_id=sys.argv[2], view=sys.arg
 Model_Training.data_preprocessing()
 Model_Training.build_model()
 Model_Training.train_model()
-Model_Training.clean_exit()
+#Model_Training.clean_exit()
+
+
+
+from tensorflow.python.keras.engine import data_adapter
+import numpy as np
+self = Model_Training
+gt = self.GENERATORS['train']
+[Xt, xt], yt = gt.__getitem__(0)
+pt = self.model.predict([Xt, xt])
+ct = np.corrcoef(yt.squeeze(), pt.squeeze())[0, 1]
+ct
+perfst = self.model.evaluate(gt, steps=10)
+perfst
+perfst = self.model.evaluate([Xt, xt], yt)
+perfst
+
+gv = self.GENERATORS['val']
+[Xv, xv], yv = gv.__getitem__(0)
+pv = self.model.predict([Xv, xv])
+cv = np.corrcoef(yv.squeeze(), pv.squeeze())[0, 1]
+cv
+perfsv = self.model.evaluate(gv, steps=10)
+perfsv
+perfsv = self.model.evaluate([Xv, xv], yv)
+perfsv
