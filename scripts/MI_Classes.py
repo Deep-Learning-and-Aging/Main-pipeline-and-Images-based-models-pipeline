@@ -63,93 +63,6 @@ from tensorflow.keras.backend import eval
 
 
 # CLASSES
-class MyCSVLogger(Callback):
-    """Callback that streams epoch results to a csv file.
-  Supports all values that can be represented as a string,
-  including 1D iterables such as np.ndarray.
-  Example:
-  ```python
-  csv_logger = CSVLogger('training.log')
-  model.fit(X_train, Y_train, callbacks=[csv_logger])
-  ```
-  Arguments:
-      filename: filename of the csv file, e.g. 'run/log.csv'.
-      separator: string used to separate elements in the csv file.
-      append: True: append if file exists (useful for continuing
-          training). False: overwrite existing file,
-  """
-    
-    def __init__(self, filename, separator=',', append=False):
-        self.sep = separator
-        self.filename = filename
-        self.append = append
-        self.writer = None
-        self.keys = None
-        self.append_header = True
-        self.csv_file = None
-        if six.PY2:
-            self.file_flags = 'b'
-            self._open_args = {}
-        else:
-            self.file_flags = ''
-            self._open_args = {'newline': '\n'}
-        Callback.__init__(self)
-    
-    def on_train_begin(self, logs=None):
-        if self.append:
-            if file_io.file_exists(self.filename):
-                with open(self.filename, 'r' + self.file_flags) as f:
-                    self.append_header = not bool(len(f.readline()))
-            mode = 'a'
-        else:
-            mode = 'w'
-        self.csv_file = io.open(self.filename, mode + self.file_flags, **self._open_args)
-    
-    def on_epoch_end(self, epoch, logs=None):
-        logs = logs or {}
-        
-        def handle_value(k):
-            is_zero_dim_ndarray = isinstance(k, np.ndarray) and k.ndim == 0
-            if isinstance(k, six.string_types):
-                return k
-            elif isinstance(k, collections_abc.Iterable) and not is_zero_dim_ndarray:
-                return '"[%s]"' % (', '.join(map(str, k)))
-            else:
-                return k
-        
-        if self.keys is None:
-            self.keys = sorted(logs.keys())
-        
-        if self.model.stop_training:
-            # We set NA so that csv parsers do not fail for this last epoch.
-            logs = dict([(k, logs[k]) if k in logs else (k, 'NA') for k in self.keys])
-        
-        if not self.writer:
-            
-            class CustomDialect(csv.excel):
-                delimiter = self.sep
-            
-            fieldnames = ['epoch', 'learning_rate'] + self.keys
-            if six.PY2:
-                fieldnames = [unicode(x) for x in fieldnames]
-            
-            self.writer = csv.DictWriter(
-                self.csv_file,
-                fieldnames=fieldnames,
-                dialect=CustomDialect)
-            if self.append_header:
-                self.writer.writeheader()
-        
-        row_dict = collections.OrderedDict({'epoch': epoch, 'learning_rate': eval(self.model.optimizer.lr)})
-        row_dict.update((key, handle_value(logs[key])) for key in self.keys)
-        self.writer.writerow(row_dict)
-        self.csv_file.flush()
-    
-    def on_train_end(self, logs=None):
-        self.csv_file.close()
-        self.writer = None
-
-
 class Hyperparameters:
     
     def __init__(self):
@@ -176,37 +89,30 @@ class Hyperparameters:
                                  'Ethnicity.Black_Other', 'Ethnicity.Chinese', 'Ethnicity.Other_ethnicity',
                                  'Ethnicity.Do_not_know', 'Ethnicity.Prefer_not_to_answer', 'Ethnicity.NA']
         self.demographic_vars = ['Age', 'Sex'] + self.ethnicities_vars
-        self.list_field_ids_in_instance_2 = ['20204', '20208', '20205', '20227']
-        self.names_model_parameters = ['target', 'organ', 'field_id', 'view', 'transformation', 'architecture',
+        self.names_model_parameters = ['target', 'organ', 'view', 'transformation', 'architecture',
                                        'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate']
         self.targets_regression = ['Age']
         self.targets_binary = ['Sex']
         self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
         self.dict_side_predictors = {'Age': ['Sex'] + self.ethnicities_vars, 'Sex': ['Age'] + self.ethnicities_vars}
-        self.images_field_ids = ['20227', '202223', '210156', '210178', '20208', '20204', '20259', '201580', '201581',
-                                 '201582', '201583', '90001']
-        self.left_right_images_field_ids = ['202223', '210156', '210178', '201582', '201583']
-        self.dict_image_fields_to_views = {'Brain_20227': ['sagittal', 'coronal', 'transverse'],
-                                           'Carotid_202223': ['longaxis', 'shortaxis', 'CIMT120', 'CIMT150', 'mixed'],
-                                           'EyeFundus_210156': ['main'],
-                                           'EyeOCT_210178': ['main'],
-                                           'Heart_20208': ['2chambers', '3chambers', '4chambers'],
-                                           'Liver_20204': ['main'],
-                                           'Pancreas_20259': ['main'],
-                                           'FullBody_201580': ['figure', 'skeleton', 'flesh', 'mixed'],
-                                           'Spine_201581': ['sagittal', 'coronal'],
-                                           'Hip_201582': ['main'],
-                                           'Knee_201583': ['main'],
-                                           'PhysicalActivity_90001': ['main']}
+        self.organs = ['Brain', 'Carotids', 'Eyes', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine', 'Hips', 'Knees',
+                       'PhysicalActivity']
+        self.left_right_organs = ['Carotids', 'Eyes', 'Hips', 'Knees']
+        self.dict_image_fields_to_views = {'Brain': ['sagittal', 'coronal', 'transverse'],
+                                           'Carotids': ['longaxis', 'shortaxis', 'CIMT120', 'CIMT150', 'mixed'],
+                                           'Eyes': ['fundus', 'OCT'],
+                                           'Heart': ['2chambers', '3chambers', '4chambers'],
+                                           'Liver': ['main'],
+                                           'Pancreas': ['main'],
+                                           'FullBody': ['figure', 'skeleton', 'flesh', 'mixed'],
+                                           'Spine': ['sagittal', 'coronal'],
+                                           'Hips': ['main'],
+                                           'Knees': ['main'],
+                                           'PhysicalActivity': ['main']}
         # the number of epochs is too small for data augmentation to be helpful for now
-        self.field_ids_not_to_augment = ['20227', '210156', '210178', '201580', '90001'] + \
-                                        ['202223', '20208', '20204', '20259', '201581', '201582', '201583']
-        self.field_ids_to_augment = []
-        # Helpful to code:
-        self.dict_field_id_to_organ = {'20227': 'Brain', '202223': 'Carotid', '210156': 'EyeFundus', '210178': 'EyeOCT',
-                                       '20208': 'Heart', '20204': 'Liver', '20259': 'Pancreas', '201580': 'FullBody',
-                                       '201581': 'Spine', '201582': 'Hip', '201583': 'Knee',
-                                       '90001': 'PhysicalActivity'}
+        self.organs_not_to_augment = ['Brain', 'Carotids', 'Eyes', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine',
+                                      'Hips', 'Knees', 'PhysicalActivity']
+        self.organs_to_augment = []
         
         # Others
         if '/Users/Alan/' in os.getcwd():
@@ -221,8 +127,8 @@ class Hyperparameters:
         parameters_list = model_name.split('_')
         for i, parameter in enumerate(self.names_model_parameters):
             parameters[parameter] = parameters_list[i]
-        if len(parameters_list) > 10:
-            parameters['outer_fold'] = parameters_list[10]
+        if len(parameters_list) > 9:
+            parameters['outer_fold'] = parameters_list[9]
         return parameters
     
     @staticmethod
@@ -248,8 +154,6 @@ class Metrics(Hyperparameters):
         Hyperparameters.__init__(self)
         self.metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
         self.metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
-        self.images_field_ids = ['20227', '202223', '210156', '20208', '20204', '20259', '201580', '201581', '201582',
-                                 '201583', '90001']
         self.dict_metrics_names_K = {'regression': ['RMSE'],  # For now, RSquare is buggy. Try again in a few months.
                                      'binary': ['ROC-AUC', 'PR-AUC', 'F1-Score', 'Binary-Accuracy', 'Precision',
                                                 'Recall', 'True-Positives', 'False-Positives', 'False-Negatives',
@@ -433,12 +337,11 @@ class PreprocessingFolds(Metrics):
     Gather all the hyperparameters of the algorithm
     """
     
-    def __init__(self, target, image_field):
+    def __init__(self, target, organ):
         Metrics.__init__(self)
         self.target = target
         self.image_field = image_field
-        self.organ = self.image_field.split('_')[0]
-        self.field_id = self.image_field.split('_')[1]
+        self.organ = organ
         self.side_predictors = self.dict_side_predictors[self.target]
         self.variables_to_normalize = self.side_predictors
         if self.target in self.targets_regression:
@@ -457,15 +360,15 @@ class PreprocessingFolds(Metrics):
         self.data_fold = None
     
     def _get_list_ids(self):
-        # get the list of the ids available for the field_id
-        if self.field_id in self.images_field_ids:
+        # get the list of the ids available for the organ
+        if self.organ in self.organs:
             list_ids = []
             # if different views are available, take the union of the ids
             for view in self.views:
-                path = '../images/' + self.organ + '/' + self.field_id + '/' + view + '/' + 'raw' + '/'
+                path = '../images/' + self.organ + '/' + '/' + view + '/' + 'raw' + '/'
                 list_ids_view = []
                 # for paired organs, take the unions of the ids available on the right and the left sides
-                if self.field_id in self.left_right_images_field_ids:
+                if self.organ in self.left_right_organs:
                     for side in ['right', 'left']:
                         list_ids_view += os.listdir(path + side + '/')
                     list_ids_view = np.unique(list_ids_view).tolist()
@@ -476,7 +379,7 @@ class PreprocessingFolds(Metrics):
             self.list_ids = np.unique(list_ids).tolist()
             self.list_ids.sort()
         else:
-            list_ids_raw = pd.read_csv(self.path_store + 'IDs_' + self.field_id + '.csv')
+            list_ids_raw = pd.read_csv(self.path_store + 'IDs_' + self.organ + '.csv')
             self.list_ids = list_ids_raw.values.squeeze().astype(str)
     
     def _filter_and_format_data(self):
@@ -577,7 +480,7 @@ class PreprocessingFolds(Metrics):
 
 class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
     
-    def __init__(self, target=None, field_id=None, data_features=None, n_samples_per_subepoch=None, batch_size=None,
+    def __init__(self, target=None, organ=None, data_features=None, n_samples_per_subepoch=None, batch_size=None,
                  training_mode=None, seed=None, side_predictors=None, dir_images=None, images_width=None,
                  images_height=None, data_augmentation=False):
         # Parameters
@@ -587,13 +490,13 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             self.labels = data_features[self.target]
         else:
             self.labels = data_features[self.target + '_raw']
-        self.field_id = field_id
+        self.organ = organ
         self.training_mode = training_mode
         self.data_features = data_features
         self.list_ids = data_features.index.values
         self.batch_size = batch_size
         # for paired organs, take twice fewer ids (two images for each id), and add organ_side as side predictor
-        if self.field_id in self.left_right_images_field_ids:
+        if self.organ in self.left_right_organs:
             self.data_features['organ_side'] = np.nan
             self.n_ids_batch = self.batch_size // 2
         else:
@@ -618,14 +521,14 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.seed = seed
         # Parameters for data augmentation: (rotation range, width shift range, height shift range, zoom range)
         self.dict_augmentation_parameters = {}
-        self.dict_augmentation_parameters.update(dict.fromkeys(self.field_ids_not_to_augment, (0, 0, 0, [0, 0])))
-        self.dict_augmentation_parameters.update(dict.fromkeys(self.field_ids_to_augment, (10, 0.1, 0.1, [0.9, 1.1])))
+        self.dict_augmentation_parameters.update(dict.fromkeys(self.organs_not_to_augment, (0, 0, 0, [0, 0])))
+        self.dict_augmentation_parameters.update(dict.fromkeys(self.organs_to_augment, (10, 0.1, 0.1, [0.9, 1.1])))
         
         ImageDataGenerator.__init__(self, rescale=1. / 255.,
-                                    rotation_range=self.dict_augmentation_parameters[self.field_id][0],
-                                    width_shift_range=self.dict_augmentation_parameters[self.field_id][1],
-                                    height_shift_range=self.dict_augmentation_parameters[self.field_id][2],
-                                    zoom_range=self.dict_augmentation_parameters[self.field_id][3])
+                                    rotation_range=self.dict_augmentation_parameters[self.organ][0],
+                                    width_shift_range=self.dict_augmentation_parameters[self.organ][1],
+                                    height_shift_range=self.dict_augmentation_parameters[self.organ][2],
+                                    zoom_range=self.dict_augmentation_parameters[self.organ][3])
     
     def __len__(self):
         return self.steps
@@ -655,7 +558,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         for i, ID in enumerate(list_ids_batch):
             y[i] = self.labels[ID]
             x[i] = self.data_features.loc[ID, self.side_predictors]
-            if self.field_id in self.left_right_images_field_ids:
+            if self.organ in self.left_right_organs:
                 if i % 2 == 0:
                     path = self.dir_images + 'right/'
                     x[i][-1] = 0
@@ -694,9 +597,82 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         # Select the corresponding ids
         list_ids_batch = [self.list_ids[i] for i in indices]
         # For paired organs, two images (left, right eyes) are selected for each id.
-        if self.field_id in self.left_right_images_field_ids:
+        if self.organ in self.left_right_organs:
             list_ids_batch = [ID for ID in list_ids_batch for _ in ('right', 'left')]
         return self._data_generation(list_ids_batch)
+
+
+class MyCSVLogger(Callback):
+    
+    def __init__(self, filename, separator=',', append=False):
+        self.sep = separator
+        self.filename = filename
+        self.append = append
+        self.writer = None
+        self.keys = None
+        self.append_header = True
+        self.csv_file = None
+        if six.PY2:
+            self.file_flags = 'b'
+            self._open_args = {}
+        else:
+            self.file_flags = ''
+            self._open_args = {'newline': '\n'}
+        Callback.__init__(self)
+    
+    def on_train_begin(self, logs=None):
+        if self.append:
+            if file_io.file_exists(self.filename):
+                with open(self.filename, 'r' + self.file_flags) as f:
+                    self.append_header = not bool(len(f.readline()))
+            mode = 'a'
+        else:
+            mode = 'w'
+        self.csv_file = io.open(self.filename, mode + self.file_flags, **self._open_args)
+    
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        
+        def handle_value(k):
+            is_zero_dim_ndarray = isinstance(k, np.ndarray) and k.ndim == 0
+            if isinstance(k, six.string_types):
+                return k
+            elif isinstance(k, collections_abc.Iterable) and not is_zero_dim_ndarray:
+                return '"[%s]"' % (', '.join(map(str, k)))
+            else:
+                return k
+        
+        if self.keys is None:
+            self.keys = sorted(logs.keys())
+        
+        if self.model.stop_training:
+            # We set NA so that csv parsers do not fail for this last epoch.
+            logs = dict([(k, logs[k]) if k in logs else (k, 'NA') for k in self.keys])
+        
+        if not self.writer:
+            
+            class CustomDialect(csv.excel):
+                delimiter = self.sep
+            
+            fieldnames = ['epoch', 'learning_rate'] + self.keys
+            if six.PY2:
+                fieldnames = [unicode(x) for x in fieldnames]
+            
+            self.writer = csv.DictWriter(
+                self.csv_file,
+                fieldnames=fieldnames,
+                dialect=CustomDialect)
+            if self.append_header:
+                self.writer.writeheader()
+        
+        row_dict = collections.OrderedDict({'epoch': epoch, 'learning_rate': eval(self.model.optimizer.lr)})
+        row_dict.update((key, handle_value(logs[key])) for key in self.keys)
+        self.writer.writerow(row_dict)
+        self.csv_file.flush()
+    
+    def on_train_end(self, logs=None):
+        self.csv_file.close()
+        self.writer = None
 
 
 class MyModelCheckpoint(ModelCheckpoint):
@@ -721,7 +697,7 @@ class DeepLearning(Metrics):
     Train models
     """
     
-    def __init__(self, target=None, organ_id=None, view=None, transformation=None, architecture=None, optimizer=None,
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
         # Initialization
         Metrics.__init__(self)
@@ -729,9 +705,7 @@ class DeepLearning(Metrics):
         
         # Model's version
         self.target = target
-        self.organ_id = organ_id
-        self.organ = self.organ_id.split('_')[0]
-        self.field_id = self.organ_id.split('_')[1]
+        self.organ = organ
         self.view = view
         self.transformation = transformation
         self.architecture = architecture
@@ -740,13 +714,13 @@ class DeepLearning(Metrics):
         self.weight_decay = float(weight_decay)
         self.dropout_rate = float(dropout_rate)
         self.outer_fold = None
-        self.version = self.target + '_' + self.organ_id + '_' + self.view + '_' + self.transformation + '_' + \
+        self.version = self.target + '_' + self.organ + '_' + self.view + '_' + self.transformation + '_' + \
                        self.architecture + '_' + self.optimizer + '_' + np.format_float_positional(self.learning_rate) \
                        + '_' + str(self.weight_decay) + '_' + str(self.dropout_rate)
         
         # NNet's architecture and weights
         self.side_predictors = self.dict_side_predictors[self.target]
-        if self.field_id in self.left_right_images_field_ids:
+        if self.organ in self.left_right_organs:
             self.side_predictors.append('organ_side')
         self.dict_final_activations = {'regression': 'linear', 'binary': 'sigmoid', 'multiclass': 'softmax',
                                        'saliency': 'linear'}
@@ -763,52 +737,42 @@ class DeepLearning(Metrics):
             self.n_samples_per_subepoch = self.batch_size * 4
         else:
             self.n_samples_per_subepoch = 32768
-        if self.field_id in self.left_right_images_field_ids:
+        if self.organ in self.left_right_organs:
             self.n_samples_per_subepoch //= 2
-        self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' \
-                          + self.transformation + '/'
+        self.dir_images = '../images/' + self.organ + '/' + '/' + self.view + '/' + self.transformation + '/'
         
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
-        self.dict_field_id_to_image_size = {
-            # Brain
-            '20227_coronal': (88, 88),  # Brain, initial size (88, 88)
-            '20227_sagittal': (88, 88),  # Brain, initial size (88, 88)
-            '20227_transverse': (88, 88),  # Brain, initial size (88, 88)
-            # Carotid
-            '202223_shortaxis': (337, 291),  # initial size (505, 436)
-            '202223_longaxis': (337, 291),  # initial size (505, 436)
-            '202223_CIMT120': (337, 291),  # initial size (505, 436)
-            '202223_CIMT150': (337, 291),  # initial size (505, 436)
-            '202223_mixed': (337, 291),  # initial size (505, 436)
-            # EyeFundus
-            '210156_main': (300, 300),  # initial size (1388, 1388)
-            # Heart
-            '20208_2chambers': (200, 200),  # initial size (200, 200)
-            '20208_3chambers': (200, 200),  # initial size (200, 200)
-            '20208_4chambers': (200, 200),  # initial size (200, 200)
-            # Liver
-            '20204_main': (288, 364),  # initial size (364, 288)
-            # Pancreas
-            '20259_main': (288, 350),  # initial size (350, 288)
-            # FullBody
-            '201580_figure': (541, 181),  # FullBody, initial size (811, 272)
-            '201580_skeleton': (541, 181),  # FullBody, initial size (811, 272)
-            '201580_flesh': (541, 181),  # FullBody, initial size (811, 272)
-            '201580_mixed': (541, 181),  # FullBody, initial size (811, 272)
-            # Spine
-            '201581_coronal': (315, 313),  # Spine, initial size (724, 720)
-            '201581_sagittal': (466, 211),  # Spine, initial size (1513, 684)
-            # Hip
-            '201582_main': (329, 303),  # Hip, initial size (626, 680)
-            # Knee
-            '201583_main': (347, 286)  # Knee, initial size (851, 700)
+        self.dict_organ_view_to_image_size = {
+            'Brain_coronal': (88, 88),  # initial size (88, 88)
+            'Brain_sagittal': (88, 88),  # initial size (88, 88)
+            'Brain_transverse': (88, 88),  # initial size (88, 88)
+            'Carotids_shortaxis': (337, 291),  # initial size (505, 436)
+            'Carotids_longaxis': (337, 291),  # initial size (505, 436)
+            'Carotids_CIMT120': (337, 291),  # initial size (505, 436)
+            'Carotids_CIMT150': (337, 291),  # initial size (505, 436)
+            'Carotids_mixed': (337, 291),  # initial size (505, 436)
+            'Eyes_fundus': (300, 300),  # initial size (1388, 1388)
+            'Eyes_OCT': (TODO, TODO),  # initial size (1388, 1388)
+            'Heart_2chambers': (200, 200),  # initial size (200, 200)
+            'Heart_3chambers': (200, 200),  # initial size (200, 200)
+            'Heart_4chambers': (200, 200),  # initial size (200, 200)
+            'Liver_main': (288, 364),  # initial size (364, 288)
+            'Pancreas_main': (288, 350),  # initial size (350, 288)
+            'FullBody_figure': (541, 181),  # initial size (811, 272)
+            'FullBody_skeleton': (541, 181),  # initial size (811, 272)
+            'FullBody_flesh': (541, 181),  # initial size (811, 272)
+            'FullBody_mixed': (541, 181),  # initial size (811, 272)
+            'Spine_sagittal': (466, 211),  # initial size (1513, 684)
+            'Spine_coronal': (315, 313),  # initial size (724, 720)
+            'Hips_main': (329, 303),  # initial size (626, 680)
+            'Knees_main': (347, 286)  # initial size (851, 700)
         }
         self.dict_architecture_to_image_size = {'MobileNet': (224, 224), 'MobileNetV2': (224, 224),
                                                 'NASNetMobile': (224, 224), 'NASNetLarge': (331, 331)}
         if self.architecture in ['MobileNet', 'MobileNetV2', 'NASNetMobile', 'NASNetLarge']:
             self.image_width, self.image_height = self.dict_architecture_to_image_size[self.architecture]
         else:
-            self.image_width, self.image_height = self.dict_field_id_to_image_size[self.field_id + '_' + self.view]
+            self.image_width, self.image_height = self.dict_organ_view_to_image_size[self.organ + '_' + self.view]
         
         # define dictionary of batch sizes to fit as many samples as the model's architecture allows
         self.dict_batch_sizes = {
@@ -818,39 +782,39 @@ class DeepLearning(Metrics):
                         'ResNet152': 16, 'ResNet50V2': 32, 'ResNet101V2': 16, 'ResNet152V2': 16, 'ResNeXt50': 4,
                         'ResNeXt101': 8, 'EfficientNetB7': 4,
                         'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
-            # Brain
-            '20227_main': {'VGG16': 512, 'VGG19': 512, 'DenseNet121': 256, 'DenseNet169': 256, 'DenseNet201': 256,
-                           'Xception': 512, 'InceptionV3': 1024, 'InceptionResNetV2': 256, 'ResNet50': 512,
-                           'ResNet101': 256, 'ResNet152': 256, 'ResNet50V2': 512, 'ResNet101V2': 256,
-                           'ResNet152V2': 256, 'ResNeXt50': 64, 'ResNeXt101': 128, 'EfficientNetB7': 64,
-                           'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
-            # EyeFundus
-            '210156_main': {'VGG16': 32, 'VGG19': 32, 'DenseNet121': 16, 'DenseNet169': 16, 'DenseNet201': 16,
-                            'Xception': 32, 'InceptionV3': 64, 'InceptionResNetV2': 16, 'ResNet50': 32, 'ResNet101': 16,
-                            'ResNet152': 16, 'ResNet50V2': 32, 'ResNet101V2': 16, 'ResNet152V2': 16, 'ResNeXt50': 4,
-                            'ResNeXt101': 8, 'EfficientNetB7': 4,
-                            'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
-            # Heart
-            '20204_2chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
+            'Brain_sagittal': {'VGG16': 512, 'VGG19': 512, 'DenseNet121': 256, 'DenseNet169': 256, 'DenseNet201': 256,
+                               'Xception': 512, 'InceptionV3': 1024, 'InceptionResNetV2': 256, 'ResNet50': 512,
+                               'ResNet101': 256, 'ResNet152': 256, 'ResNet50V2': 512, 'ResNet101V2': 256,
+                               'ResNet152V2': 256, 'ResNeXt50': 64, 'ResNeXt101': 128, 'EfficientNetB7': 64,
+                               'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
+            'Brain_coronal': {'VGG16': 512, 'VGG19': 512, 'DenseNet121': 256, 'DenseNet169': 256, 'DenseNet201': 256,
+                              'Xception': 512, 'InceptionV3': 1024, 'InceptionResNetV2': 256, 'ResNet50': 512,
+                              'ResNet101': 256, 'ResNet152': 256, 'ResNet50V2': 512, 'ResNet101V2': 256,
+                              'ResNet152V2': 256, 'ResNeXt50': 64, 'ResNeXt101': 128, 'EfficientNetB7': 64,
+                              'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
+            'Brain_transverse': {'VGG16': 512, 'VGG19': 512, 'DenseNet121': 256, 'DenseNet169': 256, 'DenseNet201': 256,
+                                 'Xception': 512, 'InceptionV3': 1024, 'InceptionResNetV2': 256, 'ResNet50': 512,
+                                 'ResNet101': 256, 'ResNet152': 256, 'ResNet50V2': 512, 'ResNet101V2': 256,
+                                 'ResNet152V2': 256, 'ResNeXt50': 64, 'ResNeXt101': 128, 'EfficientNetB7': 64,
+                                 'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
+            'Heart_2chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
                                 'Xception': 64, 'InceptionV3': 128, 'InceptionResNetV2': 64, 'ResNet50': 64,
                                 'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
                                 'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
                                 'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
-            
-            '20204_3chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
+            'Heart_3chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
                                 'Xception': 64, 'InceptionV3': 128, 'InceptionResNetV2': 64, 'ResNet50': 64,
                                 'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
                                 'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
                                 'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4},
-            
-            '20204_4chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
+            'Heart_4chambers': {'VGG16': 64, 'VGG19': 128, 'DenseNet121': 64, 'DenseNet169': 32, 'DenseNet201': 32,
                                 'Xception': 64, 'InceptionV3': 128, 'InceptionResNetV2': 64, 'ResNet50': 64,
                                 'ResNet101': 32, 'ResNet152': 32, 'ResNet50V2': 64, 'ResNet101V2': 32,
                                 'ResNet152V2': 32, 'ResNeXt50': 16, 'ResNeXt101': 8, 'EfficientNetB7': 8,
                                 'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4}}
         # Define batch size
-        if self.field_id + '_' + self.view in self.dict_batch_sizes.keys():
-            self.batch_size = self.dict_batch_sizes[self.field_id + '_' + self.view][self.architecture]
+        if self.organ + '_' + self.view in self.dict_batch_sizes.keys():
+            self.batch_size = self.dict_batch_sizes[self.organ + '_' + self.view][self.architecture]
         else:
             self.batch_size = self.dict_batch_sizes['Default'][self.architecture]
         # double the batch size for the teslaM40 cores that have bigger memory
@@ -859,7 +823,7 @@ class DeepLearning(Metrics):
                 self.batch_size *= 2
         # Define number of ids per batch (twice fewer for paired organs, because left and right samples)
         self.n_ids_batch = self.batch_size
-        if self.field_id in self.left_right_images_field_ids:
+        if self.organ in self.left_right_organs:
             self.n_ids_batch //= 2
         
         # dict to decide which field is used to generate the ids when several targets share the same ids
@@ -895,7 +859,7 @@ class DeepLearning(Metrics):
     def _load_data_features(self):
         for fold in self.folds:
             self.DATA_FEATURES[fold] = pd.read_csv(
-                self.path_store + 'data-features_' + self.organ + '_' + self.field_id + '_' + self.view + '_' +
+                self.path_store + 'data-features_' + self.organ + '_' + self.view + '_' +
                 self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
             for col_name in self.id_vars + ['outer_fold']:
                 self.DATA_FEATURES[fold][col_name] = self.DATA_FEATURES[fold][col_name].astype(str)
@@ -917,14 +881,14 @@ class DeepLearning(Metrics):
                 continue
             # parameters
             training_mode = True if self.mode == 'model_training' else False
-            if (fold == 'train') & (self.mode == 'model_training') & (self.field_id in self.field_ids_to_augment):
+            if (fold == 'train') & (self.mode == 'model_training') & (self.organ in self.organs_to_augment):
                 data_augmentation = True
             else:
                 data_augmentation = False
             # define batch size for testing: data is split between a part that fits in batches, and leftovers
             if self.mode == 'model_testing':
                 batch_size_fold = min(self.batch_size, len(DATA_FEATURES[fold].index))
-                if self.field_id in self.left_right_images_field_ids:
+                if self.organ in self.left_right_organs:
                     batch_size_fold *= 2
             else:
                 batch_size_fold = self.batch_size
@@ -933,7 +897,7 @@ class DeepLearning(Metrics):
             else:
                 n_samples_per_subepoch = None
             # generator
-            GENERATORS[fold] = MyImageDataGenerator(target=self.target, field_id=self.field_id,
+            GENERATORS[fold] = MyImageDataGenerator(target=self.target, organ=self.organ,
                                                     data_features=DATA_FEATURES[fold],
                                                     n_samples_per_subepoch=n_samples_per_subepoch,
                                                     batch_size=batch_size_fold,
@@ -1089,18 +1053,18 @@ class Training(DeepLearning):
     Train models
     """
     
-    def __init__(self, target=None, organ_id=None, view=None, transformation=None, architecture=None, optimizer=None,
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, outer_fold=None, debug_mode=False,
                  max_transfer_learning=False, continue_training=True, display_full_metrics=True):
         # parameters
-        DeepLearning.__init__(self, target, organ_id, view, transformation, architecture, optimizer, learning_rate,
+        DeepLearning.__init__(self, target, organ, view, transformation, architecture, optimizer, learning_rate,
                               weight_decay, dropout_rate, debug_mode)
         self.outer_fold = outer_fold
         self.version = self.version + '_' + str(self.outer_fold)
         # NNet's architecture's weights
         self.continue_training = continue_training
         self.max_transfer_learning = max_transfer_learning
-        self.list_parameters_to_match = ['organ', 'transformation', 'field_id', 'view']
+        self.list_parameters_to_match = ['organ', 'transformation', 'view']
         # dict to decide in which order targets should be used when trying to transfer weight from a similar model
         self.dict_alternative_targets_for_transfer_learning = {'Age': ['Age', 'Sex'], 'Sex': ['Sex', 'Age']}
         
@@ -1170,7 +1134,7 @@ class Training(DeepLearning):
                         'target'] + '_' + 'val' + '.csv'
                     try:
                         Performances = pd.read_csv(path_performances_to_load)
-                        Performances['field_id'] = Performances['field_id'].astype(str)
+                        Performances['organ'] = Performances['organ'].astype(str)
                     except FileNotFoundError:
                         # print("Could not load the file: " + path_performances_to_load)
                         break
@@ -1276,10 +1240,10 @@ class Training(DeepLearning):
 
 class PredictionsGenerate(DeepLearning):
     
-    def __init__(self, target=None, organ_id=None, view=None, transformation=None, architecture=None, optimizer=None,
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
         # Initialize parameters
-        DeepLearning.__init__(self, target, organ_id, view, transformation, architecture, optimizer, learning_rate,
+        DeepLearning.__init__(self, target, organ, view, transformation, architecture, optimizer, learning_rate,
                               weight_decay, dropout_rate, debug_mode)
         self.mode = 'model_testing'
         # Define dictionaries attributes for data, generators and predictions
@@ -1322,7 +1286,7 @@ class PredictionsGenerate(DeepLearning):
                 pred_full = pred_batch.squeeze()
             print('Predicted a total of ' + str(len(pred_full)) + ' samples.')
             # take the average between left and right predictions for paired organs
-            if self.field_id in self.left_right_images_field_ids:
+            if self.organ in self.left_right_organs:
                 pred_full = np.mean(pred_full.reshape(-1, 2), axis=1)
             # unscale predictions
             if self.target in self.targets_regression:
@@ -1484,18 +1448,16 @@ class PredictionsMerge(Hyperparameters):
 
 class PerformancesGenerate(Metrics):
     
-    def __init__(self, target=None, image_type=None, transformation=None, architecture=None, optimizer=None,
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
                  learning_rate=None, weight_decay=None, dropout_rate=None, fold=None, debug_mode=False):
         
         Metrics.__init__(self)
         
         self.target = target
-        self.image_type = image_type
-        self.organ = self.image_type.split('_')[0]
-        self.field_id = self.image_type.split('_')[1]
-        self.view = self.image_type.split('_')[2]
-        self.architecture = architecture
+        self.organ = organ
+        self.view = view
         self.transformation = transformation
+        self.architecture = architecture
         self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
@@ -1815,16 +1777,15 @@ class PerformancesTuning(Metrics):
         for fold in self.folds:
             path = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.target + '_' + fold + '.csv'
             self.PERFORMANCES[fold] = pd.read_csv(path).set_index('version', drop=False)
-            self.PERFORMANCES[fold]['field_id'] = self.PERFORMANCES[fold]['field_id'].astype(str)
+            self.PERFORMANCES[fold]['organ'] = self.PERFORMANCES[fold]['organ'].astype(str)
             self.PERFORMANCES[fold].index.name = 'columns_names'
             self.PREDICTIONS[fold] = pd.read_csv(path.replace('PERFORMANCES', 'PREDICTIONS').replace('_ranked', ''))
     
     def preprocess_data(self):
         # Get list of distinct models without taking into account hyperparameters tuning
         self.Performances = self.PERFORMANCES['val']
-        self.Performances['model'] = self.Performances['organ'] + '_' + self.Performances['field_id'] + '_' \
-                                     + self.Performances['view'] + '_' + self.Performances['transformation'] + '_' \
-                                     + self.Performances['architecture']
+        self.Performances['model'] = self.Performances['organ'] + '_' + self.Performances['view'] + '_' + \
+                                     self.Performances['transformation'] + '_' + self.Performances['architecture']
         self.models = self.Performances['model'].unique()
     
     def select_models(self):
@@ -1861,7 +1822,7 @@ class EnsemblesPredictions(Metrics):
         Metrics.__init__(self)
         self.target = target
         self.ensembles_performance_cutoff_percent = 0
-        self.parameters = {'target': self.target, 'organ': '*', 'field_id': '*', 'view': '*', 'transformation': '*',
+        self.parameters = {'target': self.target, 'organ': '*', 'view': '*', 'transformation': '*',
                            'architecture': '*', 'optimizer': '*', 'learning_rate': '*', 'weight_decay': '*',
                            'dropout_rate': '*'}
         self.version = self._parameters_to_version(self.parameters)
@@ -1869,8 +1830,8 @@ class EnsemblesPredictions(Metrics):
         self.init_perf = -np.Inf if self.main_metrics_modes[self.main_metric_name] == 'max' else np.Inf
         path_perf = self.path_store + 'PERFORMANCES_tuned_ranked_' + target + '_val.csv'
         self.Performances = pd.read_csv(path_perf).set_index('version', drop=False)
-        self.Performances['field_id'] = self.Performances['field_id'].astype(str)
-        self.list_ensemble_levels = ['transformation', 'view', 'field_id', 'organ']
+        self.Performances['organ'] = self.Performances['organ'].astype(str)
+        self.list_ensemble_levels = ['transformation', 'view', 'organ']
         self.PREDICTIONS = {}
         self.weights_by_category = None
         self.weights_by_ensembles = None
@@ -2406,9 +2367,9 @@ class PlotsScatter(Hyperparameters):
 
 class PlotsAttentionMaps(DeepLearning):
     
-    def __init__(self, target=None, organ_id=None, view=None, transformation=None, fold=None):
+    def __init__(self, target=None, organ=None, view=None, transformation=None, fold=None):
         # Partial initialization with placeholders to get access to parameters and functions
-        DeepLearning.__init__(self, target, organ_id, view, transformation, 'VGG16', 'Adam', 0, 0, 0, False)
+        DeepLearning.__init__(self, target, organ, view, transformation, 'VGG16', 'Adam', 0, 0, 0, False)
         
         # Parameters
         self.fold = fold
@@ -2419,11 +2380,9 @@ class PlotsAttentionMaps(DeepLearning):
         self.N_samples_attentionmaps = 10  # needs to be > 1 for the script to work
         
         # Pick the best model based on the performances
-        organ, field_id = organ_id.split('_')
         path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.target + '_' + self.fold + '.csv'
         Performances = pd.read_csv(path_perf).set_index('version', drop=False)
         Performances = Performances[(Performances['organ'] == organ)
-                                    & (Performances['field_id'].astype(str) == self.field_id)
                                     & (Performances['view'] == self.view)
                                     & (Performances['transformation'] == self.transformation)]
         version = Performances['version'].values[0]
@@ -2431,11 +2390,10 @@ class PlotsAttentionMaps(DeepLearning):
         
         # other parameters
         self.parameters = self._version_to_parameters(version)
-        DeepLearning.__init__(self, target, organ_id, view, transformation, self.parameters['architecture'],
+        DeepLearning.__init__(self, target, organ, view, transformation, self.parameters['architecture'],
                               self.parameters['optimizer'], self.parameters['learning_rate'],
                               self.parameters['weight_decay'], self.parameters['dropout_rate'], False)
-        self.dir_images = '../images/' + self.organ + '/' + self.field_id + '/' + self.view + '/' + \
-                          self.transformation + '/'
+        self.dir_images = '../images/' + self.organ + '/' + self.view + '/' + self.transformation + '/'
         self.prediction_type = self.dict_prediction_types[self.target]
         self.Residuals = None
         self.df_to_plot = None
@@ -2512,10 +2470,10 @@ class PlotsAttentionMaps(DeepLearning):
                 df_to_plot['Age'] - df_to_plot['res']).round().astype(str) + ', Sex = ' + df_to_plot[
                                        'Sex'] + ', sample ' + \
                                    df_to_plot['sample'].astype(str)
-        df_to_plot['save_title'] = self.target + '_' + self.organ + '_' + self.field_id + '_' + self.view + '_' + \
-                                   self.transformation + '_' + df_to_plot['Sex'] + '_' + df_to_plot['age_category'] + \
-                                   '_' + df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
-        path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ_id + '_' + self.view + \
+        df_to_plot['save_title'] = self.target + '_' + self.organ + '_' + self.view + '_' + self.transformation + '_' \
+                                   + df_to_plot['Sex'] + '_' + df_to_plot['age_category'] + '_' \
+                                   + df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
+        path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ + '_' + self.view + \
                     '_' + self.transformation + '.csv'
         df_to_plot.to_csv(path_save, index=False)
         self.df_to_plot = df_to_plot
@@ -2531,8 +2489,7 @@ class PlotsAttentionMaps(DeepLearning):
         self.df_outer_fold = self.df_to_plot[self.df_to_plot['outer_fold'] == outer_fold]
         
         # generate the data generators
-        self.generator = MyImageDataGenerator(target=self.target, field_id=self.field_id,
-                                              data_features=self.df_outer_fold,
+        self.generator = MyImageDataGenerator(target=self.target, organ=self.organ, data_features=self.df_outer_fold,
                                               n_samples_per_subepoch=self.n_samples_per_subepoch,
                                               batch_size=self.batch_size, shuffle=False, seed=self.seed,
                                               side_predictors=self.side_predictors, dir_images=self.dir_images,

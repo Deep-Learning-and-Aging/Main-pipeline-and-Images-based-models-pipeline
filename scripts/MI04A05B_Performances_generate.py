@@ -21,11 +21,11 @@ debug_mode = True
 #    sys.argv.append('test')  # fold
 
 # Default parameters for ensemble models
-if len(sys.argv) != 11:
+if len(sys.argv) != 10:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('*_*')  # organ_id, e.g Liver_20204
+    sys.argv.append('*')  # organ
     sys.argv.append('*')  # view
     sys.argv.append('*')  # transformation
     sys.argv.append('*')  # architecture
@@ -36,10 +36,10 @@ if len(sys.argv) != 11:
     sys.argv.append('val')  # fold
 
 # Compute results
-Performances_Generate = PerformancesGenerate(target=sys.argv[1], image_type=sys.argv[2], transformation=sys.argv[3],
-                                             architecture=sys.argv[4], optimizer=sys.argv[5], learning_rate=sys.argv[6],
-                                             weight_decay=sys.argv[7], dropout_rate=sys.argv[8], fold=sys.argv[9],
-                                             debug_mode=False)
+Performances_Generate = PerformancesGenerate(target=sys.argv[1], organ=sys.argv[2], view=sys.argv[3],
+                                             transformation=sys.argv[4], architecture=sys.argv[5],
+                                             optimizer=sys.argv[6], learning_rate=sys.argv[7], weight_decay=sys.argv[8],
+                                             dropout_rate=sys.argv[9], fold=sys.argv[10], debug_mode=False)
 Performances_Generate.preprocessing()
 Performances_Generate.compute_performances()
 Performances_Generate.save_performances()
