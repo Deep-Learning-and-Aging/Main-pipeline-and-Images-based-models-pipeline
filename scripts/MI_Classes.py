@@ -591,7 +591,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.training_mode = training_mode
         self.data_features = data_features
         self.list_ids = data_features.index.values
-        self.batch_size = 1 # TODO batch_size
+        self.batch_size = batch_size
         # for paired organs, take twice fewer ids (two images for each id), and add organ_side as side predictor
         if self.field_id in self.left_right_images_field_ids:
             self.data_features['organ_side'] = np.nan
@@ -603,11 +603,11 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         else:  # during prediction and other tasks, an epoch is defined as all the samples being seen once and only once
             self.steps = math.ceil(len(self.list_ids) / self.n_ids_batch)
         # initiate the indices and shuffle the ids
-        self.shuffle = n_samples_per_subepoch is None # TODO training_mode  # Only shuffle if the model is being trained. Otherwise no need.
+        self.shuffle = training_mode  # Only shuffle if the model is being trained. Otherwise no need.
         self.indices = np.arange(len(self.list_ids))
         self.idx_end = 0  # Keep track of last indice to permute indices accordingly at the end of epoch.
         if self.shuffle:
-            np.random.shuffle(self.list_ids)
+            np.random.shuffle(self.indices)
         # Input for side NN and CNN
         self.side_predictors = side_predictors
         self.dir_images = dir_images
@@ -684,7 +684,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             # Generate a new set of indices
             # print('\nThe end of the data was reached within this batch, looping.')
             if self.shuffle:
-                np.random.shuffle(self.list_ids)
+                np.random.shuffle(self.indices)
             # Complete the batch with samples from the new indices
             indices = np.concatenate([indices, self.indices[:idx_end]])
         else:
