@@ -11,3 +11,4 @@ for target in "${targets[@]}"; do
 		err_file="../eo/$version.err"
 		sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI05A_Ensembles_predictions_generate_and_merge.sh $target
 done
+

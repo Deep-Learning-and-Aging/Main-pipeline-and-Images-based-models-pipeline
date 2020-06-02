@@ -2,43 +2,44 @@
 regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs_fields=( "Brain_20227" "Carotid_202223" "EyeFundus_210156" "EyeOCT_210178" "Heart_20208" "Liver_20204" "Pancreas_20259" "FullBody_201580" "Spine_201581" "Hip_201582" "Knee_201583" )
-#organ_fields=( "EyeFundus_210156" "Liver_20204" "Brain_20227" )
-#organs_fields=( "Liver_20204" "Heart_20208" )
-organs_fields=( "EyeFundus_210156" )
+organs=( "Brain" "Eyes" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
+#organs=( "Liver" )
 architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "ResNet152V2" "Xception" "InceptionV3" )
-architectures=( "InceptionResNetV2" )
+architectures=( "InceptionV3" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
 learning_rates=( "0.000001" )
 weight_decays=( "0.0" )
-dropout_rates=( "0.0" )
+dropout_rates=( "0.2" )
 #weight_decays=( "0.0" "0.0001" "0.001" )
 #dropout_rates=( "0.0" "0.1" "0.2" )
 folds=( "train" "val" "test" )
 #folds=( "val" "test" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
+outer_folds=( "0" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
 for target in "${targets[@]}"; do
-	for organ_field in "${organs_fields[@]}"; do
-		if [ $organ_field == "Heart_20208" ]; then
-			views=( "2chambers" "3chambers" "4chambers" )
-		elif [ $organ_field == "Brain_20227" ]; then
+	for organ in "${organs[@]}"; do
+		if [ $organ == "Brain" ]; then
 			views=( "sagittal" "coronal" "transverse" )
-        elif [ $organ_field == "Carotid_202223" ]; then
+		elif [ $organ == "Eyes" ]; then
+			views=( "fundus" "OCT" )
+        elif [ $organ == "Carotids" ]; then
 			views=( "longaxis" "shortaxis" "CIMT120" "CIMT150" "mixed" )
-		elif [ $organ_field == "FullBody_201580" ]; then
+		elif [ $organ == "Heart" ]; then
+			views=( "2chambers" "3chambers" "4chambers" )
+		elif [ $organ == "FullBody" ]; then
 			views=( "figure" "skeleton" "flesh" "mixed" )
-		elif [ $organ_field == "Spine_201581" ]; then
+		elif [ $organ == "Spine" ]; then
 			views=( "sagittal" "coronal" )
 		else
 			views=( "main" )
 		fi
-		if [ $organ_field == "Liver_20204" ] || [ $organ_field == "Heart_20208" ]; then
+		if [ $organ == "Heart" ] || [ $organ == "Liver" ] || [ $organ == "Pancreas" ]; then
 			transformations=( "raw" "contrast" )
 		else
 			transformations=( "raw" )
@@ -50,22 +51,25 @@ for target in "${targets[@]}"; do
 						for learning_rate in "${learning_rates[@]}"; do
 							for weight_decay in "${weight_decays[@]}"; do
 								for dropout_rate in "${dropout_rates[@]}"; do
-									version=${target}_${organ_field}_${view}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}
+									version=${target}_${organ}_${view}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}
 									echo $version
 									name=MI03A_$version
 									job_name="$name.job"
 									out_file="../eo/$name.out"
 									err_file="../eo/$name.err"
 									# time as a function of the dataset
-									if [ $organ_field == "Carotid_20223" ]; then
+									if [ $organ == "Carotids" ]; then
 										time=40 # 9k samples
-									elif [ $organ_field == "Brain_20227" ] || [ $organ_field == "Liver_20204" ] || [ $organ_field == "Pancreas_20259" ] || [ $organ_field == "Heart_20208" ] || [ $organ_field == "FullBody_201580" ] || [ $organ_field == "Spine_201581" ] || [ $organ_field == "Hip_201582" ] || [ $organ_field == "Knee_201583" ]; then
-										time=200 #45k samples
-									elif [ $organ_field == "EyeFundus_210156" ] || [ $organ_field == "EyeOCT_210178" ]; then
-										time=400 #90k samples
+										time=10
+									elif [ $organ == "Brain" ] || [ $organ == "Liver" ] || [ $organ == "Pancreas" ] || [ $organ == "Heart" ] || [ $organ == "FullBody" ] || [ $organ == "Spine" ] || [ $organ == "Hips" ] || [ $organ == "Knees" ]; then
+										time=300 #45k samples
+										time=90
+									elif [ $organ == "Eyes" ]; then
+										time=600 #90k samples
+										time=170
 									fi
 									# double the time for datasets for which each image is available for both the left and the right side
-									if [ $organ_field == "Carotid_20223" ] || [ $organ_field == "EyeFundus_210156" ] || [ $organ_field == "EyeOCT_210178" ] || [ $organ_field == "Hip_201582" ] || [ $organ_field == "Knee_201583" ]; then
+									if [ $organ == "Carotids" ] || [ $organ == "Eyes" ] || [ $organs == "Hips" ] || [ $organs == "Knees" ]; then
 										time=$(( 2*$time ))
 									fi
 									# time multiplicator as a function of architecture
@@ -89,24 +93,20 @@ for target in "${targets[@]}"; do
 									if $missing_weights; then
 										continue
 									fi
-									echo HERE
 									#if regenerate_predictions option is on or if one of the predictions is missing, run the job
 									to_run=false
 									for fold in "${folds[@]}"; do
 										path_predictions="../data/Predictions_${version}_${fold}.csv"
-										echo $path_predictions
 										if ! test -f $path_predictions; then
-											echo $path_predictions
 											to_run=true
 										fi
 									done
-									echo $to_run
 									if $regenerate_predictions; then
 										to_run=true
 									fi
 									if $to_run; then
 										echo Submitting job for $version
-										#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $organ_id $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
+										sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $organ $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate
 									#else
 									#	echo Predictions for $version have already been generated.
 									fi

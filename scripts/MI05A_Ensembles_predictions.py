@@ -11,6 +11,7 @@ if len(sys.argv) != 2:
 Ensemble_Predictions = EnsemblesPredictions(target=sys.argv[1])
 Ensemble_Predictions.load_data()
 Ensemble_Predictions.generate_ensemble_predictions()
+Ensemble_Predictions.generate_average_aging()
 Ensemble_Predictions.save_predictions()
 
 # Exit
