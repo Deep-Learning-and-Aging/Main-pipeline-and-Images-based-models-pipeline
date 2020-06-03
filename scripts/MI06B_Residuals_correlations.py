@@ -7,12 +7,14 @@ if len(sys.argv) != 3:
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('train')  # fold
+    sys.argv.append('instances')  # pred_type
 
 # Options
 debug_mode = True
 
 # Compute results
-Residuals_Correlations = ResidualsCorrelations(target=sys.argv[1], fold=sys.argv[2], debug_mode=debug_mode)
+Residuals_Correlations = ResidualsCorrelations(target=sys.argv[1], fold=sys.argv[2], pred_type=sys.argv[3],
+                                               debug_mode=debug_mode)
 Residuals_Correlations.preprocessing()
 Residuals_Correlations.generate_correlations()
 Residuals_Correlations.save_correlations()
