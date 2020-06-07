@@ -2,12 +2,12 @@ import sys
 from MI_Classes import ResidualsCorrelations
 
 # Default parameters
-if len(sys.argv) != 3:
+if len(sys.argv) != 4:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('train')  # fold
-    sys.argv.append('instances')  # pred_type
+    sys.argv.append('val')  # fold
+    sys.argv.append('eids')  # pred_type
 
 # Options
 debug_mode = True

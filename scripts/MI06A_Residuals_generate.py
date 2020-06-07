@@ -7,7 +7,7 @@ if len(sys.argv) != 4:
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('test')  # fold
-    sys.argv.append('instances')  # pred_type
+    sys.argv.append('eids')  # pred_type
 
 # Options
 debug_mode = False

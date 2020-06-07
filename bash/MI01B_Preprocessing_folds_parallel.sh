@@ -2,7 +2,7 @@
 targets=( "Age" )
 organs=( "Brain" "Carotids" "Eyes" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" ) #"PhysicalActivity" )
 organs=( "Brain" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
-#organs=( "Carotids" )
+organs=( "Liver" )
 n_cpu_cores=1
 time=5
 memory=8G

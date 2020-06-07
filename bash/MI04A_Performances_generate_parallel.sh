@@ -1,9 +1,9 @@
 #!/bin/bash
-regenerate_performances=false
+regenerate_performances=true
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
-#organs=( "Liver" )
+#organs=( "Pancreas" )
 #architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
 architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 #architectures=( "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "InceptionV3" "InceptionResNetV2" )
@@ -13,12 +13,13 @@ optimizers=( "Adam" )
 learning_rates=( "0.000001" )
 weight_decays=( "0.0" )
 #dropout_rates=( "0.1" "0.3" "0.5" "0.8" )
-dropout_rates=( "0.2" )
+dropout_rates=( "0.15" "0.2" "0.25" )
 #weight_decays=( "0.0" "0.0001" "0.001" "0.01" "0.1" )
 #dropout_rates=( "0.0" "0.1" "0.3" "0.5" "0.8" "0.95")
 folds=( "train" "val" "test" )
-#folds=( "val" "test" )
+#folds=( "val" )
 pred_types=( "instances" "eids" )
+pred_types=( "eids" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
@@ -59,7 +60,7 @@ for target in "${targets[@]}"; do
 								for dropout_rate in "${dropout_rates[@]}"; do
 									for fold in "${folds[@]}"; do
 										for pred_type in "${pred_types[@]}"; do
-											version=${target}_${organ}_${view}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${fold}_${pred_type}
+											version=${pred_type}_${target}_${organ}_${view}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${fold}
 											name=MI04A-$version
 											job_name="$name.job"
 											out_file="../eo/$name.out"

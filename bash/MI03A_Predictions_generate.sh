@@ -11,3 +11,9 @@ module load cuda/10.1
 source ~/python_3.6.0/bin/activate
 python -u ../scripts/MI03A_Predictions_generate.py $1 $2 $3 $4 $5 $6 $7 $8 $9 && echo "PYTHON SCRIPT COMPLETED" 
 
+if [-f ../eo/$SLURM_JOBID]
+ then
+  rm ../eo/$SLURM_JOBID
+  exit 0
+fi
+
