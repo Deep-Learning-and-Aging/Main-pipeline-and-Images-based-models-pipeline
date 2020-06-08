@@ -3,7 +3,7 @@
 targets=( "Age" )
 #targets=( "Sex" )
 organs=( "Brain" "Eyes" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
-#organs=( "Heart" "Brain" )
+#organs=( "Eyes" )
 #organs=( "Brain" "Eyes" "Carotids" "Heart" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
 #organs=( "Heart" "Liver" ) # "Eyes" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )

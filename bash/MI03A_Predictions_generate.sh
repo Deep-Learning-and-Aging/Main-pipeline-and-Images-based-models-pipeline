@@ -9,7 +9,7 @@ module load gcc/6.2.0
 module load python/3.6.0
 module load cuda/10.1
 source ~/python_3.6.0/bin/activate
-python -u ../scripts/MI03A_Predictions_generate.py $1 $2 $3 $4 $5 $6 $7 $8 $9 && echo "PYTHON SCRIPT COMPLETED" 
+python -u ../scripts/MI03A_Predictions_generate.py $1 $2 $3 $4 $5 $6 $7 $8 $9 ${10} && echo "PYTHON SCRIPT COMPLETED" 
 
 if [-f ../eo/$SLURM_JOBID]
  then

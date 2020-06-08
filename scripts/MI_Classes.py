@@ -1237,10 +1237,11 @@ class Training(DeepLearning):
 class PredictionsGenerate(DeepLearning):
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
-                 learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
+                 learning_rate=None, weight_decay=None, dropout_rate=None, outer_fold=None, debug_mode=False):
         # Initialize parameters
         DeepLearning.__init__(self, target, organ, view, transformation, architecture, optimizer, learning_rate,
-                              weight_decay, dropout_rate, debug_mode)
+                              weight_decay, dropout_rate, outer_fold, debug_mode)
+        self.outer_fold = outer_fold
         self.mode = 'model_testing'
         # Define dictionaries attributes for data, generators and predictions
         self.DATA_FEATURES_BATCH = {}
@@ -1261,7 +1262,7 @@ class PredictionsGenerate(DeepLearning):
                 if fold in self.DATA_FEATURES_LEFTOVERS.keys():
                     del self.DATA_FEATURES_LEFTOVERS[fold]
     
-    def _generate_outerfolds_predictions(self):
+    def _generate_outerfold_predictions(self):
         # prepare unscaling
         if self.target in self.targets_regression:
             mean_train = self.DATA_FEATURES['train'][self.target + '_raw'].mean()
@@ -1273,7 +1274,8 @@ class PredictionsGenerate(DeepLearning):
             print('Predicting samples from fold ' + fold + '.')
             print(str(len(self.DATA_FEATURES[fold].index)) + ' samples to predict.')
             print('Predicting batches: ' + str(len(self.DATA_FEATURES_BATCH[fold].index)) + ' samples.')
-            pred_batch = self.model.predict(self.GENERATORS_BATCH[fold], steps=self.GENERATORS_BATCH[fold].steps, verbose=1)
+            pred_batch = self.model.predict(self.GENERATORS_BATCH[fold], steps=self.GENERATORS_BATCH[fold].steps,
+                                            verbose=1)
             if fold in self.GENERATORS_LEFTOVERS.keys():
                 print('Predicting leftovers: ' + str(len(self.DATA_FEATURES_LEFTOVERS[fold].index)) + ' samples.')
                 pred_leftovers = self.model.predict(self.GENERATORS_LEFTOVERS[fold],
@@ -1288,34 +1290,26 @@ class PredictionsGenerate(DeepLearning):
             # unscale predictions
             if self.target in self.targets_regression:
                 pred_full = pred_full * std_train + mean_train
-            # merge the predictions
-            self.DATA_FEATURES[fold]['pred'] = pred_full
-            if fold in self.PREDICTIONS.keys():
-                self.PREDICTIONS[fold] = pd.concat([self.PREDICTIONS[fold], self.DATA_FEATURES[fold]])
-            else:
-                self.PREDICTIONS[fold] = self.DATA_FEATURES[fold]
             # format the dataframe
+            self.DATA_FEATURES[fold]['pred'] = pred_full
+            self.PREDICTIONS[fold] = self.DATA_FEATURES[fold]
             self.PREDICTIONS[fold]['id'] = [ID.replace('.jpg', '') for ID in self.PREDICTIONS[fold]['id']]
     
-    def _generate_and_concatenate_predictions(self):
-        for outer_fold in self.outer_folds:
-            self.outer_fold = outer_fold
-            print('Predicting samples for the outer_fold = ' + self.outer_fold)
-            self.path_load_weights = self.path_store + 'model-weights_' + self.version + '_' + self.outer_fold + '.h5'
-            self._load_data_features()
-            if self.debug_mode:
-                self._take_subset_to_debug()
-            self._load_model_weights()
-            self._split_batch_leftovers()
-            # generate the generators
-            self.GENERATORS_BATCH = self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_BATCH)
-            if self.DATA_FEATURES_LEFTOVERS is not None:
-                self.GENERATORS_LEFTOVERS = self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_LEFTOVERS)
-            self._generate_outerfolds_predictions()
+    def _generate_predictions(self):
+        self.path_load_weights = self.path_store + 'model-weights_' + self.version + '_' + self.outer_fold + '.h5'
+        self._load_data_features()
+        if self.debug_mode:
+            self._take_subset_to_debug()
+        self._load_model_weights()
+        self._split_batch_leftovers()
+        # generate the generators
+        self.GENERATORS_BATCH = self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_BATCH)
+        if self.DATA_FEATURES_LEFTOVERS is not None:
+            self.GENERATORS_LEFTOVERS = self._generate_generators(DATA_FEATURES=self.DATA_FEATURES_LEFTOVERS)
+        self._generate_outerfold_predictions()
     
     def _format_predictions(self):
         for fold in self.folds:
-            # print the performance TODO check if is working
             perf_fun = self.dict_metrics_sklearn[self.dict_main_metrics_names[self.target]]
             perf = perf_fun(self.PREDICTIONS[fold][self.target + '_raw'], self.PREDICTIONS[fold]['pred'])
             print('The ' + fold + ' performance is: ' + str(perf))
@@ -1325,8 +1319,34 @@ class PredictionsGenerate(DeepLearning):
     
     def generate_predictions(self):
         self._generate_architecture()
-        self._generate_and_concatenate_predictions()
+        self._generate_predictions()
         self._format_predictions()
+    
+    def save_predictions(self):
+        for fold in self.folds:
+            self.PREDICTIONS[fold].to_csv(self.path_store + 'Predictions_instances_' + self.version + '_' + fold + '_'
+                                          + self.outer_fold + '.csv', index=False)
+
+
+class PredictionsConcatenate(Hyperparameters):
+    
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
+                 learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
+        # Initialize parameters
+        Hyperparameters.__init__(self, target, organ, view, transformation, architecture, optimizer, learning_rate,
+                                 weight_decay, dropout_rate, debug_mode)
+        # Define dictionaries attributes for data, generators and predictions
+        self.PREDICTIONS = {}
+    
+    def concatenate_predictions(self):
+        for fold in self.folds:
+            for outer_fold in self.outer_folds:
+                Predictions_fold = pd.read_csv(self.path_store + 'Predictions_instances_' + self.version + '_' + fold +
+                                               '_' + outer_fold + '.csv')
+                if fold in self.PREDICTIONS.keys():
+                    self.PREDICTIONS[fold] = pd.concat([self.PREDICTIONS[fold], Predictions_fold])
+                else:
+                    self.PREDICTIONS[fold] = Predictions_fold
     
     def save_predictions(self):
         for fold in self.folds:
@@ -2579,7 +2599,7 @@ class PlotsLoggers(Hyperparameters):
                 self._plot_logger(version=version + '_' + outer_fold)
 
 
-class PlotsScatter(Hyperparameters):
+class PlotsScatterplots(Hyperparameters):
     
     def __init__(self, target=None, pred_type=None):
         Hyperparameters.__init__(self)
@@ -2738,9 +2758,12 @@ class PlotsAttentionMaps(DeepLearning):
         pred_age = (df_to_plot['Age'] - df_to_plot['res']).round().astype(str)
         df_to_plot['plot_title'] = 'Age = ' + df_to_plot['Age'].astype(str) + ', Predicted Age = ' + pred_age + \
                                    ', Sex = ' + df_to_plot['sex'] + ', sample ' + df_to_plot['sample'].astype(str)
-        df_to_plot['save_title'] = self.target + '_' + self.organ + '_' + self.view + '_' + self.transformation + '_' \
-                                   + df_to_plot['sex'] + '_' + df_to_plot['age_category'] + '_' \
-                                   + df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
+        df_to_plot['save_title'] = self.path_store + '../figures/Attention_Maps/' + self.target + '/' + self.organ + \
+                                   '/' + self.view + '/' + self.transformation + '/' + df_to_plot['sex'] + '/' + \
+                                   df_to_plot['age_category'] + '/' + df_to_plot['aging_rate'] + '/' + self.target + \
+                                   '_' + self.organ + '_' + self.view + '_' + self.transformation + '_' + \
+                                   df_to_plot['sex'] + '_' + df_to_plot['age_category'] + '_' + \
+                                   df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str) + '.png'
         path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ + '_' + self.view + \
                     '_' + self.transformation + '.csv'
         df_to_plot.to_csv(path_save, index=False)
@@ -2816,7 +2839,10 @@ class PlotsAttentionMaps(DeepLearning):
         plt.axis('off')
         plt.title(self.plot_title)
         fig = plt.gcf()
-        fig.savefig('../figures/Attention_Maps/' + save_title + '.png')
+        path = '/'.join(save_title.split('/')[:-1])
+        if not os.path.exists(path):
+            os.makedirs(path)
+        fig.savefig(save_title)
         plt.show()
     
     def _plot_attention_maps(self, save_title):
@@ -2837,7 +2863,10 @@ class PlotsAttentionMaps(DeepLearning):
         
         plt.suptitle(self.plot_title, fontsize=20)
         fig = plt.gcf()
-        fig.savefig('../figures/Attention_Maps/Summary_' + save_title + '.png')
+        path = '/'.join(save_title.split('/')[:-1])
+        if not os.path.exists(path):
+            os.makedirs(path)
+        fig.savefig(save_title.replace('Attention_Maps/', 'Attention_Maps/Summary_'))
         plt.show()
     
     def _generate_maps_for_one_batch(self, i):
@@ -2860,7 +2889,9 @@ class PlotsAttentionMaps(DeepLearning):
             self._generate_gradcam_map()
             #self._generate_guidedbackprop_map(guided_backprops[j])
 
-            self._plot_attention_map(filter_map=getattr(self, map_type + '_filter'), save_title=self.dict_map_types_to_names[map_type] + '_' + save_title)
+            save_title = save_title.replace('Attention_Maps/',
+                                            'Attention_Maps/' + self.dict_map_types_to_names[map_type])
+            self._plot_attention_map(filter_map=getattr(self, map_type + '_filter'), save_title=save_title)
             
             '''
             # plot the three maps individually
