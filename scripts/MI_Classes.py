@@ -1002,7 +1002,14 @@ class DeepLearning(Metrics):
     
     def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
         x = concatenate([cnn_output, side_nn_output])
+        '''
         for n in [int(2 ** (10 - i)) for i in range(7)]:
+            x = Dense(n, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
+            # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
+            if n > 64:
+                x = Dropout(self.dropout_rate * n / 1024)(x)
+        '''
+        for n in [int(2 ** (2*(5 - i))) for i in range(4)]:
             x = Dense(n, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
             # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
             if n > 64:
@@ -1590,7 +1597,7 @@ class PredictionsEids(Hyperparameters):
             Predictions_version = self.Predictions_eids[['id', outer_version, pred_version]]
             Predictions_version.rename(columns={outer_version: 'outer_fold', pred_version: 'pred'}, inplace=True)
             Predictions_version.dropna(inplace=True)
-            Predictions_version.to_csv(self.path_store + 'Predictions_eids_' + '_'.join(pred_version.split('_')[2:]) +
+            Predictions_version.to_csv(self.path_store + 'Predictions_eids_' + '_'.join(pred_version.split('_')[1:]) +
                                        '_' + self.fold + '.csv', index=False)
     
     def save_predictions(self):
@@ -2337,6 +2344,8 @@ class ResidualsCorrelations(Hyperparameters):
         # Merge both as a dataframe of strings
         self.CORRELATIONS['_str'] = self.CORRELATIONS[''].round(3).applymap(str) \
                                     + '+-' + self.CORRELATIONS['_sd'].round(3).applymap(str)
+        # Print correlations
+        print(self.CORRELATIONS[''])
     
     def save_correlations(self):
         for mode in self.modes:
@@ -2721,7 +2730,7 @@ class PlotsAttentionMaps(DeepLearning):
         # Select with samples to plot
         print('Selecting representative samples...')
         Sexes = ['Male', 'Female']
-        dict_sexes_to_values = {'Male': 0, 'Female': 1}
+        dict_sexes_to_values = {'Male': 1, 'Female': 0}
         df_to_plot = None
         for sex in Sexes:
             print('Sex: ' + sex)

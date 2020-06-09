@@ -37,3 +37,7 @@ Model_Training.data_preprocessing()
 Model_Training.build_model()
 Model_Training.train_model()
 Model_Training.clean_exit()
+
+
+for i in range(4):
+    print(2**(2*(5-i)))

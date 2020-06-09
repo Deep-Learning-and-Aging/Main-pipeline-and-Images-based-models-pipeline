@@ -1,9 +1,9 @@
 #!/bin/bash
-regenerate_performances=true
+regenerate_performances=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
-organs=( "Brain" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
+#organs=( "Brain" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
 #organs=( "Pancreas" )
 #architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "NASNetLarge" "Xception" "InceptionV3" "InceptionResNetV2" )
 architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
@@ -21,7 +21,7 @@ folds=( "train" "val" "test" )
 #folds=( "val" )
 pred_types=( "instances" "eids" )
 #pred_types=( "eids" )
-memory=8G
+memory=2G
 n_cpu_cores=1
 n_gpus=1
 for target in "${targets[@]}"; do
@@ -67,7 +67,7 @@ for target in "${targets[@]}"; do
 											out_file="../eo/$name.out"
 											err_file="../eo/$name.err"
 											time=90
-											time=10 #debug mode
+											time=2 #debug mode
 											#allocate more time for the training fold because of the larger sample size
 											if [ $fold = "train" ]; then
 												time=$(( 8*$time ))
@@ -80,7 +80,7 @@ for target in "${targets[@]}"; do
 											#if regenerate_performances option is on or if the performances have not yet been generated, run the job
 											if ! test -f "../data/Performances_${version}.csv" || $regenerate_performances; then
 												echo Submitting job for $version
-												sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05C_Performances_generate.sh $target $organ $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $fold $pred_type
+												sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh $target $organ $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $fold $pred_type
 											#else
 											#	echo Performance for $version have already been generated.
 											fi

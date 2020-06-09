@@ -7,8 +7,8 @@ if len(sys.argv) != 5:
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('test')  # inner_fold
-    sys.argv.append('instances')  # pred_type
-    sys.argv.append('True')  # ensemble_models. Set False for MI04B and True for MI05B
+    sys.argv.append('eids')  # pred_type
+    sys.argv.append('False')  # ensemble_models. Set False for MI04B and True for MI05B
 
 # Compute results
 Performances_Merge = PerformancesMerge(target=sys.argv[1], fold=sys.argv[2], pred_type=sys.argv[3],

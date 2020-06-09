@@ -33,4 +33,3 @@ if save_predictions:
 
 # Exit
 Predictions_Generate.clean_exit()
-
