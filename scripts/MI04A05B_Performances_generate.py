@@ -6,7 +6,7 @@ from MI_Classes import PerformancesGenerate
 debug_mode = True
 
 # Default parameters
-if len(sys.argv) != 12:
+if len(sys.argv) != 13:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
@@ -18,12 +18,13 @@ if len(sys.argv) != 12:
     sys.argv.append('0.000001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
     sys.argv.append('0.2')  # dropout
+    sys.argv.append('0.1')  # data_augmentation_factor
     sys.argv.append('test')  # fold
     sys.argv.append('eids')  # pred_type
 
 
 # Default parameters for ensemble models
-# if len(sys.argv) != 12:
+# if len(sys.argv) != 13:
 #     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
 #     sys.argv = ['']
 #     sys.argv.append('Age')  # target
@@ -43,8 +44,8 @@ if len(sys.argv) != 12:
 Performances_Generate = PerformancesGenerate(target=sys.argv[1], organ=sys.argv[2], view=sys.argv[3],
                                              transformation=sys.argv[4], architecture=sys.argv[5],
                                              optimizer=sys.argv[6], learning_rate=sys.argv[7], weight_decay=sys.argv[8],
-                                             dropout_rate=sys.argv[9], fold=sys.argv[10], pred_type=sys.argv[11],
-                                             debug_mode=False)
+                                             dropout_rate=sys.argv[9], data_augmentation_factor=sys.argv[10],
+                                             fold=sys.argv[11], pred_type=sys.argv[12], debug_mode=False)
 Performances_Generate.preprocessing()
 Performances_Generate.compute_performances()
 Performances_Generate.save_performances()

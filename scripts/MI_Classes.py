@@ -100,7 +100,8 @@ class Hyperparameters:
                                  'Ethnicity.Do_not_know', 'Ethnicity.Prefer_not_to_answer', 'Ethnicity.NA']
         self.demographic_vars = ['Age', 'Sex'] + self.ethnicities_vars
         self.names_model_parameters = ['target', 'organ', 'view', 'transformation', 'architecture',
-                                       'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate']
+                                       'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate',
+                                       'data_augmentation_factor']
         self.targets_regression = ['Age']
         self.targets_binary = ['Sex']
         self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
@@ -119,10 +120,9 @@ class Hyperparameters:
                                            'Hips': ['main'],
                                            'Knees': ['main'],
                                            'PhysicalActivity': ['main']}
-        # the number of epochs is too small for data augmentation to be helpful for now
-        self.organs_not_to_augment = ['Brain', 'Carotids', 'Eyes', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine',
-                                      'Hips', 'Knees', 'PhysicalActivity']
-        self.organs_to_augment = []
+        self.organsviews_not_to_augment = ['Brain_sagittal', 'Brain_coronal', 'Brain_transverse', 'FullBody_figure',
+                                           'FullBody_skeleton', 'FullBody_flesh', 'FullBody_mixed',
+                                           'PhysicalActivity_main']
         
         # Others
         if '/Users/Alan/' in os.getcwd():
@@ -137,8 +137,8 @@ class Hyperparameters:
         parameters_list = model_name.split('_')
         for i, parameter in enumerate(self.names_model_parameters):
             parameters[parameter] = parameters_list[i]
-        if len(parameters_list) > 9:
-            parameters['outer_fold'] = parameters_list[9]
+        if len(parameters_list) > 10:
+            parameters['outer_fold'] = parameters_list[10]
         return parameters
     
     @staticmethod
@@ -499,9 +499,9 @@ class PreprocessingFolds(Metrics):
 
 class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
     
-    def __init__(self, target=None, organ=None, data_features=None, n_samples_per_subepoch=None, batch_size=None,
-                 training_mode=None, seed=None, side_predictors=None, dir_images=None, images_width=None,
-                 images_height=None, data_augmentation=False):
+    def __init__(self, target=None, organ=None, view=None, data_features=None, n_samples_per_subepoch=None,
+                 batch_size=None, training_mode=None, side_predictors=None, dir_images=None, images_width=None,
+                 images_height=None, data_augmentation=False, data_augmentation_factor=None, seed=None):
         # Parameters
         Hyperparameters.__init__(self)
         self.target = target
@@ -510,6 +510,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         else:
             self.labels = data_features[self.target + '_raw']
         self.organ = organ
+        self.view = view
         self.training_mode = training_mode
         self.data_features = data_features
         self.list_ids = data_features.index.values
@@ -537,17 +538,29 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.images_height = images_height
         # Data augmentation
         self.data_augmentation = data_augmentation
+        self.data_augmentation_factor = data_augmentation_factor
         self.seed = seed
         # Parameters for data augmentation: (rotation range, width shift range, height shift range, zoom range)
         self.dict_augmentation_parameters = {}
-        self.dict_augmentation_parameters.update(dict.fromkeys(self.organs_not_to_augment, (0, 0, 0, [0, 0])))
-        self.dict_augmentation_parameters.update(dict.fromkeys(self.organs_to_augment, (10, 0.1, 0.1, [0.9, 1.1])))
-        
+        # Eyes
+        params = tuple([p * self.data_augmentation_factor for p in (10, 0.0, 0.0, 0.01)])
+        self.dict_augmentation_parameters.update(dict.fromkeys(['Eyes_fundus'], params))
+        params = tuple([p * self.data_augmentation_factor for p in (20, 0.1, 0.1, 0.05)])
+        self.dict_augmentation_parameters.update(dict.fromkeys(['Eyes_OCT'], params))
+        # Carotids, Heart, Liver, Pancreas, Hips, Knees
+        organs_views = ['Carotids_shortaxis', 'Carotids_longaxis', 'Carotids_CIMT120', 'Carotids_CIMT150',
+                        'Carotids_mixed', 'Heart_2chambers', 'Heart_3chambers', 'Heart_4chambers', 'Liver_main',
+                        'Pancreas_main', 'Spine_sagittal', 'Spine_coronal', 'Hips_main', 'Knees_main']
+        params = tuple([p * self.data_augmentation_factor for p in (10, 0.1, 0.1, 0.1)])
+        self.dict_augmentation_parameters.update(dict.fromkeys(organs_views, params))
+        # Others
+        self.dict_augmentation_parameters.update(dict.fromkeys(self.organsviews_not_to_augment, (0.0, 0.0, 0.0, 0.0)))
+        organ_view = self.organ + '_' + self.view
         ImageDataGenerator.__init__(self, rescale=1. / 255.,
-                                    rotation_range=self.dict_augmentation_parameters[self.organ][0],
-                                    width_shift_range=self.dict_augmentation_parameters[self.organ][1],
-                                    height_shift_range=self.dict_augmentation_parameters[self.organ][2],
-                                    zoom_range=self.dict_augmentation_parameters[self.organ][3])
+                                    rotation_range=self.dict_augmentation_parameters[organ_view][0],
+                                    width_shift_range=self.dict_augmentation_parameters[organ_view][1],
+                                    height_shift_range=self.dict_augmentation_parameters[organ_view][2],
+                                    zoom_range=self.dict_augmentation_parameters[organ_view][3])
     
     def __len__(self):
         return self.steps
@@ -562,7 +575,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         if hasattr(img, 'close'):
             img.close()
         if self.data_augmentation:
-            params = self.get_random_transform(Xi.shape, seed=self.seed)
+            params = self.get_random_transform(Xi.shape)
             Xi = self.apply_transform(Xi, params)
         Xi = self.standardize(Xi)
         return Xi
@@ -720,7 +733,8 @@ class DeepLearning(Metrics):
     """
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
-                 learning_rate=None, weight_decay=None, dropout_rate=None, debug_mode=False):
+                 learning_rate=None, weight_decay=None, dropout_rate=None, data_augmentation_factor=None,
+                 debug_mode=False):
         # Initialization
         Metrics.__init__(self)
         tf.random.set_seed(self.seed)
@@ -735,10 +749,12 @@ class DeepLearning(Metrics):
         self.learning_rate = float(learning_rate)
         self.weight_decay = float(weight_decay)
         self.dropout_rate = float(dropout_rate)
+        self.data_augmentation_factor = float(data_augmentation_factor)
         self.outer_fold = None
         self.version = self.target + '_' + self.organ + '_' + self.view + '_' + self.transformation + '_' + \
                        self.architecture + '_' + self.optimizer + '_' + np.format_float_positional(self.learning_rate) \
-                       + '_' + str(self.weight_decay) + '_' + str(self.dropout_rate)
+                       + '_' + str(self.weight_decay) + '_' + str(self.dropout_rate) + '_' + \
+                       str(self.data_augmentation_factor)
         
         # NNet's architecture and weights
         self.side_predictors = self.dict_side_predictors[self.target]
@@ -759,7 +775,7 @@ class DeepLearning(Metrics):
         
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
         self.dict_organ_view_to_image_size = {
-            'Brain_coronal': (316, 316),  # initial size (88, 88) TODO see if 88 -> 316 made a difference
+            'Brain_coronal': (316, 316),  # initial size (88, 88)
             'Brain_sagittal': (316, 316),  # initial size (88, 88)
             'Brain_transverse': (316, 316),  # initial size (88, 88)
             'Carotids_shortaxis': (337, 291),  # initial size (505, 436)
@@ -769,7 +785,7 @@ class DeepLearning(Metrics):
             'Carotids_mixed': (337, 291),  # initial size (505, 436)
             'Eyes_fundus': (316, 316),  # initial size (1388, 1388)
             'Eyes_OCT': (312, 320),  # initial size (500, 512)
-            'Heart_2chambers': (316, 316),  # initial size (200, 200) TODO consider 200 -> 316
+            'Heart_2chambers': (316, 316),  # initial size (200, 200)
             'Heart_3chambers': (316, 316),  # initial size (200, 200)
             'Heart_4chambers': (316, 316),  # initial size (200, 200)
             'Liver_main': (288, 364),  # initial size (364, 288)
@@ -875,7 +891,8 @@ class DeepLearning(Metrics):
                 continue
             # parameters
             training_mode = True if self.mode == 'model_training' else False
-            if (fold == 'train') & (self.mode == 'model_training') & (self.organ in self.organs_to_augment):
+            if (fold == 'train') & (self.mode == 'model_training') & \
+                    (self.organ + '_' + self.view not in self.organsviews_not_to_augment):
                 data_augmentation = True
             else:
                 data_augmentation = False
@@ -893,14 +910,14 @@ class DeepLearning(Metrics):
             else:
                 n_samples_per_subepoch = None
             # generator
-            GENERATORS[fold] = MyImageDataGenerator(target=self.target, organ=self.organ,
-                                                    data_features=DATA_FEATURES[fold],
-                                                    n_samples_per_subepoch=n_samples_per_subepoch,
-                                                    batch_size=batch_size_fold, training_mode=training_mode,
-                                                    seed=self.seed, side_predictors=self.side_predictors,
-                                                    dir_images=self.dir_images, images_width=self.image_width,
-                                                    images_height=self.image_height,
-                                                    data_augmentation=data_augmentation)
+            GENERATORS[fold] = \
+                MyImageDataGenerator(target=self.target, organ=self.organ, view=self.view,
+                                     data_features=DATA_FEATURES[fold], n_samples_per_subepoch=n_samples_per_subepoch,
+                                     batch_size=batch_size_fold, training_mode=training_mode,
+                                     side_predictors=self.side_predictors, dir_images=self.dir_images,
+                                     images_width=self.image_width, images_height=self.image_height,
+                                     data_augmentation=data_augmentation,
+                                     data_augmentation_factor=self.data_augmentation_factor, seed=self.seed)
         return GENERATORS
     
     def _generate_class_weights(self):
@@ -1002,7 +1019,6 @@ class DeepLearning(Metrics):
     
     def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
         x = concatenate([cnn_output, side_nn_output])
-        '''
         for n in [int(2 ** (10 - i)) for i in range(7)]:
             x = Dense(n, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
             # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
@@ -1014,6 +1030,7 @@ class DeepLearning(Metrics):
             # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
             if n > 64:
                 x = Dropout(self.dropout_rate * n / 1024)(x)
+        '''
         predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
         self.model = Model(inputs=[cnn_input, side_nn_input], outputs=predictions)
     
@@ -1057,11 +1074,12 @@ class Training(DeepLearning):
     """
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
-                 learning_rate=None, weight_decay=None, dropout_rate=None, outer_fold=None, debug_mode=False,
-                 max_transfer_learning=False, continue_training=True, display_full_metrics=True):
+                 learning_rate=None, weight_decay=None, dropout_rate=None, data_augmentation_factor=None,
+                 outer_fold=None, debug_mode=False, max_transfer_learning=False, continue_training=True,
+                 display_full_metrics=True):
         # parameters
         DeepLearning.__init__(self, target, organ, view, transformation, architecture, optimizer, learning_rate,
-                              weight_decay, dropout_rate, debug_mode)
+                              weight_decay, dropout_rate, data_augmentation_factor, debug_mode)
         self.outer_fold = outer_fold
         self.version = self.version + '_' + str(self.outer_fold)
         # NNet's architecture's weights
@@ -1119,6 +1137,47 @@ class Training(DeepLearning):
         # continue training if possible
         if self.continue_training and os.path.exists(self.path_load_weights):
             print('Loading the weights from the model\'s previous training iteration.')
+            return
+        
+        # Check if the same model with other hyperparameters have already been trained. Pick the best for transfer.
+        params = self.version.split('_')
+        params[5], params[6], params[7], params[8], params[9] = '*', '*', '*', '*', '*'  # hyperparameters
+        versions = '../eo/MI02_' + '_'.join(params) + '.out'
+        files = glob.glob(versions)
+        if self.main_metric_mode == 'min':
+            best_perf = np.Inf
+        else:
+            best_perf = -np.Inf
+        for file in files:
+            hand = open(file, 'r')
+            # find best last performance
+            final_improvement_line = None
+            baseline_performance_line = None
+            for line in hand:
+                line = line.rstrip()
+                if re.search('Baseline validation ' + self.main_metric_name + ' = ', line):
+                    baseline_performance_line = line
+                if re.search('val_' + self.main_metric_name + ' improved from', line):
+                    final_improvement_line = line
+            hand.close()
+            if final_improvement_line is not None:
+                perf = float(final_improvement_line.split(' ')[7].replace(',', ''))
+            elif baseline_performance_line is not None:
+                perf = float(baseline_performance_line.split(' ')[-1])
+            else:
+                continue
+            # Keep track of the file with the best performance
+            if self.main_metric_mode == 'min':
+                update = perf < best_perf
+            else:
+                update = perf > best_perf
+            if update:
+                best_perf = perf
+                self.path_load_weights = \
+                    file.replace('../eo/', self.path_store).replace('MI02_', 'model-weights_').replace('.out', '.h5')
+        if best_perf not in [-np.Inf, np.Inf]:
+            print('Transfering the weights from: ' + self.path_load_weights + ', with ' + self.main_metric_name + ' = '
+                  + str(best_perf))
             return
         
         # Look for similar models, starting from very similar to less similar
@@ -1213,17 +1272,17 @@ class Training(DeepLearning):
         patience_reduce_lr = 2 + self.GENERATORS['train'].steps
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=patience_reduce_lr, verbose=1,
                                                  mode='min', min_delta=0, cooldown=0, min_lr=0)
-        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=4, verbose=0,
+        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=5, verbose=0,
                                        mode=self.main_metric_mode, baseline=self.baseline_performance)
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, early_stopping, reduce_lr_on_plateau]
     
     def build_model(self):
         self._weights_for_transfer_learning()
         self._generate_architecture()
-        if self.keras_weights is None:
+        if os.path.exists(self.path_save_weights):
             self._load_model_weights()
         else:
-            # save imagenet weights as default, in case no better weights are found
+            # save transferred weights as default, in case no better weights are found
             self.model.save_weights(self.path_save_weights.replace('model-weights', 'backup-model-weights'))
             self.model.save_weights(self.path_save_weights)
         self._compile_model()
@@ -1964,9 +2023,14 @@ class PerformancesTuning(Metrics):
     
     def select_models(self):
         main_metric_name = self.dict_main_metrics_names[self.target]
+        main_metric_mode = self.main_metrics_modes[main_metric_name]
         Perf_col_name = main_metric_name + '_all'
         for model in self.models:
             Performances_model = self.Performances[self.Performances['model'] == model]
+            Performances_model.sort_values([Perf_col_name, 'learning_rate', 'dropout_rate', 'weight_decay',
+                                            'data_augmentation_factor'],
+                                           ascending=[main_metric_mode == 'min', False, False, False, False],
+                                           inplace=True)
             best_version = Performances_model['version'][
                 Performances_model[Perf_col_name] == Performances_model[Perf_col_name].max()].values[0]
             versions_to_drop = [version for version in Performances_model['version'].values if
@@ -2725,7 +2789,11 @@ class PlotsAttentionMaps(DeepLearning):
         Residuals['outer_fold'] = Residuals['outer_fold'].astype(int).astype(str)
         Residuals['res_abs'] = Residuals['res'].abs()
         self.Residuals = Residuals  # [['id', 'outer_fold', 'Sex', 'Age', 'res', 'res_abs']] TODO
-    
+        print('debugging. this is the shape before taking useless subset of cols')
+        print(Residuals.shape)
+        print('this is the shape before taking useless subset of cols')
+        print(Residuals[['id', 'outer_fold', 'Sex', 'Age', 'res', 'res_abs']].shape)
+
     def _select_representative_samples(self):
         # Select with samples to plot
         print('Selecting representative samples...')
@@ -2789,12 +2857,12 @@ class PlotsAttentionMaps(DeepLearning):
         self.df_outer_fold = self.df_to_plot[self.df_to_plot['outer_fold'] == outer_fold]
         
         # generate the data generators
-        self.generator = MyImageDataGenerator(target=self.target, organ=self.organ, data_features=self.df_outer_fold,
-                                              n_samples_per_subepoch=self.n_samples_per_subepoch,
-                                              batch_size=self.batch_size, training_mode=False, seed=self.seed,
-                                              side_predictors=self.side_predictors, dir_images=self.dir_images,
-                                              images_width=self.image_width, images_height=self.image_height,
-                                              data_augmentation=False)
+        self.generator = \
+            MyImageDataGenerator(target=self.target, organ=self.organ, view=self.view, data_features=self.df_outer_fold,
+                                 n_samples_per_subepoch=self.n_samples_per_subepoch, batch_size=self.batch_size,
+                                 training_mode=False, side_predictors=self.side_predictors, dir_images=self.dir_images,
+                                 images_width=self.image_width, images_height=self.image_height,
+                                 data_augmentation=False, data_augmentation_factor=None, seed=self.seed)
         
         # load the weights for the fold
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
@@ -2857,18 +2925,16 @@ class PlotsAttentionMaps(DeepLearning):
     def _plot_attention_maps(self, save_title):
         # format the grid of plots
         plt.clf()
-        fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-        subtitles = {0: {0: 'Original Image', 1: 'Saliency'}, 1: {0: 'Grad-CAM', 1: 'Guided Backpropagation'}}
-        for i in [0, 1]:
-            for j in [0, 1]:
-                axes[i, j].imshow(self.image)
-                axes[i, j].axis('off')
-                axes[i, j].set_title(subtitles[i][j], {'fontsize': 15})
+        fig, axes = plt.subplots(1, 2, figsize=(7, 10))
+        subtitles = {0: {0: 'Saliency', 1: 'Grad-CAM'}}
+        for j in [0, 1]:
+            axes[0, j].imshow(self.image)
+            axes[0, j].axis('off')
+            axes[0, j].set_title(subtitles[i][j], {'fontsize': 15})
         
         # fill the plot array
-        axes[0, 1].imshow(self.saliency_filter)
-        axes[1, 0].imshow(self.grad_cam_filter)
-        axes[1, 1].imshow(self.guided_backprop_filter)
+        axes[0, 0].imshow(self.saliency_filter)
+        axes[0, 1].imshow(self.grad_cam_filter)
         
         plt.suptitle(self.plot_title, fontsize=20)
         fig = plt.gcf()
