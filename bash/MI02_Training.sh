@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p gpu
-#SBATCH --open-mode=append
+#SBATCH --open-mode=truncate
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=alanlegoallec@g.harvard.edu
 
