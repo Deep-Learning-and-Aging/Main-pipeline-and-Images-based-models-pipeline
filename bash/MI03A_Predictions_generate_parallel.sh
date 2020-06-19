@@ -60,7 +60,7 @@ for target in "${targets[@]}"; do
 						for learning_rate in "${learning_rates[@]}"; do
 							for weight_decay in "${weight_decays[@]}"; do
 								for dropout_rate in "${dropout_rates[@]}"; do
-									for fold in "${folds[@]}"; do
+									for outer_fold in "${outer_folds[@]}"; do
 										version=${target}_${organ}_${view}_${transformation}_${architecture}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${data_augmentation_factor}_${outer_fold}
 										name=MI03A_$version
 										job_name="$name.job"

@@ -1,6 +1,7 @@
 # LIBRARIES
 # set up backend for ssh -x11 figures
 import matplotlib
+
 matplotlib.use('Agg')
 
 # read and write
@@ -84,10 +85,10 @@ class Hyperparameters:
         self.path_store = '../data/'
         self.folds = ['train', 'val', 'test']
         self.n_CV_outer_folds = 10
-        #TODO DEBUG
-        self.n_CV_outer_folds = 1
+        # TODO DEBUG
+        # self.n_CV_outer_folds = 1
         self.outer_folds = [str(x) for x in list(range(self.n_CV_outer_folds))]
-        self.ensemble_types = ['*', '?', ',']
+        self.ensemble_types = ['*']  # ['*', '?', ','] for multiple types of ensemble models
         self.modes = ['', '_sd', '_str']
         self.id_vars = ['id', 'eid', 'instance']
         self.ethnicities_vars = ['Ethnicity.White', 'Ethnicity.British', 'Ethnicity.Irish', 'Ethnicity.White_Other',
@@ -99,7 +100,7 @@ class Hyperparameters:
                                  'Ethnicity.Black_Other', 'Ethnicity.Chinese', 'Ethnicity.Other_ethnicity',
                                  'Ethnicity.Do_not_know', 'Ethnicity.Prefer_not_to_answer', 'Ethnicity.NA']
         self.demographic_vars = ['Age', 'Sex'] + self.ethnicities_vars
-        self.names_model_parameters = ['target', 'organ', 'view', 'transformation', 'architecture',
+        self.names_model_parameters = ['target', 'organ', 'view', 'transformation', 'architecture', 'n_fc_layers',
                                        'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate',
                                        'data_augmentation_factor']
         self.targets_regression = ['Age']
@@ -110,16 +111,16 @@ class Hyperparameters:
                        'PhysicalActivity']
         self.left_right_organs = ['Carotids', 'Eyes', 'Hips', 'Knees']
         self.dict_organs_to_views = {'Brain': ['sagittal', 'coronal', 'transverse'],
-                                           'Carotids': ['longaxis', 'shortaxis', 'CIMT120', 'CIMT150', 'mixed'],
-                                           'Eyes': ['fundus', 'OCT'],
-                                           'Heart': ['2chambers', '3chambers', '4chambers'],
-                                           'Liver': ['main'],
-                                           'Pancreas': ['main'],
-                                           'FullBody': ['figure', 'skeleton', 'flesh', 'mixed'],
-                                           'Spine': ['sagittal', 'coronal'],
-                                           'Hips': ['main'],
-                                           'Knees': ['main'],
-                                           'PhysicalActivity': ['main']}
+                                     'Carotids': ['longaxis', 'shortaxis', 'CIMT120', 'CIMT150', 'mixed'],
+                                     'Eyes': ['fundus', 'OCT'],
+                                     'Heart': ['2chambers', '3chambers', '4chambers'],
+                                     'Liver': ['main'],
+                                     'Pancreas': ['main'],
+                                     'FullBody': ['figure', 'skeleton', 'flesh', 'mixed'],
+                                     'Spine': ['sagittal', 'coronal'],
+                                     'Hips': ['main'],
+                                     'Knees': ['main'],
+                                     'PhysicalActivity': ['main']}
         self.organsviews_not_to_augment = ['Brain_sagittal', 'Brain_coronal', 'Brain_transverse', 'FullBody_figure',
                                            'FullBody_skeleton', 'FullBody_flesh', 'FullBody_mixed',
                                            'PhysicalActivity_main']
@@ -137,8 +138,8 @@ class Hyperparameters:
         parameters_list = model_name.split('_')
         for i, parameter in enumerate(self.names_model_parameters):
             parameters[parameter] = parameters_list[i]
-        if len(parameters_list) > 10:
-            parameters['outer_fold'] = parameters_list[10]
+        if len(parameters_list) > 11:
+            parameters['outer_fold'] = parameters_list[11]
         return parameters
     
     @staticmethod
@@ -299,6 +300,13 @@ class PreprocessingMain(Hyperparameters):
                                          ethnicities['Ethnicity.NA']
         self.data_raw = self.data_raw.join(ethnicities)
     
+    def _impute_missing_ecg_instances(self):
+        data_ecgs = pd.read_csv('/n/groups/patel/Alan/Aging/TimeSeries/scripts/age_analysis/missing_samples.csv')
+        data_ecgs['eid'] = data_ecgs['eid'].astype(str)
+        data_ecgs['instance'] = data_ecgs['instance'].astype(str)
+        for _, row in data_ecgs.iterrows():
+            self.data_raw.loc[row['eid'], 'Date_attended_center_' + row['instance']] = row['observation_date']
+    
     def generate_data(self):
         # Preprocessing
         dict_UKB_fields_to_names = {'34-0.0': 'Year_of_birth', '52-0.0': 'Month_of_birth',
@@ -314,6 +322,7 @@ class PreprocessingMain(Hyperparameters):
         self.data_raw.rename(columns=dict_UKB_fields_to_names, inplace=True)
         self.data_raw['eid'] = self.data_raw['eid'].astype(str)
         self.data_raw.set_index('eid', drop=False, inplace=True)
+        self._impute_missing_ecg_instances()
         self.data_raw = self.data_raw.dropna(subset=['Sex'])
         self._compute_age()
         self.data_raw = self.data_raw.dropna(how='all', subset=['Age_0', 'Age_1', 'Age_2', 'Age_3'])
@@ -345,7 +354,7 @@ class PreprocessingMain(Hyperparameters):
         self.data_features_eids = self.data_features[self.data_features.instance == '0']
         self.data_features_eids['instance'] = '*'
         self.data_features_eids['id'] = [ID.replace('_0', '_*') for ID in self.data_features_eids['id'].values]
-
+    
     def save_data(self):
         self.data_features.to_csv(self.path_store + 'data-features_instances.csv', index=False)
         self.data_features_eids.to_csv(self.path_store + 'data-features_eids.csv', index=False)
@@ -525,6 +534,9 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
             self.steps = math.ceil(n_samples_per_subepoch / self.batch_size)
         else:  # during prediction and other tasks, an epoch is defined as all the samples being seen once and only once
             self.steps = math.ceil(len(self.list_ids) / self.n_ids_batch)
+        # learning_rate_patience
+        if n_samples_per_subepoch is not None:
+            self.n_subepochs_per_epoch = math.ceil(len(self.data_features.index) / n_samples_per_subepoch)
         # initiate the indices and shuffle the ids
         self.shuffle = training_mode  # Only shuffle if the model is being trained. Otherwise no need.
         self.indices = np.arange(len(self.list_ids))
@@ -541,26 +553,32 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.data_augmentation_factor = data_augmentation_factor
         self.seed = seed
         # Parameters for data augmentation: (rotation range, width shift range, height shift range, zoom range)
-        self.dict_augmentation_parameters = {}
-        # Eyes
-        params = tuple([p * self.data_augmentation_factor for p in (10, 0.0, 0.0, 0.01)])
-        self.dict_augmentation_parameters.update(dict.fromkeys(['Eyes_fundus'], params))
-        params = tuple([p * self.data_augmentation_factor for p in (20, 0.1, 0.1, 0.05)])
-        self.dict_augmentation_parameters.update(dict.fromkeys(['Eyes_OCT'], params))
-        # Carotids, Heart, Liver, Pancreas, Hips, Knees
-        organs_views = ['Carotids_shortaxis', 'Carotids_longaxis', 'Carotids_CIMT120', 'Carotids_CIMT150',
-                        'Carotids_mixed', 'Heart_2chambers', 'Heart_3chambers', 'Heart_4chambers', 'Liver_main',
-                        'Pancreas_main', 'Spine_sagittal', 'Spine_coronal', 'Hips_main', 'Knees_main']
-        params = tuple([p * self.data_augmentation_factor for p in (10, 0.1, 0.1, 0.1)])
-        self.dict_augmentation_parameters.update(dict.fromkeys(organs_views, params))
-        # Others
-        self.dict_augmentation_parameters.update(dict.fromkeys(self.organsviews_not_to_augment, (0.0, 0.0, 0.0, 0.0)))
-        organ_view = self.organ + '_' + self.view
+        self.augmentation_parameters = \
+            pd.DataFrame(index=['Brain_sagittal', 'Brain_coronal', 'Brain_transverse', 'Eyes_fundus', 'Eyes_OCT',
+                                'Carotids_shortaxis', 'Carotids_longaxis', 'Carotids_CIMT120', 'Carotids_CIMT150',
+                                'Carotids_mixed', 'Heart_2chambers', 'Heart_3chambers', 'Heart_4chambers', 'Liver_main',
+                                'Pancreas_main', 'FullBody_figure', 'FullBody_skeleton', 'FullBody_flesh',
+                                'FullBody_mixed', 'Spine_sagittal', 'Spine_coronal', 'Hips_main', 'Knees_main'],
+                         columns=['rotation', 'width_shift', 'height_shift', 'zoom'])
+        self.augmentation_parameters.loc['Brain_sagittal', :] = [20, 0.05, 0.1, 0.0]
+        self.augmentation_parameters.loc['Brain_coronal', :] = [10, 0.05, 0.1, 0.0]
+        self.augmentation_parameters.loc['Brain_transverse', :] = [10, 0.05, 0.1, 0.0]
+        self.augmentation_parameters.loc['Eyes_fundus', :] = [20, 0.02, 0.02, 0]
+        self.augmentation_parameters.loc['Eyes_OCT', :] = [30, 0.1, 0.2, 0]
+        self.augmentation_parameters.loc[['Carotids_shortaxis', 'Carotids_longaxis', 'Carotids_CIMT120',
+                                          'Carotids_CIMT150'], :] = [0, 0.2, 0.0, 0.0]
+        self.augmentation_parameters.loc[['Heart_2chambers', 'Heart_3chambers', 'Heart_4chambers', 'Liver_main',
+                                          'Pancreas_main', 'Spine_sagittal'], :] = [10, 0.1, 0.1, 0.0]
+        self.augmentation_parameters.loc[['FullBody_figure', 'FullBody_skeleton', 'FullBody_flesh',
+                                          'FullBody_mixed'], :] = [10, 0.05, 0.02, 0.0]
+        self.augmentation_parameters.loc['Spine_sagittal', :] = [0, 0.1, 0.1, 0]
+        self.augmentation_parameters.loc[['Spine_coronal', 'Hips_main', 'Knees_main'], :] = [10, 0.1, 0.1, 0.1]
+        
         ImageDataGenerator.__init__(self, rescale=1. / 255.,
-                                    rotation_range=self.dict_augmentation_parameters[organ_view][0],
-                                    width_shift_range=self.dict_augmentation_parameters[organ_view][1],
-                                    height_shift_range=self.dict_augmentation_parameters[organ_view][2],
-                                    zoom_range=self.dict_augmentation_parameters[organ_view][3])
+                                    rotation_range=self.augmentation_parameters.loc[organ_view, 'rotation'],
+                                    width_shift_range=self.augmentation_parameters.loc[organ_view, 'width_shift'],
+                                    height_shift_range=self.augmentation_parameters.loc[organ_view, 'height_shift'],
+                                    zoom_range=self.augmentation_parameters.loc[organ_view, 'zoom'])
     
     def __len__(self):
         return self.steps
@@ -602,7 +620,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
                     x[i][-1] = 1 - x[i][-1]
             else:
                 path = self.dir_images
-            X[i, ] = self._generate_image(path_image=path + ID + '.jpg')
+            X[i,] = self._generate_image(path_image=path + ID + '.jpg')
         return [X, x], y
     
     def __getitem__(self, index):
@@ -732,9 +750,9 @@ class DeepLearning(Metrics):
     Train models
     """
     
-    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
-                 learning_rate=None, weight_decay=None, dropout_rate=None, data_augmentation_factor=None,
-                 debug_mode=False):
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
+                 optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
+                 data_augmentation_factor=None, debug_mode=False):
         # Initialization
         Metrics.__init__(self)
         tf.random.set_seed(self.seed)
@@ -745,16 +763,16 @@ class DeepLearning(Metrics):
         self.view = view
         self.transformation = transformation
         self.architecture = architecture
+        self.n_fc_layers = int(n_fc_layers)
         self.optimizer = optimizer
         self.learning_rate = float(learning_rate)
         self.weight_decay = float(weight_decay)
         self.dropout_rate = float(dropout_rate)
         self.data_augmentation_factor = float(data_augmentation_factor)
         self.outer_fold = None
-        self.version = self.target + '_' + self.organ + '_' + self.view + '_' + self.transformation + '_' + \
-                       self.architecture + '_' + self.optimizer + '_' + np.format_float_positional(self.learning_rate) \
-                       + '_' + str(self.weight_decay) + '_' + str(self.dropout_rate) + '_' + \
-                       str(self.data_augmentation_factor)
+        self.version = target + '_' + organ + '_' + view + '_' + transformation + '_' + architecture + '_' + \
+                       n_fc_layers + '_' + optimizer + '_' + learning_rate + '_' + weight_decay + '_' + dropout_rate + \
+                       '_' + data_augmentation_factor
         
         # NNet's architecture and weights
         self.side_predictors = self.dict_side_predictors[self.target]
@@ -785,7 +803,7 @@ class DeepLearning(Metrics):
             'Carotids_mixed': (337, 291),  # initial size (505, 436)
             'Eyes_fundus': (316, 316),  # initial size (1388, 1388)
             'Eyes_OCT': (312, 320),  # initial size (500, 512)
-            'Heart_2chambers': (316, 316),  # initial size (200, 200)
+            'Heart_2chambers': (316, 316),  # initial size (200, 200) #TODO might want to revert back to 316
             'Heart_3chambers': (316, 316),  # initial size (200, 200)
             'Heart_4chambers': (316, 316),  # initial size (200, 200)
             'Liver_main': (288, 364),  # initial size (364, 288)
@@ -1012,25 +1030,17 @@ class DeepLearning(Metrics):
     
     def _generate_side_nn(self):
         side_nn = Sequential()
-        side_nn.add(Dense(128, input_dim=len(self.side_predictors), activation="relu"))
-        side_nn.add(Dense(64, activation="relu"))
-        side_nn.add(Dense(24, activation="relu"))
+        side_nn.add(Dense(24, input_dim=len(self.side_predictors), activation="relu",
+                          kernel_regularizer=regularizers.l2(self.weight_decay)))
         return side_nn.input, side_nn.output
     
     def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
         x = concatenate([cnn_output, side_nn_output])
-        for n in [int(2 ** (10 - i)) for i in range(7)]:
+        for n in [int(2 ** (9 - i)) for i in range(self.n_fc_layers)]:
             x = Dense(n, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
             # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
-            if n > 64:
+            if n > 32:
                 x = Dropout(self.dropout_rate * n / 1024)(x)
-        '''
-        for n in [int(2 ** (2*(5 - i))) for i in range(4)]:
-            x = Dense(n, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
-            # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
-            if n > 64:
-                x = Dropout(self.dropout_rate * n / 1024)(x)
-        '''
         predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
         self.model = Model(inputs=[cnn_input, side_nn_input], outputs=predictions)
     
@@ -1073,13 +1083,13 @@ class Training(DeepLearning):
     Train models
     """
     
-    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
-                 learning_rate=None, weight_decay=None, dropout_rate=None, data_augmentation_factor=None,
-                 outer_fold=None, debug_mode=False, max_transfer_learning=False, continue_training=True,
-                 display_full_metrics=True):
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
+                 optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
+                 data_augmentation_factor=None, outer_fold=None, debug_mode=False, max_transfer_learning=False,
+                 continue_training=True, display_full_metrics=True):
         # parameters
-        DeepLearning.__init__(self, target, organ, view, transformation, architecture, optimizer, learning_rate,
-                              weight_decay, dropout_rate, data_augmentation_factor, debug_mode)
+        DeepLearning.__init__(self, target, organ, view, transformation, architecture, n_fc_layers, optimizer,
+                              learning_rate, weight_decay, dropout_rate, data_augmentation_factor, debug_mode)
         self.outer_fold = outer_fold
         self.version = self.version + '_' + str(self.outer_fold)
         # NNet's architecture's weights
@@ -1141,7 +1151,7 @@ class Training(DeepLearning):
         
         # Check if the same model with other hyperparameters have already been trained. Pick the best for transfer.
         params = self.version.split('_')
-        params[5], params[6], params[7], params[8], params[9] = '*', '*', '*', '*', '*'  # hyperparameters
+        params[6], params[7], params[8], params[9], params[10] = '*', '*', '*', '*', '*'  # hyperparameters
         versions = '../eo/MI02_' + '_'.join(params) + '.out'
         files = glob.glob(versions)
         if self.main_metric_mode == 'min':
@@ -1192,8 +1202,8 @@ class Training(DeepLearning):
                     parameters_to_match['target'] = target_to_load
                     # load the ranked performances table to select the best performing model among the similar
                     # models available
-                    path_performances_to_load = self.path_store + 'PERFORMANCES_ranked_' + parameters_to_match[
-                        'target'] + '_' + 'val' + '.csv'
+                    path_performances_to_load = self.path_store + 'PERFORMANCES_ranked_' + \
+                                                parameters_to_match['target'] + '_' + 'val' + '.csv'
                     try:
                         Performances = pd.read_csv(path_performances_to_load)
                         Performances['organ'] = Performances['organ'].astype(str)
@@ -1224,7 +1234,10 @@ class Training(DeepLearning):
     
     def _compile_model(self):
         # if learning rate was reduced with success according to logger, start with this reduced learning rate
-        path_logger = self.path_store + 'logger_' + self.version + '.csv'
+        if self.path_load_weights is not None:
+            path_logger = self.path_load_weights.replace('model-weights', 'logger').replace('.h5', '.csv')
+        else:
+            path_logger = self.path_store + 'logger_' + self.version + '.csv'  # TODO delete
         if os.path.exists(path_logger):
             try:
                 logger = pd.read_csv(path_logger)
@@ -1269,17 +1282,23 @@ class Training(DeepLearning):
                                              monitor='val_' + self.main_metric.name, baseline=self.baseline_performance,
                                              verbose=1, save_best_only=True, save_weights_only=True,
                                              mode=self.main_metric_mode, save_freq='epoch')
-        patience_reduce_lr = 2 + self.GENERATORS['train'].steps
+        patience_reduce_lr = 3 * self.GENERATORS['train'].n_subepochs_per_epoch
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=patience_reduce_lr, verbose=1,
                                                  mode='min', min_delta=0, cooldown=0, min_lr=0)
-        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=5, verbose=0,
-                                       mode=self.main_metric_mode, baseline=self.baseline_performance)
+        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=30, verbose=0,
+                                       mode=self.main_metric_mode,
+                                       baseline=self.baseline_performance)  # TODO change patience back
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, early_stopping, reduce_lr_on_plateau]
     
     def build_model(self):
         self._weights_for_transfer_learning()
         self._generate_architecture()
-        if os.path.exists(self.path_save_weights):
+        # Load weights if possible
+        try:
+            load_weights = True if os.path.exists(self.path_load_weights) else False
+        except TypeError:
+            load_weights = False
+        if load_weights:
             self._load_model_weights()
         else:
             # save transferred weights as default, in case no better weights are found
@@ -1302,11 +1321,12 @@ class Training(DeepLearning):
 
 class PredictionsGenerate(DeepLearning):
     
-    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
-                 learning_rate=None, weight_decay=None, dropout_rate=None, outer_fold=None, debug_mode=False):
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
+                 optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
+                 data_augmentation_factor=None, outer_fold=None, debug_mode=False):
         # Initialize parameters
-        DeepLearning.__init__(self, target, organ, view, transformation, architecture, optimizer, learning_rate,
-                              weight_decay, dropout_rate, outer_fold, debug_mode)
+        DeepLearning.__init__(self, target, organ, view, transformation, architecture, n_fc_layers, optimizer,
+                              learning_rate, weight_decay, dropout_rate, data_augmentation_factor, debug_mode)
         self.outer_fold = outer_fold
         self.mode = 'model_testing'
         # Define dictionaries attributes for data, generators and predictions
@@ -1456,8 +1476,7 @@ class PredictionsMerge(Hyperparameters):
         self.list_models = glob.glob(self.path_store + 'Predictions_instances_' + self.target + '_*_' + self.fold +
                                      '.csv')
         # get rid of ensemble models
-        self.list_models = [model for model in self.list_models
-                            if not (('*' in model) | ('?' in model) | (',' in model))]
+        self.list_models = [model for model in self.list_models if not any(e in model for e in self.ensemble_types)]
         self.list_models.sort()
     
     def preprocessing(self):
@@ -1722,7 +1741,7 @@ class PerformancesGenerate(Metrics):
         Predictions = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + self.version + '_' +
                                   self.fold + '.csv')
         Predictions['id'] = Predictions['id'].astype(str)
-        #Predictions.rename(columns={'Pred_' + self.version: 'pred'}, inplace=True) TODO delete
+        # Predictions.rename(columns={'Pred_' + self.version: 'pred'}, inplace=True) TODO delete
         self.Predictions = Predictions.merge(self.data_features, how='inner', on=['id'])
     
     # Initialize performances dataframes and compute sample sizes
@@ -1857,11 +1876,9 @@ class PerformancesMerge(Metrics):
                                      self.fold + '_str.csv')
         # get rid of ensemble models
         if self.ensemble_models:
-            self.list_models = [model for model in self.list_models
-                                if (('*' in model) | ('?' in model) | (',' in model))]
+            self.list_models = [model for model in self.list_models if any(e in model for e in self.ensemble_types)]
         else:
-            self.list_models = [model for model in self.list_models
-                                if not (('*' in model) | ('?' in model) | (',' in model))]
+            self.list_models = [model for model in self.list_models if not any(e in model for e in self.ensemble_types)]
         self.Performances = None
         self.Performances_alphabetical = None
         self.Performances_ranked = None
@@ -2007,7 +2024,7 @@ class PerformancesTuning(Metrics):
     
     def load_data(self):
         for fold in self.folds:
-            path = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + '_'\
+            path = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + '_' \
                    + fold + '.csv'
             self.PERFORMANCES[fold] = pd.read_csv(path).set_index('version', drop=False)
             self.PERFORMANCES[fold]['organ'] = self.PERFORMANCES[fold]['organ'].astype(str)
@@ -2044,7 +2061,7 @@ class PerformancesTuning(Metrics):
         
         # drop 'model' column
         self.Performances.drop(['model'], inplace=True, axis=1)
-
+        
         # Display results
         for fold in self.folds:
             print('The tuned ' + fold + ' performances are:')
@@ -2161,12 +2178,14 @@ class EnsemblesPredictions(Metrics):
             if len(list_ensemble_levels) > 0:
                 Ensemble_predictions_weighted_by_category = \
                     PREDICTIONS[fold][ensemble_namecols] * self.weights_by_category
-                Ensemble_predictions_weighted_by_ensembles = \
-                    PREDICTIONS[fold][self.sub_ensemble_cols] * self.weights_by_ensembles
-                PREDICTIONS[fold]['pred_' + version.replace('*', '?')] = \
+                PREDICTIONS[fold]['pred_' + version] = \
                     Ensemble_predictions_weighted_by_category.sum(axis=1, skipna=False)
-                PREDICTIONS[fold]['pred_' + version.replace('*', ',')] = \
-                    Ensemble_predictions_weighted_by_ensembles.sum(axis=1, skipna=False)
+                # PREDICTIONS[fold]['pred_' + version.replace('*', '?')] = \
+                #    Ensemble_predictions_weighted_by_category.sum(axis=1, skipna=False)
+                # Ensemble_predictions_weighted_by_ensembles = \
+                #    PREDICTIONS[fold][self.sub_ensemble_cols] * self.weights_by_ensembles
+                # PREDICTIONS[fold]['pred_' + version.replace('*', ',')] = \
+                #    Ensemble_predictions_weighted_by_ensembles.sum(axis=1, skipna=False)
     
     def _build_single_ensemble_wrapper(self, Performances, parameters, version, list_ensemble_levels, ensemble_level):
         Predictions = self.PREDICTIONS['val']
@@ -2200,14 +2219,14 @@ class EnsemblesPredictions(Metrics):
                         PREDICTIONS_01[fold][pred_version]
                     self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['2', '3'])] = \
                         PREDICTIONS_23[fold][pred_version]
-            
+        
         elif Ensemble_outerfolds.transpose().nunique().max() > 1:  # 2-Compute on all folds at once
             self._build_single_ensemble(self.PREDICTIONS, Performances, parameters, version, list_ensemble_levels,
                                         ensemble_level)
             for fold in self.folds:
                 for ensemble_type in self.ensemble_types:
                     self.PREDICTIONS[fold]['outer_fold_' + version.replace('*', ensemble_type)] = np.nan
-            
+        
         else:  # 3-Compute fold by fold
             PREDICTIONS_ENSEMBLE = {}
             for outer_fold in self.outer_folds:
@@ -2225,18 +2244,19 @@ class EnsemblesPredictions(Metrics):
                 
                 # merge the predictions on each outer_fold
                 for fold in self.folds:
-                    PREDICTIONS_outerfold[fold]['outer_fold_' + version] = float(outer_fold)
-                    PREDICTIONS_outerfold[fold]['outer_fold_' + version.replace('*', ',')] = float(outer_fold)
-                    PREDICTIONS_outerfold[fold]['outer_fold_' + version.replace('*', '?')] = float(outer_fold)
+                    for ensemble_type in self.ensemble_types:
+                        PREDICTIONS_outerfold[fold]['outer_fold_' + version.replace('*', ensemble_type)] = \
+                            float(outer_fold)
                     
                     # Save all the ensemble models if available
                     if ensemble_level is None:
                         df_outer_fold = PREDICTIONS_outerfold[fold][['id', 'outer_fold_' + version, 'pred_' + version]]
                     else:
-                        df_outer_fold = PREDICTIONS_outerfold[fold][
-                            ['id', 'outer_fold_' + version, 'pred_' + version,
-                             'outer_fold_' + version.replace('*', ','), 'pred_' + version.replace('*', ','),
-                             'outer_fold_' + version.replace('*', '?'), 'pred_' + version.replace('*', '?')]]
+                        cols = ['id']
+                        for ensemble_type in self.ensemble_types:
+                            cols += ['outer_fold_' + version.replace('*', ensemble_type),
+                                     'pred_' + version.replace('*', ensemble_type)]
+                        df_outer_fold = PREDICTIONS_outerfold[fold][cols]
                     
                     # Initiate, or append if some previous outerfolds have already been concatenated
                     if fold not in PREDICTIONS_ENSEMBLE.keys():
@@ -2255,7 +2275,7 @@ class EnsemblesPredictions(Metrics):
                                                                           on=['id'])
         
         # build and save a dataset for this specific ensemble model
-        for ensemble_type in ['*', ',', '?']:
+        for ensemble_type in self.ensemble_types:
             version_type = version.replace('*', ensemble_type)
             if 'pred_' + version_type in self.PREDICTIONS['test'].columns.values:
                 for fold in self.folds:
@@ -2331,7 +2351,7 @@ class ResidualsGenerate(Hyperparameters):
             df_model = self.Residuals[['Age', 'pred_' + model]]
             no_na_indices = [not b for b in df_model['pred_' + model].isna()]
             df_model = df_model.dropna()
-            if(len(df_model.index)) > 0:
+            if (len(df_model.index)) > 0:
                 age = df_model.loc[:, ['Age']]
                 res = df_model['Age'] - df_model['pred_' + model]
                 regr = linear_model.LinearRegression()
@@ -2450,7 +2470,7 @@ class SelectBest(Metrics):
     
     def _select_versions(self):
         Performances = self.PERFORMANCES['val']
-        idx_Ensembles = Performances['organ'].isin(['*', '?', ',']).values
+        idx_Ensembles = Performances['organ'].isin(self.ensemble_types).values
         idx_withoutEnsembles = [not b for b in idx_Ensembles]
         Perf_Ensembles = Performances[idx_Ensembles]
         Perf_withoutEnsembles = Performances[idx_withoutEnsembles]
@@ -2785,7 +2805,7 @@ class PlotsAttentionMaps(DeepLearning):
         Residuals.rename(columns={'res_' + self.version: 'res', 'outer_fold_' + self.version: 'outer_fold'},
                          inplace=True)
         Residuals.set_index('id', drop=False, inplace=True)
-        #Residuals['id'] = Residuals['id'].astype(str).apply(self._append_ext) TODO
+        # Residuals['id'] = Residuals['id'].astype(str).apply(self._append_ext) TODO
         Residuals['outer_fold'] = Residuals['outer_fold'].astype(int).astype(str)
         Residuals['res_abs'] = Residuals['res'].abs()
         self.Residuals = Residuals  # [['id', 'outer_fold', 'Sex', 'Age', 'res', 'res_abs']] TODO
@@ -2793,7 +2813,7 @@ class PlotsAttentionMaps(DeepLearning):
         print(Residuals.shape)
         print('this is the shape before taking useless subset of cols')
         print(Residuals[['id', 'outer_fold', 'Sex', 'Age', 'res', 'res_abs']].shape)
-
+    
     def _select_representative_samples(self):
         # Select with samples to plot
         print('Selecting representative samples...')
@@ -2820,9 +2840,9 @@ class PlotsAttentionMaps(DeepLearning):
                     print('Aging rate: ' + aging_rate)
                     Residuals_ar = Residuals_age
                     if aging_rate == 'accelerated':
-                        Residuals_ar.sort_values(by='res', ascending=False, inplace=True)
-                    elif aging_rate == 'decelerated':
                         Residuals_ar.sort_values(by='res', ascending=True, inplace=True)
+                    elif aging_rate == 'decelerated':
+                        Residuals_ar.sort_values(by='res', ascending=False, inplace=True)
                     else:
                         Residuals_ar.sort_values(by='res_abs', ascending=True, inplace=True)
                     Residuals_ar['aging_rate'] = aging_rate
@@ -2960,10 +2980,10 @@ class PlotsAttentionMaps(DeepLearning):
             save_title = self.df_outer_fold['save_title'].values[i * self.batch_size + j]
             
             # generate the transparent filters for saliency, grad-cam and guided-backprop maps
-            #self._generate_saliency_map(saliencies[j])
+            # self._generate_saliency_map(saliencies[j])
             self._generate_gradcam_map()
-            #self._generate_guidedbackprop_map(guided_backprops[j])
-
+            # self._generate_guidedbackprop_map(guided_backprops[j])
+            
             save_title = save_title.replace('Attention_Maps/',
                                             'Attention_Maps/' + self.dict_map_types_to_names[map_type])
             self._plot_attention_map(filter_map=getattr(self, map_type + '_filter'), save_title=save_title)
