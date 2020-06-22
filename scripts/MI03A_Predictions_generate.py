@@ -8,7 +8,7 @@ debug_mode = False
 save_predictions = True
 
 # Default parameters
-if len(sys.argv) != 13:
+if len(sys.argv) != 14:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
@@ -17,6 +17,7 @@ if len(sys.argv) != 13:
     sys.argv.append('contrast')  # transformation
     sys.argv.append('InceptionV3')  # architecture
     sys.argv.append('0')  # n_fc_layers
+    sys.argv.append('4')  # n_fc_nodes
     sys.argv.append('Adam')  # optimizer
     sys.argv.append('0.0001')  # learning_rate
     sys.argv.append('0.0')  # weight decay
@@ -27,10 +28,10 @@ if len(sys.argv) != 13:
 # Compute results
 Predictions_Generate = PredictionsGenerate(target=sys.argv[1], organ=sys.argv[2], view=sys.argv[3],
                                            transformation=sys.argv[4], architecture=sys.argv[5],
-                                           n_fc_layers=sys.argv[6], optimizer=sys.argv[7], learning_rate=sys.argv[8],
-                                           weight_decay=sys.argv[9], dropout_rate=sys.argv[10],
-                                           data_augmentation_factor=sys.argv[11], outer_fold=sys.argv[12],
-                                           debug_mode=debug_mode)
+                                           n_fc_layers=sys.argv[6], n_fc_nodes=sys.argv[7], optimizer=sys.argv[8],
+                                           learning_rate=sys.argv[9], weight_decay=sys.argv[10],
+                                           dropout_rate=sys.argv[11], data_augmentation_factor=sys.argv[12],
+                                           outer_fold=sys.argv[13], debug_mode=debug_mode)
 Predictions_Generate.generate_predictions()
 if save_predictions:
     Predictions_Generate.save_predictions()

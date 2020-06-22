@@ -101,7 +101,7 @@ class Hyperparameters:
                                  'Ethnicity.Do_not_know', 'Ethnicity.Prefer_not_to_answer', 'Ethnicity.NA']
         self.demographic_vars = ['Age', 'Sex'] + self.ethnicities_vars
         self.names_model_parameters = ['target', 'organ', 'view', 'transformation', 'architecture', 'n_fc_layers',
-                                       'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate',
+                                       'n_fc_nodes', 'optimizer', 'learning_rate', 'weight_decay', 'dropout_rate',
                                        'data_augmentation_factor']
         self.targets_regression = ['Age']
         self.targets_binary = ['Sex']
@@ -573,7 +573,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
                                           'FullBody_mixed'], :] = [10, 0.05, 0.02, 0.0]
         self.augmentation_parameters.loc['Spine_sagittal', :] = [0, 0.1, 0.1, 0]
         self.augmentation_parameters.loc[['Spine_coronal', 'Hips_main', 'Knees_main'], :] = [10, 0.1, 0.1, 0.1]
-        
+        organ_view = self.organ + '_' + self.view
         ImageDataGenerator.__init__(self, rescale=1. / 255.,
                                     rotation_range=self.augmentation_parameters.loc[organ_view, 'rotation'],
                                     width_shift_range=self.augmentation_parameters.loc[organ_view, 'width_shift'],
@@ -751,7 +751,7 @@ class DeepLearning(Metrics):
     """
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
-                 optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
+                 n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
                  data_augmentation_factor=None, debug_mode=False):
         # Initialization
         Metrics.__init__(self)
@@ -764,6 +764,7 @@ class DeepLearning(Metrics):
         self.transformation = transformation
         self.architecture = architecture
         self.n_fc_layers = int(n_fc_layers)
+        self.n_fc_nodes = int(n_fc_nodes)
         self.optimizer = optimizer
         self.learning_rate = float(learning_rate)
         self.weight_decay = float(weight_decay)
@@ -771,8 +772,8 @@ class DeepLearning(Metrics):
         self.data_augmentation_factor = float(data_augmentation_factor)
         self.outer_fold = None
         self.version = target + '_' + organ + '_' + view + '_' + transformation + '_' + architecture + '_' + \
-                       n_fc_layers + '_' + optimizer + '_' + learning_rate + '_' + weight_decay + '_' + dropout_rate + \
-                       '_' + data_augmentation_factor
+                       n_fc_layers + '_' + n_fc_nodes + '_' + optimizer + '_' + learning_rate + '_' + weight_decay + \
+                       '_' + dropout_rate + '_' + data_augmentation_factor
         
         # NNet's architecture and weights
         self.side_predictors = self.dict_side_predictors[self.target]
@@ -1025,21 +1026,22 @@ class DeepLearning(Metrics):
             if self.architecture == 'EfficientNetB7':
                 x = Dropout(self.dropout_rate)(x)
         x = Dense(1000, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
-        cnn_output = Dropout(self.dropout_rate)(x)
+        cnn_output = Dropout(self.dropout_rate * 1000 / 1024)(x)
         return cnn.input, cnn_output
     
     def _generate_side_nn(self):
         side_nn = Sequential()
         side_nn.add(Dense(24, input_dim=len(self.side_predictors), activation="relu",
                           kernel_regularizer=regularizers.l2(self.weight_decay)))
+        side_nn.add(Dropout(self.dropout_rate * 24 / 1024))
         return side_nn.input, side_nn.output
     
     def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
         x = concatenate([cnn_output, side_nn_output])
-        for n in [int(2 ** (9 - i)) for i in range(self.n_fc_layers)]:
+        for n in [int(self.n_fc_nodes * (2 ** (2 * (self.n_fc_layers - 1 - i)))) for i in range(self.n_fc_layers)]:
             x = Dense(n, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
             # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
-            if n > 32:
+            if n > 16:
                 x = Dropout(self.dropout_rate * n / 1024)(x)
         predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
         self.model = Model(inputs=[cnn_input, side_nn_input], outputs=predictions)
@@ -1082,19 +1084,19 @@ class Training(DeepLearning):
     """
     Train models
     """
-    
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
-                 optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
-                 data_augmentation_factor=None, outer_fold=None, debug_mode=False, max_transfer_learning=False,
+                 n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
+                 data_augmentation_factor=None, outer_fold=None, debug_mode=False, transfer_learning=None,
                  continue_training=True, display_full_metrics=True):
         # parameters
-        DeepLearning.__init__(self, target, organ, view, transformation, architecture, n_fc_layers, optimizer,
-                              learning_rate, weight_decay, dropout_rate, data_augmentation_factor, debug_mode)
+        DeepLearning.__init__(self, target, organ, view, transformation, architecture, n_fc_layers, n_fc_nodes,
+                              optimizer, learning_rate, weight_decay, dropout_rate, data_augmentation_factor,
+                              debug_mode)
         self.outer_fold = outer_fold
         self.version = self.version + '_' + str(self.outer_fold)
         # NNet's architecture's weights
         self.continue_training = continue_training
-        self.max_transfer_learning = max_transfer_learning
+        self.transfer_learning = transfer_learning
         self.list_parameters_to_match = ['organ', 'transformation', 'view']
         # dict to decide in which order targets should be used when trying to transfer weight from a similar model
         self.dict_alternative_targets_for_transfer_learning = {'Age': ['Age', 'Sex'], 'Sex': ['Sex', 'Age']}
@@ -1149,49 +1151,56 @@ class Training(DeepLearning):
             print('Loading the weights from the model\'s previous training iteration.')
             return
         
-        # Check if the same model with other hyperparameters have already been trained. Pick the best for transfer.
-        params = self.version.split('_')
-        params[6], params[7], params[8], params[9], params[10] = '*', '*', '*', '*', '*'  # hyperparameters
-        versions = '../eo/MI02_' + '_'.join(params) + '.out'
-        files = glob.glob(versions)
-        if self.main_metric_mode == 'min':
-            best_perf = np.Inf
-        else:
-            best_perf = -np.Inf
-        for file in files:
-            hand = open(file, 'r')
-            # find best last performance
-            final_improvement_line = None
-            baseline_performance_line = None
-            for line in hand:
-                line = line.rstrip()
-                if re.search('Baseline validation ' + self.main_metric_name + ' = ', line):
-                    baseline_performance_line = line
-                if re.search('val_' + self.main_metric_name + ' improved from', line):
-                    final_improvement_line = line
-            hand.close()
-            if final_improvement_line is not None:
-                perf = float(final_improvement_line.split(' ')[7].replace(',', ''))
-            elif baseline_performance_line is not None:
-                perf = float(baseline_performance_line.split(' ')[-1])
-            else:
-                continue
-            # Keep track of the file with the best performance
+        # Initialize the weights using other the weights from other successful hyperparameters combinations
+        if self.transfer_learning == 'hyperparameters':
+            # Check if the same model with other hyperparameters have already been trained. Pick the best for transfer.
+            params = self.version.split('_')
+            params_tl_idx = \
+                [i for i in range(len(names_model_parameters))
+                 if any(names_model_parameters[i] == p for p in
+                        ['optimizer', 'learning_rate', 'weight_decay', 'dropout_rate', 'data_augmentation_factor'])]
+            for idx in params_tl_idx:
+                params[idx] = '*'
+            versions = '../eo/MI02_' + '_'.join(params) + '.out'
+            files = glob.glob(versions)
             if self.main_metric_mode == 'min':
-                update = perf < best_perf
+                best_perf = np.Inf
             else:
-                update = perf > best_perf
-            if update:
-                best_perf = perf
-                self.path_load_weights = \
-                    file.replace('../eo/', self.path_store).replace('MI02_', 'model-weights_').replace('.out', '.h5')
-        if best_perf not in [-np.Inf, np.Inf]:
-            print('Transfering the weights from: ' + self.path_load_weights + ', with ' + self.main_metric_name + ' = '
-                  + str(best_perf))
-            return
+                best_perf = -np.Inf
+            for file in files:
+                hand = open(file, 'r')
+                # find best last performance
+                final_improvement_line = None
+                baseline_performance_line = None
+                for line in hand:
+                    line = line.rstrip()
+                    if re.search('Baseline validation ' + self.main_metric_name + ' = ', line):
+                        baseline_performance_line = line
+                    if re.search('val_' + self.main_metric_name + ' improved from', line):
+                        final_improvement_line = line
+                hand.close()
+                if final_improvement_line is not None:
+                    perf = float(final_improvement_line.split(' ')[7].replace(',', ''))
+                elif baseline_performance_line is not None:
+                    perf = float(baseline_performance_line.split(' ')[-1])
+                else:
+                    continue
+                # Keep track of the file with the best performance
+                if self.main_metric_mode == 'min':
+                    update = perf < best_perf
+                else:
+                    update = perf > best_perf
+                if update:
+                    best_perf = perf
+                    self.path_load_weights = \
+                        file.replace('../eo/', self.path_store).replace('MI02', 'model-weights').replace('.out', '.h5')
+            if best_perf not in [-np.Inf, np.Inf]:
+                print('Transfering the weights from: ' + self.path_load_weights + ', with ' + self.main_metric_name +
+                      ' = ' + str(best_perf))
+                return
         
-        # Look for similar models, starting from very similar to less similar
-        if self.max_transfer_learning:
+        # Initialize the weights based on models trained on different datasets, ranked by similarity
+        if self.transfer_learning == 'datasets':
             while True:
                 # print('Matching models for the following criterias:');
                 # print(['architecture', 'target'] + list_parameters_to_match)
@@ -1322,11 +1331,12 @@ class Training(DeepLearning):
 class PredictionsGenerate(DeepLearning):
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
-                 optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
+                 n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
                  data_augmentation_factor=None, outer_fold=None, debug_mode=False):
         # Initialize parameters
-        DeepLearning.__init__(self, target, organ, view, transformation, architecture, n_fc_layers, optimizer,
-                              learning_rate, weight_decay, dropout_rate, data_augmentation_factor, debug_mode)
+        DeepLearning.__init__(self, target, organ, view, transformation, architecture, n_fc_layers, n_fc_nodes,
+                              optimizer, learning_rate, weight_decay, dropout_rate, data_augmentation_factor,
+                              debug_mode)
         self.outer_fold = outer_fold
         self.mode = 'model_testing'
         # Define dictionaries attributes for data, generators and predictions
@@ -2088,9 +2098,9 @@ class EnsemblesPredictions(Metrics):
         self.target = target
         self.pred_type = pred_type
         self.ensembles_performance_cutoff_percent = 0
-        self.parameters = {'target': self.target, 'organ': '*', 'view': '*', 'transformation': '*',
-                           'architecture': '*', 'optimizer': '*', 'learning_rate': '*', 'weight_decay': '*',
-                           'dropout_rate': '*'}
+        self.parameters = {'target': self.target, 'organ': '*', 'view': '*', 'transformation': '*', 'architecture': '*',
+                           'n_fc_layers':'*', 'n_fc_nodes':'*', 'optimizer': '*', 'learning_rate': '*',
+                           'weight_decay': '*', 'dropout_rate': '*', 'data_augmentation_factor': '*'}
         self.version = self._parameters_to_version(self.parameters)
         self.main_metric_name = self.dict_main_metrics_names[target]
         self.init_perf = -np.Inf if self.main_metrics_modes[self.main_metric_name] == 'max' else np.Inf
