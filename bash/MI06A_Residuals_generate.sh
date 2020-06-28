@@ -1,4 +1,5 @@
 #!/bin/bash
+#SBATCH --parsable
 #SBATCH -p priority
 #SBATCH --open-mode=truncate
 #SBATCH --mail-type=FAIL

@@ -1,4 +1,5 @@
 #!/bin/bash
+#SBATCH --parsable
 #SBATCH -p gpu
 #SBATCH --open-mode=truncate
 #SBATCH --mail-type=FAIL

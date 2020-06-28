@@ -91,6 +91,7 @@ class Hyperparameters:
         self.ensemble_types = ['*']  # ['*', '?', ','] for multiple types of ensemble models
         self.modes = ['', '_sd', '_str']
         self.id_vars = ['id', 'eid', 'instance']
+        self.instances = ['0', '1', '1.5', '2', '3']
         self.ethnicities_vars = ['Ethnicity.White', 'Ethnicity.British', 'Ethnicity.Irish', 'Ethnicity.White_Other',
                                  'Ethnicity.Mixed', 'Ethnicity.White_and_Black_Caribbean',
                                  'Ethnicity.White_and_Black_African', 'Ethnicity.White_and_Asian',
@@ -243,7 +244,9 @@ class PreprocessingMain(Hyperparameters):
         self.data_raw['Month_of_birth'] = self.data_raw['Month_of_birth'].astype(int)
         self.data_raw['Date_of_birth'] = self.data_raw.apply(
             lambda row: datetime(row.Year_of_birth, row.Month_of_birth, 15), axis=1)
-        for i in [str(i) for i in range(4)]:
+        self.data_raw['Date_attended_center_1.5'] = \
+            self.data_raw['Date_attended_center_1.5'].apply(lambda x: x if pd.isna(x) else x.split('T')[0])
+        for i in self.instances:
             self.data_raw['Date_attended_center_' + i] = \
                 self.data_raw['Date_attended_center_' + i].apply(
                     lambda x: pd.NaT if pd.isna(x) else datetime.strptime(x, '%Y-%m-%d'))
@@ -312,11 +315,12 @@ class PreprocessingMain(Hyperparameters):
         dict_UKB_fields_to_names = {'34-0.0': 'Year_of_birth', '52-0.0': 'Month_of_birth',
                                     '53-0.0': 'Date_attended_center_0', '53-1.0': 'Date_attended_center_1',
                                     '53-2.0': 'Date_attended_center_2', '53-3.0': 'Date_attended_center_3',
+                                    '90010-0.0': 'Date_attended_center_1.5',  # Start time of wear for accelerometer
                                     '31-0.0': 'Sex', '21000-0.0': 'Ethnicity', '21000-1.0': 'Ethnicity_1',
                                     '21000-2.0': 'Ethnicity_2', '22414-2.0': 'Abdominal_images_quality'}
         self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
                                     usecols=['eid', '31-0.0', '21000-0.0', '21000-1.0', '21000-2.0', '34-0.0', '52-0.0',
-                                             '53-0.0', '53-1.0', '53-2.0', '53-3.0', '22414-2.0'])
+                                             '53-0.0', '53-1.0', '90010-0.0', '53-2.0', '53-3.0', '22414-2.0'])
         
         # Formatting
         self.data_raw.rename(columns=dict_UKB_fields_to_names, inplace=True)
@@ -325,12 +329,12 @@ class PreprocessingMain(Hyperparameters):
         self._impute_missing_ecg_instances()
         self.data_raw = self.data_raw.dropna(subset=['Sex'])
         self._compute_age()
-        self.data_raw = self.data_raw.dropna(how='all', subset=['Age_0', 'Age_1', 'Age_2', 'Age_3'])
+        self.data_raw = self.data_raw.dropna(how='all', subset=['Age_0', 'Age_1', 'Age_1.5', 'Age_2', 'Age_3'])
         self._encode_ethnicity()
         
         # Concatenate the data from the different instances
         self.data_features = None
-        for i in [str(i) for i in range(4)]:
+        for i in self.instances:
             print('Preparing the samples for instance ' + i)
             df_i = self.data_raw[['eid', 'Sex', 'Age_' + i] + self.ethnicities_vars + ['Abdominal_images_quality']
                                  ].dropna(subset=['Age_' + i])
@@ -346,6 +350,9 @@ class PreprocessingMain(Hyperparameters):
             else:
                 self.data_features = self.data_features.append(df_i)
             print('The size of the full concatenated dataframe is now ' + str(len(self.data_features.index)))
+        
+        # Save age as a float32 instead of float64
+        self.data_features['Age'] = np.float32(self.data_features['Age'])
         
         # Shuffle the rows before saving the dataframe
         self.data_features = self.data_features.sample(frac=1)
@@ -620,7 +627,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
                     x[i][-1] = 1 - x[i][-1]
             else:
                 path = self.dir_images
-            X[i,] = self._generate_image(path_image=path + ID + '.jpg')
+            X[i, :, :, :] = self._generate_image(path_image=path + ID + '.jpg')
         return [X, x], y
     
     def __getitem__(self, index):
@@ -1025,15 +1032,16 @@ class DeepLearning(Metrics):
             x = GlobalAveragePooling2D()(x)
             if self.architecture == 'EfficientNetB7':
                 x = Dropout(self.dropout_rate)(x)
-        x = Dense(1000, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
-        cnn_output = Dropout(self.dropout_rate * 1000 / 1024)(x)
+        #x = Dense(1000, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
+        #cnn_output = Dropout(self.dropout_rate * 1000 / 1024)(x) TODO remove
+        cnn_output = x
         return cnn.input, cnn_output
     
     def _generate_side_nn(self):
         side_nn = Sequential()
-        side_nn.add(Dense(24, input_dim=len(self.side_predictors), activation="relu",
+        side_nn.add(Dense(16, input_dim=len(self.side_predictors), activation="relu",
                           kernel_regularizer=regularizers.l2(self.weight_decay)))
-        side_nn.add(Dropout(self.dropout_rate * 24 / 1024))
+        side_nn.add(Dropout(self.dropout_rate * 16 / 1024))
         return side_nn.input, side_nn.output
     
     def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
@@ -1291,10 +1299,10 @@ class Training(DeepLearning):
                                              monitor='val_' + self.main_metric.name, baseline=self.baseline_performance,
                                              verbose=1, save_best_only=True, save_weights_only=True,
                                              mode=self.main_metric_mode, save_freq='epoch')
-        patience_reduce_lr = 3 * self.GENERATORS['train'].n_subepochs_per_epoch
+        patience_reduce_lr = min(7, 3 * self.GENERATORS['train'].n_subepochs_per_epoch)
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=patience_reduce_lr, verbose=1,
                                                  mode='min', min_delta=0, cooldown=0, min_lr=0)
-        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=30, verbose=0,
+        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=15, verbose=0,
                                        mode=self.main_metric_mode,
                                        baseline=self.baseline_performance)  # TODO change patience back
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, early_stopping, reduce_lr_on_plateau]
@@ -2577,6 +2585,84 @@ class SelectCorrelationsNAs(Hyperparameters):
                     self.CORRELATIONS[models_type]['*'][mode][fold].to_csv(self.path_store + 'ResidualsCorrelations' +
                                                                            models_type + mode + '_*_' + self.target +
                                                                            '_' + fold + '.csv', index=True)
+
+
+class GWASPreprocessing(Hyperparameters):
+    
+    def __init__(self, target=None):
+        Hyperparameters.__init__(self)
+        self.target = target
+        self.Residuals = None
+        self.covars = None
+        self.data = None
+    
+    def _preprocess_residuals(self):
+        # Load residuals
+        Residuals = pd.read_csv("/n/groups/patel/Alan/Aging/Medical_Images/RESIDUALS_bestmodels_eids_Age_test.csv") # TODO change to normal path
+        #Residuals = pd.read_csv(self.path_store + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
+        Residuals['id'] = Residuals['eid']
+        Residuals.rename(columns={'id': 'FID', 'eid': 'IID'}, inplace=True)
+        Residuals = Residuals[Residuals['Ethnicity.White'] == 1]
+        cols_to_drop = ['instance', 'Sex'] + \
+                       [col for col in Residuals.columns.values if ('Ethnicity.' in col) | ('outer_fold_' in col)]
+        Residuals.drop(columns=cols_to_drop, inplace=True)
+        self.Residuals = Residuals
+    
+    def _preprocess_covars(self):
+        # Load covars
+        covar_cols = ['eid', '22001-0.0', '21000-0.0', '54-0.0', '22000-0.0'] + ['22009-0.' + str(i) for i in
+                                                                                 range(1, 41)]
+        covars = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv', usecols=covar_cols)
+        dict_rename = {'eid': 'IID', '22001-0.0': 'Sex', '21000-0.0': 'Ethnicity', '54-0.0': 'Assessment_center',
+                       '22000-0.0': 'Genotyping_batch'}
+        for i in range(1, 41):
+            dict_rename.update(dict.fromkeys(['22009-0.' + str(i)], 'PC' + str(i)))
+        covars.rename(columns=dict_rename, inplace=True)
+        covars.dropna(inplace=True)
+        covars['Sex'][covars['Sex'] == 0] = 2
+        covars['Sex'] = covars['Sex'].astype(int)
+        # remove non whites samples as suggested in BOLT-LMM_v2.3.4_manual.pdf p18
+        covars = covars[covars['Ethnicity'].isin([1, 1001, 1002, 1003])]
+        self.covars = covars
+    
+    def _merge_main_data(self):
+        # Merge both dataframes
+        self.data = self.covars.merge(self.Residuals, on=['IID'])
+        self.data.to_csv(self.path_store + 'GWAS_data_' + self.target + '.tab', index=False, header=False, sep=' ')
+        # Save a smaller version for debugging purposes
+        self.data.iloc[:1000, :].to_csv(self.path_store + 'GWAS_data_' + self.target + '_debug.tab',
+                                        index=False, header=False, sep=' ')
+    
+    def _compute_family_structure(self):
+        # Generate family structure data
+        fam = self.data[['IID', 'FID', 'Sex']]
+        fam['father'] = 0
+        fam['mother'] = 0
+        fam['phenotype'] = 1
+        fam = fam[['FID', 'IID', 'father', 'mother', 'Sex', 'phenotype']]
+        fam.dropna(inplace=True)
+        fam.to_csv(self.path_store + 'GWAS_family_structure_' + self.target + '.fam', index=False, header=False, sep=' ')
+    
+    def _list_removed(self):
+        # samples to remove for all organs
+        remove = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv', usecols=['eid'])
+        remove.rename(columns={'eid': 'FID'}, inplace=True)
+        remove['IID'] = remove['FID']
+        remove = remove[-remove['IID'].isin(self.data['IID'].values)]
+        remove.to_csv(self.path_store + 'GWAS_remove_' + self.target + '.tab', index=False, sep=' ')
+        # samples to remove for each organ
+        organs = [col for col in self.Residuals.columns.values if col not in ['FID', 'IID', 'Age']]
+        for organ in organs:
+            remove_organ = self.data[self.data[organ].isna()][['FID', 'IID']]
+            remove_organ.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ + '.tab',
+                                                                 index=False, sep=' ')
+    
+    def compute_gwas_input(self):
+        self._preprocess_residuals()
+        self._preprocess_covars()
+        self._merge_main_data()
+        self._compute_family_structure()
+        self._list_removed()
 
 
 class PlotsCorrelations(Hyperparameters):

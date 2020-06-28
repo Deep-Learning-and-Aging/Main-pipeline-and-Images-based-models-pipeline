@@ -24,6 +24,7 @@ outer_folds=( "0" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
+declare -a IDs=()
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then
@@ -104,7 +105,8 @@ for target in "${targets[@]}"; do
 										fi
 										if $to_run; then
 											echo Submitting job for $version
-											sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $organ $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold
+											ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $organ $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold)
+											IDs+=($ID)
 										#else
 										#	echo Predictions for $version have already been generated.
 										fi
@@ -118,4 +120,8 @@ for target in "${targets[@]}"; do
 		done
 	done
 done
+# Produce the list of job dependencies fr the next step
+printf -v IDs_list '%s:' "${IDs[@]}"
+dependencies="${IDs_list%:}"
+echo $dependencies
 

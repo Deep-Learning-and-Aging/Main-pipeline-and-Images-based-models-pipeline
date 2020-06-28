@@ -24,6 +24,7 @@ pred_types=( "instances" "eids" )
 memory=2G
 n_cpu_cores=1
 n_gpus=1
+declare -a IDs=()
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then
@@ -80,7 +81,8 @@ for target in "${targets[@]}"; do
 											#if regenerate_performances option is on or if the performances have not yet been generated, run the job
 											if ! test -f "../data/Performances_${version}.csv" || $regenerate_performances; then
 												echo Submitting job for $version
-												sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh $target $organ $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $fold $pred_type
+												ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh $target $organ $view $transformation $architecture $optimizer $learning_rate $weight_decay $dropout_rate $fold $pred_type)
+												IDs+=($ID)
 											#else
 											#	echo Performance for $version have already been generated.
 											fi
@@ -95,4 +97,8 @@ for target in "${targets[@]}"; do
 		done
 	done
 done
+# Produce the list of job dependencies fr the next step
+printf -v IDs_list '%s:' "${IDs[@]}"
+dependencies="${IDs_list%:}"
+echo $dependencies
 

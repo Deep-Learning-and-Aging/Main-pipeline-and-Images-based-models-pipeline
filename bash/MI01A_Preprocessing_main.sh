@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --job-name=MI01A.job
 #SBATCH --output=../eo/MI01A.out
 #SBATCH --error=../eo/MI01A.err
 #SBATCH --mem-per-cpu=8G 
 #SBATCH -c 1
 #SBATCH -t 15
+#SBATCH --parsable 
 #SBATCH -p priority
 #SBATCH --open-mode=truncate
 #SBATCH --mail-type=FAIL
