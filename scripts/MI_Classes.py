@@ -811,7 +811,7 @@ class DeepLearning(Metrics):
             'Carotids_mixed': (337, 291),  # initial size (505, 436)
             'Eyes_fundus': (316, 316),  # initial size (1388, 1388)
             'Eyes_OCT': (312, 320),  # initial size (500, 512)
-            'Heart_2chambers': (316, 316),  # initial size (200, 200) #TODO might want to revert back to 316
+            'Heart_2chambers': (316, 316),  # initial size (200, 200)
             'Heart_3chambers': (316, 316),  # initial size (200, 200)
             'Heart_4chambers': (316, 316),  # initial size (200, 200)
             'Liver_main': (288, 364),  # initial size (364, 288)
@@ -1032,8 +1032,6 @@ class DeepLearning(Metrics):
             x = GlobalAveragePooling2D()(x)
             if self.architecture == 'EfficientNetB7':
                 x = Dropout(self.dropout_rate)(x)
-        #x = Dense(1000, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
-        #cnn_output = Dropout(self.dropout_rate * 1000 / 1024)(x) TODO remove
         cnn_output = x
         return cnn.input, cnn_output
     
@@ -1041,17 +1039,18 @@ class DeepLearning(Metrics):
         side_nn = Sequential()
         side_nn.add(Dense(16, input_dim=len(self.side_predictors), activation="relu",
                           kernel_regularizer=regularizers.l2(self.weight_decay)))
-        side_nn.add(Dropout(self.dropout_rate * 16 / 1024))
         return side_nn.input, side_nn.output
     
     def _complete_architecture(self, cnn_input, cnn_output, side_nn_input, side_nn_output):
         x = concatenate([cnn_output, side_nn_output])
+        x = Dropout(self.dropout_rate)(x)
         for n in [int(self.n_fc_nodes * (2 ** (2 * (self.n_fc_layers - 1 - i)))) for i in range(self.n_fc_layers)]:
             x = Dense(n, activation='relu', kernel_regularizer=regularizers.l2(self.weight_decay))(x)
             # scale the dropout proportionally to the number of nodes in a layer. No dropout for the last layers
             if n > 16:
                 x = Dropout(self.dropout_rate * n / 1024)(x)
-        predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type])(x)
+        predictions = Dense(1, activation=self.dict_final_activations[self.prediction_type],
+                            kernel_regularizer=regularizers.l2(self.weight_decay))(x)
         self.model = Model(inputs=[cnn_input, side_nn_input], outputs=predictions)
     
     def _generate_architecture(self):
@@ -1254,7 +1253,7 @@ class Training(DeepLearning):
         if self.path_load_weights is not None:
             path_logger = self.path_load_weights.replace('model-weights', 'logger').replace('.h5', '.csv')
         else:
-            path_logger = self.path_store + 'logger_' + self.version + '.csv'  # TODO delete
+            path_logger = self.path_store + 'logger_' + self.version + '.csv'
         if os.path.exists(path_logger):
             try:
                 logger = pd.read_csv(path_logger)
@@ -1266,8 +1265,8 @@ class Training(DeepLearning):
                 lr = self.learning_rate
         else:
             lr = self.learning_rate
-        self.model.compile(optimizer=self.optimizers[self.optimizer](lr=lr, clipnorm=1.0),
-                           loss=self.loss_function, metrics=self.metrics)
+        self.model.compile(optimizer=self.optimizers[self.optimizer](lr=lr, clipnorm=1.0), loss=self.loss_function,
+                           metrics=self.metrics)
     
     def _compute_baseline_performance(self):
         # calculate initial val_loss value
@@ -1328,12 +1327,14 @@ class Training(DeepLearning):
     def train_model(self):
         # garbage collector
         _ = gc.collect()
+        # use more verbose when debugging
+        verbose = 1 if self.debug_mode else 2
         
         # train the model
         self.model.fit(self.GENERATORS['train'], steps_per_epoch=self.GENERATORS['train'].steps,
                        validation_data=self.GENERATORS['val'], validation_steps=self.GENERATORS['val'].steps,
                        shuffle=False, use_multiprocessing=False, workers=self.n_cpus, epochs=self.n_epochs_max,
-                       class_weight=self.class_weights, callbacks=self.callbacks, verbose=1)
+                       class_weight=self.class_weights, callbacks=self.callbacks, verbose=verbose)
 
 
 class PredictionsGenerate(DeepLearning):
@@ -2592,14 +2593,27 @@ class GWASPreprocessing(Hyperparameters):
     def __init__(self, target=None):
         Hyperparameters.__init__(self)
         self.target = target
+        self.fam = None
         self.Residuals = None
         self.covars = None
         self.data = None
+        self.list_organs = None
+        self.IIDs_organs = None
+    
+    def _generate_fam_file(self):
+        fam = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_genetics/ukb52887_cal_chr1_v2_s488264.fam',
+                          header=None, sep=' ')
+        fam.columns = ['FID', 'IID', 'father', 'mother', 'Sex', 'phenotype']
+        fam['phenotype'] = 1
+        fam.to_csv(self.path_store + 'GWAS.fam', index=False, header=False, sep=' ')
+        fam.to_csv(self.path_store + 'GWAS_exhaustive_placeholder.tab', index=False, sep='\t')
+        self.fam = fam
     
     def _preprocess_residuals(self):
         # Load residuals
-        Residuals = pd.read_csv("/n/groups/patel/Alan/Aging/Medical_Images/RESIDUALS_bestmodels_eids_Age_test.csv") # TODO change to normal path
-        #Residuals = pd.read_csv(self.path_store + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
+        Residuals = pd.read_csv(
+            "/n/groups/patel/Alan/Aging/Medical_Images/RESIDUALS_bestmodels_eids_Age_test.csv")  # TODO change to normal path
+        # Residuals = pd.read_csv(self.path_store + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
         Residuals['id'] = Residuals['eid']
         Residuals.rename(columns={'id': 'FID', 'eid': 'IID'}, inplace=True)
         Residuals = Residuals[Residuals['Ethnicity.White'] == 1]
@@ -2607,6 +2621,7 @@ class GWASPreprocessing(Hyperparameters):
                        [col for col in Residuals.columns.values if ('Ethnicity.' in col) | ('outer_fold_' in col)]
         Residuals.drop(columns=cols_to_drop, inplace=True)
         self.Residuals = Residuals
+        self.list_organs = [col for col in self.Residuals.columns.values if col not in ['FID', 'IID', 'Age']]
     
     def _preprocess_covars(self):
         # Load covars
@@ -2628,40 +2643,35 @@ class GWASPreprocessing(Hyperparameters):
     def _merge_main_data(self):
         # Merge both dataframes
         self.data = self.covars.merge(self.Residuals, on=['IID'])
-        self.data.to_csv(self.path_store + 'GWAS_data_' + self.target + '.tab', index=False, header=False, sep=' ')
-        # Save a smaller version for debugging purposes
-        self.data.iloc[:1000, :].to_csv(self.path_store + 'GWAS_data_' + self.target + '_debug.tab',
-                                        index=False, header=False, sep=' ')
-    
-    def _compute_family_structure(self):
-        # Generate family structure data
-        fam = self.data[['IID', 'FID', 'Sex']]
-        fam['father'] = 0
-        fam['mother'] = 0
-        fam['phenotype'] = 1
-        fam = fam[['FID', 'IID', 'father', 'mother', 'Sex', 'phenotype']]
-        fam.dropna(inplace=True)
-        fam.to_csv(self.path_store + 'GWAS_family_structure_' + self.target + '.fam', index=False, header=False, sep=' ')
+        reordered_cols = ['FID', 'IID', 'Assessment_center', 'Genotyping_batch', 'Age', 'Sex', 'Ethnicity'] + \
+                         ['PC' + str(i) for i in range(1, 41)] + self.list_organs
+        self.data = self.data[reordered_cols]
+        self.IIDs_organs = {}
+        for organ in self.list_organs:
+            data_organ = self.data.copy()
+            cols_to_drop = [organ2 for organ2 in self.list_organs if organ2 != organ]
+            data_organ.drop(columns=cols_to_drop, inplace=True)
+            data_organ.dropna(inplace=True)
+            data_organ.to_csv(self.path_store + 'GWAS_data_' + self.target + '_' + organ + '.tab', index=False,
+                              sep='\t')
+            self.IIDs_organs[organ] = data_organ['IID'].values
+            # Save a smaller version for debugging purposes
+            data_organ.iloc[:1000, :].to_csv(self.path_store + 'GWAS_data_' + self.target + '_' + organ + '_debug.tab',
+                                             index=False, sep='\t')
     
     def _list_removed(self):
-        # samples to remove for all organs
-        remove = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv', usecols=['eid'])
-        remove.rename(columns={'eid': 'FID'}, inplace=True)
-        remove['IID'] = remove['FID']
-        remove = remove[-remove['IID'].isin(self.data['IID'].values)]
-        remove.to_csv(self.path_store + 'GWAS_remove_' + self.target + '.tab', index=False, sep=' ')
         # samples to remove for each organ
-        organs = [col for col in self.Residuals.columns.values if col not in ['FID', 'IID', 'Age']]
-        for organ in organs:
-            remove_organ = self.data[self.data[organ].isna()][['FID', 'IID']]
-            remove_organ.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ + '.tab',
-                                                                 index=False, sep=' ')
+        for organ in self.list_organs:
+            remove_organ = self.fam[['FID', 'IID']].copy()
+            remove_organ = remove_organ[-remove_organ['IID'].isin(self.IIDs_organs[organ])]
+            remove_organ.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ + '.tab', index=False,
+                                header=False, sep=' ')
     
     def compute_gwas_input(self):
+        self._generate_fam_file()
         self._preprocess_residuals()
         self._preprocess_covars()
         self._merge_main_data()
-        self._compute_family_structure()
         self._list_removed()
 
 
@@ -2930,8 +2940,8 @@ class PlotsAttentionMaps(DeepLearning):
                     Residuals_age = Residuals_sex[Residuals_sex['Age'] >= Residuals_sex['Age'].max() - 1]
                 Residuals_age['age_category'] = age_category
                 if len(Residuals_age.index) < 3 * self.N_samples_attentionmaps:
-                    print(f"Warning! Less than {3 * self.N_samples_attentionmaps} samples ({len(Residuals_age.index)})"
-                          f" for sex = {sex} and age category = {age_category}")
+                    print("DEBUG print below") #TODO
+                    #print(f"Warning! Less than {3 * self.N_samples_attentionmaps} samples ({len(Residuals_age.index)})"f" for sex = {sex} and age category = {age_category}")
                 for aging_rate in ['accelerated', 'normal', 'decelerated']:
                     print('Aging rate: ' + aging_rate)
                     Residuals_ar = Residuals_age
