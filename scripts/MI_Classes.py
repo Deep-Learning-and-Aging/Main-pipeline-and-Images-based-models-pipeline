@@ -557,16 +557,17 @@ class PreprocessingFolds(Metrics):
         # distribute the eids between the different outer and inner folds
         eids = self.data['eid'].unique()
         FOLDS_EIDS = {}
-        if self.organ in self.organs_instances23: #TODO debug and see if it works
+        if self.organ in self.organs_instances23:
             # Use the same split for all images models
             for outer_fold in self.outer_folds:
                 eids_fold = np.array(pd.read_csv(self.path_store + '../eids_split/instances23_eids_' + outer_fold +
-                                                 '.csv', header=None)).tolist()[0]
+                                                 '.csv', header=None, dtype=str)).tolist()[0]
                 FOLDS_EIDS[outer_fold] = [eid for eid in eids_fold if eid in eids]
         elif self.organ == 'Eyes':
-            eids_fold = np.array(pd.read_csv(self.path_store + '../eids_split/Eyes_eids_' + outer_fold + '.csv',
-                                             header=None)).tolist()[0]
-            FOLDS_EIDS[outer_fold] = [eid for eid in eids_fold if eid in eids]
+            for outer_fold in self.outer_folds:
+                eids_fold = np.array(pd.read_csv(self.path_store + '../eids_split/Eyes_eids_' + outer_fold + '.csv',
+                                                 header=None, dtype=str)).tolist()[0]
+                FOLDS_EIDS[outer_fold] = [eid for eid in eids_fold if eid in eids]
         else:
             random.shuffle(eids)
             n_samples = len(eids)
@@ -627,8 +628,8 @@ class PreprocessingFolds(Metrics):
                         print(data_fold[data_fold.isna().any(axis=1)])
                         print('/!\\ WARNING! ' + str(n_mismatching_samples) + ' ' + fold + ' images ids out of ' +
                               str(len(data_fold.index)) + ' did not match the dataframe!')
-                    data_fold.to_csv(self.path_store + 'data-features_' + self.organ + '_' + view + '_' +
-                                     self.target + '_' + fold + '_' + outer_fold + '.csv', index=False)
+                    data_fold.to_csv(self.path_store + 'data-features_' + self.organ + '_' + view + '_' + self.target +
+                                     '_' + fold + '_' + outer_fold + '.csv', index=False)
                     print('For outer_fold ' + outer_fold + ', the ' + fold + ' fold has a sample size of ' +
                           str(len(data_fold.index)))
                     self.data_fold = data_fold
@@ -2193,7 +2194,7 @@ class PerformancesTuning(Metrics):
         Perf_col_name = main_metric_name + '_all'
         for model in self.models:
             Performances_model = self.Performances[self.Performances['model'] == model]
-            Performances_model.sort_values([Perf_col_name, 'n_fc_layers', 'n_fc_nodes','learning_rate', 'dropout_rate',
+            Performances_model.sort_values([Perf_col_name, 'n_fc_layers', 'n_fc_nodes', 'learning_rate', 'dropout_rate',
                                             'weight_decay', 'data_augmentation_factor'],
                                            ascending=[main_metric_mode == 'min', True, True, False, False, False,
                                                       False], inplace=True)
@@ -2301,10 +2302,8 @@ class EnsemblesPredictions(Metrics):
         weights = np.array(weights)
         self.weights_by_ensembles = weights / weights.sum()
     
-    def _build_single_ensemble(self, PREDICTIONS, Performances, parameters, version, list_ensemble_levels,
-                               ensemble_level):
+    def _build_single_ensemble(self, PREDICTIONS, Performances, version, list_ensemble_levels, ensemble_level):
         # define which models should be integrated into the ensemble model, and how they should be weighted
-        Predictions = PREDICTIONS['val']
         performance_cutoff = np.max(Performances[self.main_metric_name + '_all']) \
                              * self.ensembles_performance_cutoff_percent
         ensemble_namecols = ['pred_' + model_name for model_name in
@@ -2315,11 +2314,9 @@ class EnsemblesPredictions(Metrics):
         weights_with_names = Performances[self.main_metric_name + '_all'][
             Performances[self.main_metric_name + '_all'] > performance_cutoff]
         weights = weights_with_names.values / weights_with_names.values.sum()
+        # weighted by subcategories
         if len(list_ensemble_levels) > 0:
-            # weighted by both performance and subcategories
             self._weighted_weights_by_category(weights_with_names, Performances, ensemble_level)
-            # weighted by the performance of the ensemble models right below it
-            #self._weighted_weights_by_ensembles(Predictions, Performances, parameters, ensemble_level)
         
         # for each fold, build the ensemble model
         for fold in self.folds:
@@ -2330,14 +2327,8 @@ class EnsemblesPredictions(Metrics):
                     PREDICTIONS[fold][ensemble_namecols] * self.weights_by_category
                 PREDICTIONS[fold]['pred_' + version] = \
                     Ensemble_predictions_weighted_by_category.sum(axis=1, skipna=False)
-                # PREDICTIONS[fold]['pred_' + version.replace('*', '?')] = \
-                #    Ensemble_predictions_weighted_by_category.sum(axis=1, skipna=False)
-                # Ensemble_predictions_weighted_by_ensembles = \
-                #    PREDICTIONS[fold][self.sub_ensemble_cols] * self.weights_by_ensembles
-                # PREDICTIONS[fold]['pred_' + version.replace('*', ',')] = \
-                #    Ensemble_predictions_weighted_by_ensembles.sum(axis=1, skipna=False)
     
-    def _build_single_ensemble_wrapper(self, Performances, parameters, version, list_ensemble_levels, ensemble_level):
+    def _build_single_ensemble_wrapper(self, Performances, version, list_ensemble_levels, ensemble_level):
         print('Building the ensemble model ' + version)
         Predictions = self.PREDICTIONS['val']
         # Select the outerfolds columns for the model
@@ -2359,17 +2350,15 @@ class EnsemblesPredictions(Metrics):
             PREDICTIONS_23 = {}
             for fold in self.folds:
                 PREDICTIONS_01[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['0', '1'])]
-                #PREDICTIONS_15[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['1.5'])]
+                # PREDICTIONS_15[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['1.5'])]
                 PREDICTIONS_23[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['2', '3'])]
             Performances_01 = self._drop_na_pred_versions(PREDICTIONS_01, Performances)
-            #Performances_15 = self._drop_na_pred_versions(PREDICTIONS_15, Performances)
+            # Performances_15 = self._drop_na_pred_versions(PREDICTIONS_15, Performances)
             Performances_23 = self._drop_na_pred_versions(PREDICTIONS_23, Performances)
-            self._build_single_ensemble(PREDICTIONS_01, Performances_01, parameters, version, list_ensemble_levels,
-                                        ensemble_level)
-            #self._build_single_ensemble(PREDICTIONS_15, Performances_01, parameters, version, list_ensemble_levels,
-            #                            ensemble_level)
-            self._build_single_ensemble(PREDICTIONS_23, Performances_23, parameters, version, list_ensemble_levels,
-                                        ensemble_level)
+            self._build_single_ensemble(PREDICTIONS_01, Performances_01, version, list_ensemble_levels, ensemble_level)
+            # self._build_single_ensemble(PREDICTIONS_15, Performances_01, version, list_ensemble_levels,
+            #                             ensemble_level)
+            self._build_single_ensemble(PREDICTIONS_23, Performances_23, version, list_ensemble_levels, ensemble_level)
             for fold in self.folds:
                 for ensemble_type in self.ensemble_types:
                     self.PREDICTIONS[fold]['outer_fold_' + version.replace('*', ensemble_type)] = np.nan
@@ -2377,15 +2366,14 @@ class EnsemblesPredictions(Metrics):
                     self.PREDICTIONS[fold][pred_version] = np.nan
                     self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['0', '1'])] = \
                         PREDICTIONS_01[fold][pred_version]
-                    #self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['1.5'])] = \
-                    #    PREDICTIONS_15[fold][pred_version]
+                    # self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['1.5'])] = \
+                    #     PREDICTIONS_15[fold][pred_version]
                     self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['2', '3'])] = \
                         PREDICTIONS_23[fold][pred_version]
         
         elif len(Ensemble_outerfolds.dropna().index) == 0 or Ensemble_outerfolds.transpose().nunique().max() > 1:
             # 2-Compute on all folds at once
-            self._build_single_ensemble(self.PREDICTIONS, Performances, parameters, version, list_ensemble_levels,
-                                        ensemble_level)
+            self._build_single_ensemble(self.PREDICTIONS, Performances, version, list_ensemble_levels, ensemble_level)
             for fold in self.folds:
                 for ensemble_type in self.ensemble_types:
                     self.PREDICTIONS[fold]['outer_fold_' + version.replace('*', ensemble_type)] = np.nan
@@ -2402,8 +2390,8 @@ class EnsemblesPredictions(Metrics):
                         self.PREDICTIONS[fold]['outer_fold_' + version] == float(outer_fold)]
                 
                 # build the ensemble model
-                self._build_single_ensemble(PREDICTIONS_outerfold, Performances, parameters,
-                                            version, list_ensemble_levels, ensemble_level)
+                self._build_single_ensemble(PREDICTIONS_outerfold, Performances, version, list_ensemble_levels,
+                                            ensemble_level)
                 
                 # merge the predictions on each outer_fold
                 for fold in self.folds:
@@ -2473,8 +2461,8 @@ class EnsemblesPredictions(Metrics):
             ensemble_level = None
         
         # compute the ensemble model for the parent
-        self._build_single_ensemble_wrapper(Performances_parent, parameters_parent, version_parent,
-                                            list_ensemble_levels_parent, ensemble_level)
+        self._build_single_ensemble_wrapper(Performances_parent, version_parent, list_ensemble_levels_parent,
+                                            ensemble_level)
     
     def generate_ensemble_predictions(self):
         self._recursive_ensemble_builder(self.Performances, self.parameters, self.version, self.list_ensemble_levels)
@@ -2521,14 +2509,14 @@ class ResidualsGenerate(Hyperparameters):
                 res_correction = regr.predict(age)
                 res_corrected = res - res_correction
                 self.Residuals.loc[no_na_indices, 'pred_' + model] = res_corrected
-            # debug plot
-            if self.debug_mode:
-                print('Bias for the residuals ' + model, regr.coef_)
-                plt.scatter(age, res)
-                plt.scatter(age, res_corrected)
-                regr2 = linear_model.LinearRegression()
-                regr2.fit(age, res_corrected)
-                print('Coefficients after: \n', regr2.coef_)
+                # debug plot
+                if self.debug_mode:
+                    print('Bias for the residuals ' + model, regr.coef_)
+                    plt.scatter(age, res)
+                    plt.scatter(age, res_corrected)
+                    regr2 = linear_model.LinearRegression()
+                    regr2.fit(age, res_corrected)
+                    print('Coefficients after: \n', regr2.coef_)
         self.Residuals.rename(columns=lambda x: x.replace('pred_', 'res_'), inplace=True)
     
     def save_residuals(self):
@@ -2612,8 +2600,6 @@ class SelectBest(Metrics):
         self.RESIDUALS = {}
         self.PERFORMANCES = {}
         self.CORRELATIONS = {}
-        # TODO remove below
-        self.folds = ['val', 'test']
     
     def _load_data(self):
         for fold in self.folds:
@@ -2676,8 +2662,8 @@ class SelectBest(Metrics):
                         + '.csv'
             path_res = self.path_store + 'RESIDUALS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold + \
                        '.csv'
-            path_corr = self.path_store + 'ResidualsCorrelations_bestmodels_str_' + self.pred_type + '_' + self.target + \
-                        '_' + fold + '.csv'
+            path_corr = self.path_store + 'ResidualsCorrelations_bestmodels_str_' + self.pred_type + '_' + self.target \
+                        + '_' + fold + '.csv'
             path_perf = self.path_store + 'PERFORMANCES_bestmodels_ranked_' + self.pred_type + '_' + self.target + '_' \
                         + fold + '.csv'
             self.PREDICTIONS[fold].to_csv(path_pred, index=False)
@@ -2695,8 +2681,6 @@ class SelectCorrelationsNAs(Hyperparameters):
         Hyperparameters.__init__(self)
         self.target = target
         self.CORRELATIONS = {'*': {'': {}, '_sd': {}, '_str': {}}}
-        #TODO remove below
-        self.folds = ['val', 'test']
     
     def load_data(self):
         for models_type in ['', '_bestmodels']:
