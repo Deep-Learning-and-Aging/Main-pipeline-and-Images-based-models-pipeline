@@ -10,6 +10,7 @@ import sys
 import glob
 import re
 import fnmatch
+import csv
 from datetime import datetime
 
 # maths
@@ -85,8 +86,6 @@ class Hyperparameters:
         self.path_store = '../data/'
         self.folds = ['train', 'val', 'test']
         self.n_CV_outer_folds = 10
-        # TODO DEBUG
-        # self.n_CV_outer_folds = 1
         self.outer_folds = [str(x) for x in list(range(self.n_CV_outer_folds))]
         self.ensemble_types = ['*']  # ['*', '?', ','] for multiple types of ensemble models
         self.modes = ['', '_sd', '_str']
@@ -122,9 +121,9 @@ class Hyperparameters:
                                      'Hips': ['main'],
                                      'Knees': ['main'],
                                      'PhysicalActivity': ['main']}
-        self.organsviews_not_to_augment = ['Brain_sagittal', 'Brain_coronal', 'Brain_transverse', 'FullBody_figure',
-                                           'FullBody_skeleton', 'FullBody_flesh', 'FullBody_mixed',
-                                           'PhysicalActivity_main']
+        self.organsviews_not_to_augment = ['PhysicalActivity_main']
+        self.organs_instances23 = ['Brain', 'Carotids', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine', 'Hips',
+                                   'Knees']
         
         # Others
         if '/Users/Alan/' in os.getcwd():
@@ -238,6 +237,14 @@ class PreprocessingMain(Hyperparameters):
         self.data_features = None
         self.data_features_eids = None
     
+    def _compute_sex(self):
+        # Use genetic sex when available
+        self.data_raw['Sex_genetic'][self.data_raw['Sex_genetic'].isna()] = \
+            self.data_raw['Sex'][self.data_raw['Sex_genetic'].isna()]
+        self.data_raw.drop(['Sex'], axis=1, inplace=True)
+        self.data_raw.rename(columns={'Sex_genetic': 'Sex'}, inplace=True)
+        self.data_raw = self.data_raw.dropna(subset=['Sex'])
+    
     def _compute_age(self):
         # Recompute age with greater precision by leveraging the month of birth
         self.data_raw['Year_of_birth'] = self.data_raw['Year_of_birth'].astype(int)
@@ -252,8 +259,9 @@ class PreprocessingMain(Hyperparameters):
                     lambda x: pd.NaT if pd.isna(x) else datetime.strptime(x, '%Y-%m-%d'))
             self.data_raw['Age_' + i] = self.data_raw['Date_attended_center_' + i] - self.data_raw['Date_of_birth']
             self.data_raw['Age_' + i] = self.data_raw['Age_' + i].dt.days / 365.25
-            self.data_raw = self.data_raw.drop(['Date_attended_center_' + i], axis=1)
-        self.data_raw = self.data_raw.drop(['Year_of_birth', 'Month_of_birth', 'Date_of_birth'], axis=1)
+            self.data_raw.drop(['Date_attended_center_' + i], axis=1, inplace=True)
+        self.data_raw.drop(['Year_of_birth', 'Month_of_birth', 'Date_of_birth'], axis=1, inplace=True)
+        self.data_raw.dropna(how='all', subset=['Age_0', 'Age_1', 'Age_1.5', 'Age_2', 'Age_3'], inplace=True)
     
     def _encode_ethnicity(self):
         # Fill NAs for ethnicity on instance 0 if available in other instances
@@ -283,7 +291,7 @@ class PreprocessingMain(Hyperparameters):
                                 '-5': 'Ethnicity.NA'}
         self.data_raw['Ethnicity'] = self.data_raw['Ethnicity'].fillna(-5).astype(int).astype(str)
         ethnicities = pd.get_dummies(self.data_raw['Ethnicity'])
-        self.data_raw = self.data_raw.drop(['Ethnicity'], axis=1)
+        self.data_raw.drop(['Ethnicity'], axis=1, inplace=True)
         ethnicities.rename(columns=dict_ethnicity_codes, inplace=True)
         ethnicities['Ethnicity.White'] = ethnicities['Ethnicity.White'] + ethnicities['Ethnicity.British'] + \
                                          ethnicities['Ethnicity.Irish'] + ethnicities['Ethnicity.White_Other']
@@ -316,20 +324,21 @@ class PreprocessingMain(Hyperparameters):
                                     '53-0.0': 'Date_attended_center_0', '53-1.0': 'Date_attended_center_1',
                                     '53-2.0': 'Date_attended_center_2', '53-3.0': 'Date_attended_center_3',
                                     '90010-0.0': 'Date_attended_center_1.5',  # Start time of wear for accelerometer
-                                    '31-0.0': 'Sex', '21000-0.0': 'Ethnicity', '21000-1.0': 'Ethnicity_1',
-                                    '21000-2.0': 'Ethnicity_2', '22414-2.0': 'Abdominal_images_quality'}
+                                    '31-0.0': 'Sex', '22001-0.0': 'Sex_genetic', '21000-0.0': 'Ethnicity',
+                                    '21000-1.0': 'Ethnicity_1', '21000-2.0': 'Ethnicity_2',
+                                    '22414-2.0': 'Abdominal_images_quality'}
         self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
-                                    usecols=['eid', '31-0.0', '21000-0.0', '21000-1.0', '21000-2.0', '34-0.0', '52-0.0',
-                                             '53-0.0', '53-1.0', '90010-0.0', '53-2.0', '53-3.0', '22414-2.0'])
+                                    usecols=['eid', '31-0.0', '22001-0.0', '21000-0.0', '21000-1.0', '21000-2.0',
+                                             '34-0.0', '52-0.0', '53-0.0', '53-1.0', '90010-0.0', '53-2.0', '53-3.0',
+                                             '22414-2.0'])
         
         # Formatting
         self.data_raw.rename(columns=dict_UKB_fields_to_names, inplace=True)
         self.data_raw['eid'] = self.data_raw['eid'].astype(str)
         self.data_raw.set_index('eid', drop=False, inplace=True)
         self._impute_missing_ecg_instances()
-        self.data_raw = self.data_raw.dropna(subset=['Sex'])
+        self._compute_sex()
         self._compute_age()
-        self.data_raw = self.data_raw.dropna(how='all', subset=['Age_0', 'Age_1', 'Age_1.5', 'Age_2', 'Age_3'])
         self._encode_ethnicity()
         
         # Concatenate the data from the different instances
@@ -367,25 +376,132 @@ class PreprocessingMain(Hyperparameters):
         self.data_features_eids.to_csv(self.path_store + 'data-features_eids.csv', index=False)
 
 
+class PreprocessingImagesIDs(Hyperparameters):
+    
+    def __init__(self):
+        Hyperparameters.__init__(self)
+        # Instances 2 and 3 datasets (most medical images, mostly medical images)
+        self.instances23_eids = None
+        self.HEART_EIDs = None
+        self.heart_eids = None
+        self.FOLDS_23_EIDS = None
+        # Other organs
+        self.eids = None
+        self.FOLDS_EIDS = None
+        self.organs_to_field = {'Eyes': '5270', 'Vascular': '4206'}
+        self.organ = None
+        self.organ_id = None
+    
+    def _load_23_eids(self):
+        data_features = pd.read_csv(self.path_store + 'data-features_instances.csv')
+        images_eids = data_features['eid'][data_features['instance'].isin([2, 3])]
+        self.images_eids = list(set(images_eids))
+    
+    def _load_heart_eids(self):
+        # IDs already used in Heart videos
+        HEART_EIDS = {}
+        heart_eids = []
+        for i in range(10):
+            # Important: The i's data fold is used as *validation* fold for outer fold i.
+            data_i = pd.read_csv(
+                "/n/groups/patel/JbProst/Heart/Data/FoldsAugmented/data-features_Heart_20208_Augmented_Age_val_" + str(
+                    i) + ".csv")
+            HEART_EIDS[i] = list(set([int(str(ID)[:7]) for ID in data_i['eid']]))
+            heart_eids = heart_eids + HEART_EIDS[i]
+        self.HEART_EIDS = HEART_EIDS
+        self.heart_eids = heart_eids
+    
+    def _split_23_eids_folds(self):
+        self._load_23_eids()
+        self._load_heart_eids()
+        # List extra images ids, and split them between the different folds.
+        extra_eids = [eid for eid in self.images_eids if eid not in self.heart_eids]
+        random.shuffle(extra_eids)
+        n_samples = len(extra_eids)
+        n_samples_by_fold = n_samples / self.n_CV_outer_folds
+        FOLDS_EXTRAEIDS = {}
+        FOLDS_EIDS = {}
+        for outer_fold in self.outer_folds:
+            FOLDS_EXTRAEIDS[outer_fold] = \
+                extra_eids[int((int(outer_fold)) * n_samples_by_fold):int((int(outer_fold) + 1) * n_samples_by_fold)]
+            FOLDS_EIDS[outer_fold] = self.HEART_EIDS[int(outer_fold)] + FOLDS_EXTRAEIDS[outer_fold]
+        self.FOLDS_23_EIDS = FOLDS_EIDS
+    
+    def _save_23_eids_folds(self):
+        for outer_fold in self.outer_folds:
+            with open(self.path_store + 'instances23_eids_' + outer_fold + '.csv', 'w', newline='') as myfile:
+                wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
+                wr.writerow(self.FOLDS_23_EIDS[outer_fold])
+    
+    def _load_eids(self):
+        dict_UKB_fields_to_names = {'53-0.0': 'Date_attended_center', '53-1.0': 'Date_attended_center',
+                                    self.organ_id + '-0.0': 'organ', self.organ_id + '-1.0': 'organ'}
+        eids = []
+        for instance in [str(i) for i in range(2)]:
+            df_i = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
+                               usecols=['eid', '53-' + instance + '.0', self.organ_id + '-' + instance + '.0'])
+            df_i.rename(columns=dict_UKB_fields_to_names, inplace=True)
+            df_i.dropna(subset=['Date_attended_center', 'organ'], how='any', inplace=True)
+            eids = list(set(eids + list(df_i['eid'].values)))
+            self.eids = eids
+
+    def _split_eids_folds(self):
+        eids = self.eids
+        random.shuffle(eids)
+        n_samples = len(eids)
+        n_samples_by_fold = n_samples / self.n_CV_outer_folds
+        FOLDS_EIDS = {}
+        for outer_fold in self.outer_folds:
+            FOLDS_EIDS[outer_fold] = \
+                eids[int((int(outer_fold)) * n_samples_by_fold):int((int(outer_fold) + 1) * n_samples_by_fold)]
+        self.FOLDS_EIDS = FOLDS_EIDS
+
+    def _save_eids_folds(self):
+        for outer_fold in self.outer_folds:
+            with open(self.path_store + self.organ + '_eids_' + outer_fold + '.csv', 'w', newline='') as myfile:
+                wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
+                wr.writerow(self.FOLDS_EIDS[outer_fold])
+    
+    def generate_eids_splits(self):
+        print("Generating eids split for organs on instances 2 and 3")
+        self._split_23_eids_folds()
+        self._save_23_eids_folds()
+        for i, (k, v) in enumerate(self.organs_to_field.items()):
+            print("Generating eids split for organ " + k)
+            self.organ = k
+            self.organ_id = v
+            self._load_eids()
+            self._split_eids_folds()
+            self._save_eids_folds()
+
+
 class PreprocessingFolds(Metrics):
     """
     Gather all the hyperparameters of the algorithm
     """
     
-    def __init__(self, target, organ):
+    def __init__(self, target, organ, regenerate_data):
         Metrics.__init__(self)
         self.target = target
         self.organ = organ
-        self.side_predictors = self.dict_side_predictors[self.target]
+        
+        # Check if these folds have already been generated
+        if not regenerate_data:
+            if len(glob.glob(self.path_store + 'data-features_' + organ + '_*_' + target + '_*.csv')) > 0:
+                print("Error: The files already exist! Either change regenerate_data to True or delete the previous"
+                      " version.")
+                sys.exit(1)
+        
+        self.side_predictors = self.dict_side_predictors[target]
         self.variables_to_normalize = self.side_predictors
-        if self.target in self.targets_regression:
-            self.variables_to_normalize.append(self.target)
+        if target in self.targets_regression:
+            self.variables_to_normalize.append(target)
         self.dict_image_quality_col = {'Liver': 'Abdominal_images_quality'}
         self.dict_image_quality_col.update(
             dict.fromkeys(['Brain', 'Carotids', 'Eyes', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine', 'Hips',
                            'Knees', 'PhysicalActivity', 'ECG', 'ArterialStiffness'], None))
-        self.image_quality_col = self.dict_image_quality_col[self.organ]
-        self.views = self.dict_organs_to_views[self.organ]
+        self.image_quality_col = self.dict_image_quality_col[organ]
+        self.views = self.dict_organs_to_views[organ]
         self.list_ids = None
         self.list_ids_per_view = {}
         self.data = None
@@ -430,7 +546,7 @@ class PreprocessingFolds(Metrics):
         data.set_index('id', drop=False, inplace=True)
         if self.image_quality_col is not None:
             data = data[data['Data_quality'] != np.nan]
-            data = data.drop('Data_quality', axis=1)
+            data.drop('Data_quality', axis=1, inplace=True)
         # get rid of samples with NAs
         data.dropna(inplace=True)
         # list the samples' ids for which images are available
@@ -440,13 +556,24 @@ class PreprocessingFolds(Metrics):
     def _split_eids(self):
         # distribute the eids between the different outer and inner folds
         eids = self.data['eid'].unique()
-        random.shuffle(eids)
-        n_samples = len(eids)
-        n_samples_by_fold = n_samples / self.n_CV_outer_folds
         FOLDS_EIDS = {}
-        for outer_fold in self.outer_folds:
-            FOLDS_EIDS[outer_fold] = np.ndarray.tolist(
-                eids[int((int(outer_fold)) * n_samples_by_fold):int((int(outer_fold) + 1) * n_samples_by_fold)])
+        if self.organ in self.organs_instances23: #TODO debug and see if it works
+            # Use the same split for all images models
+            for outer_fold in self.outer_folds:
+                eids_fold = np.array(pd.read_csv(self.path_store + '../eids_split/instances23_eids_' + outer_fold +
+                                                 '.csv', header=None)).tolist()[0]
+                FOLDS_EIDS[outer_fold] = [eid for eid in eids_fold if eid in eids]
+        elif self.organ == 'Eyes':
+            eids_fold = np.array(pd.read_csv(self.path_store + '../eids_split/Eyes_eids_' + outer_fold + '.csv',
+                                             header=None)).tolist()[0]
+            FOLDS_EIDS[outer_fold] = [eid for eid in eids_fold if eid in eids]
+        else:
+            random.shuffle(eids)
+            n_samples = len(eids)
+            n_samples_by_fold = n_samples / self.n_CV_outer_folds
+            for outer_fold in self.outer_folds:
+                FOLDS_EIDS[outer_fold] = np.ndarray.tolist(
+                    eids[int((int(outer_fold)) * n_samples_by_fold):int((int(outer_fold) + 1) * n_samples_by_fold)])
         TRAINING_EIDS = {}
         VALIDATION_EIDS = {}
         TEST_EIDS = {}
@@ -521,10 +648,10 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         # Parameters
         Hyperparameters.__init__(self)
         self.target = target
-        if self.target in self.targets_regression:
-            self.labels = data_features[self.target]
+        if target in self.targets_regression:
+            self.labels = data_features[target]
         else:
-            self.labels = data_features[self.target + '_raw']
+            self.labels = data_features[target + '_raw']
         self.organ = organ
         self.view = view
         self.training_mode = training_mode
@@ -532,13 +659,13 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.list_ids = data_features.index.values
         self.batch_size = batch_size
         # for paired organs, take twice fewer ids (two images for each id), and add organ_side as side predictor
-        if self.organ in self.left_right_organs:
+        if organ in self.left_right_organs:
             self.data_features['organ_side'] = np.nan
-            self.n_ids_batch = self.batch_size // 2
+            self.n_ids_batch = batch_size // 2
         else:
-            self.n_ids_batch = self.batch_size
+            self.n_ids_batch = batch_size
         if self.training_mode & (n_samples_per_subepoch is not None):  # during training, 1 epoch = number of samples
-            self.steps = math.ceil(n_samples_per_subepoch / self.batch_size)
+            self.steps = math.ceil(n_samples_per_subepoch / batch_size)
         else:  # during prediction and other tasks, an epoch is defined as all the samples being seen once and only once
             self.steps = math.ceil(len(self.list_ids) / self.n_ids_batch)
         # learning_rate_patience
@@ -580,7 +707,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
                                           'FullBody_mixed'], :] = [10, 0.05, 0.02, 0.0]
         self.augmentation_parameters.loc['Spine_sagittal', :] = [0, 0.1, 0.1, 0]
         self.augmentation_parameters.loc[['Spine_coronal', 'Hips_main', 'Knees_main'], :] = [10, 0.1, 0.1, 0.1]
-        organ_view = self.organ + '_' + self.view
+        organ_view = organ + '_' + view
         ImageDataGenerator.__init__(self, rescale=1. / 255.,
                                     rotation_range=self.augmentation_parameters.loc[organ_view, 'rotation'],
                                     width_shift_range=self.augmentation_parameters.loc[organ_view, 'width_shift'],
@@ -783,7 +910,7 @@ class DeepLearning(Metrics):
                        '_' + dropout_rate + '_' + data_augmentation_factor
         
         # NNet's architecture and weights
-        self.side_predictors = self.dict_side_predictors[self.target]
+        self.side_predictors = self.dict_side_predictors[target]
         if self.organ in self.left_right_organs:
             self.side_predictors.append('organ_side')
         self.dict_final_activations = {'regression': 'linear', 'binary': 'sigmoid', 'multiclass': 'softmax',
@@ -797,7 +924,7 @@ class DeepLearning(Metrics):
         self.DATA_FEATURES = {}
         self.mode = None
         self.n_cpus = len(os.sched_getaffinity(0))
-        self.dir_images = '../images/' + self.organ + '/' + self.view + '/' + self.transformation + '/'
+        self.dir_images = '../images/' + organ + '/' + view + '/' + transformation + '/'
         
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
         self.dict_organ_view_to_image_size = {
@@ -828,9 +955,9 @@ class DeepLearning(Metrics):
         self.dict_architecture_to_image_size = {'MobileNet': (224, 224), 'MobileNetV2': (224, 224),
                                                 'NASNetMobile': (224, 224), 'NASNetLarge': (331, 331)}
         if self.architecture in ['MobileNet', 'MobileNetV2', 'NASNetMobile', 'NASNetLarge']:
-            self.image_width, self.image_height = self.dict_architecture_to_image_size[self.architecture]
+            self.image_width, self.image_height = self.dict_architecture_to_image_size[architecture]
         else:
-            self.image_width, self.image_height = self.dict_organ_view_to_image_size[self.organ + '_' + self.view]
+            self.image_width, self.image_height = self.dict_organ_view_to_image_size[organ + '_' + view]
         
         # define dictionary of batch sizes to fit as many samples as the model's architecture allows
         self.dict_batch_sizes = {
@@ -841,32 +968,32 @@ class DeepLearning(Metrics):
                         'ResNeXt101': 8, 'EfficientNetB7': 4,
                         'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4}}
         # Define batch size
-        if self.organ + '_' + self.view in self.dict_batch_sizes.keys():
-            self.batch_size = self.dict_batch_sizes[self.organ + '_' + self.view][self.architecture]
+        if organ + '_' + view in self.dict_batch_sizes.keys():
+            self.batch_size = self.dict_batch_sizes[organ + '_' + view][architecture]
         else:
-            self.batch_size = self.dict_batch_sizes['Default'][self.architecture]
+            self.batch_size = self.dict_batch_sizes['Default'][architecture]
         # double the batch size for the teslaM40 cores that have bigger memory
         if len(GPUtil.getGPUs()) > 0:  # make sure GPUs are available (not truesometimes for debugging)
             if GPUtil.getGPUs()[0].memoryTotal > 20000:
                 self.batch_size *= 2
         # Define number of ids per batch (twice fewer for paired organs, because left and right samples)
         self.n_ids_batch = self.batch_size
-        if self.organ in self.left_right_organs:
+        if organ in self.left_right_organs:
             self.n_ids_batch //= 2
         
         # Define number of samples per subepoch
-        if self.debug_mode:
+        if debug_mode:
             self.n_samples_per_subepoch = self.batch_size * 4
         else:
             self.n_samples_per_subepoch = 32768
-        if self.organ in self.left_right_organs:
+        if organ in self.left_right_organs:
             self.n_samples_per_subepoch //= 2
         
         # dict to decide which field is used to generate the ids when several targets share the same ids
         self.dict_target_to_ids = dict.fromkeys(['Age', 'Sex'], 'Age')
         
         # Metrics
-        self.prediction_type = self.dict_prediction_types[self.target]
+        self.prediction_type = self.dict_prediction_types[target]
         
         # Model
         self.model = None
@@ -1100,7 +1227,7 @@ class Training(DeepLearning):
                               optimizer, learning_rate, weight_decay, dropout_rate, data_augmentation_factor,
                               debug_mode)
         self.outer_fold = outer_fold
-        self.version = self.version + '_' + str(self.outer_fold)
+        self.version = self.version + '_' + str(outer_fold)
         # NNet's architecture's weights
         self.continue_training = continue_training
         self.transfer_learning = transfer_learning
@@ -1117,7 +1244,7 @@ class Training(DeepLearning):
         # Metrics
         self.loss_name = self.dict_losses_names[self.prediction_type]
         self.loss_function = self.dict_losses_K[self.loss_name]
-        self.main_metric_name = self.dict_main_metrics_names_K[self.target]
+        self.main_metric_name = self.dict_main_metrics_names_K[target]
         self.main_metric_mode = self.main_metrics_modes[self.main_metric_name]
         self.main_metric = self.dict_metrics_K[self.main_metric_name]
         self.display_full_metrics = display_full_metrics
@@ -1130,7 +1257,7 @@ class Training(DeepLearning):
         
         # Model
         self.path_load_weights = self.path_store + 'model-weights_' + self.version + '.h5'
-        if self.debug_mode:
+        if debug_mode:
             self.path_save_weights = self.path_store + 'model-weights-debug.h5'
         else:
             self.path_save_weights = self.path_store + 'model-weights_' + self.version + '.h5'
@@ -1298,12 +1425,12 @@ class Training(DeepLearning):
                                              monitor='val_' + self.main_metric.name, baseline=self.baseline_performance,
                                              verbose=1, save_best_only=True, save_weights_only=True,
                                              mode=self.main_metric_mode, save_freq='epoch')
-        patience_reduce_lr = min(7, 3 * self.GENERATORS['train'].n_subepochs_per_epoch)
+        patience_reduce_lr = min(6, 3 * self.GENERATORS['train'].n_subepochs_per_epoch)
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=patience_reduce_lr, verbose=1,
                                                  mode='min', min_delta=0, cooldown=0, min_lr=0)
-        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=15, verbose=0,
+        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=10, verbose=0,
                                        mode=self.main_metric_mode,
-                                       baseline=self.baseline_performance)  # TODO change patience back
+                                       baseline=self.baseline_performance)
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, early_stopping, reduce_lr_on_plateau]
     
     def build_model(self):
@@ -1532,7 +1659,7 @@ class PredictionsMerge(Hyperparameters):
                 elif self.fold == 'train':
                     Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['id', 'outer_fold'])
                 else:
-                    prediction = prediction.drop(['outer_fold'], axis=1)
+                    prediction.drop(['outer_fold'], axis=1, inplace=True)
                     # not supported for panda version > 0.23.4 for now
                     Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['id'])
                 # print('prediction\'s shape: ' + str(prediction.shape))
@@ -1544,7 +1671,7 @@ class PredictionsMerge(Hyperparameters):
                 self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer',
                                                                 on=['id', 'outer_fold'])
             else:
-                Predictions_subgroup = Predictions_subgroup.drop(['outer_fold'], axis=1)
+                Predictions_subgroup.drop(['outer_fold'], axis=1, inplace=True)
                 # not supported for panda version > 0.23.4 for now
                 self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer', on=['id'])
             print('Predictions_df\'s shape: ' + str(self.Predictions_df.shape))
@@ -1581,16 +1708,16 @@ class PredictionsMerge(Hyperparameters):
 
 class PredictionsEids(Hyperparameters):
     
-    def __init__(self, target=None, fold=None, ensemble_models=None, n_cpus=None, debug_mode=None):
+    def __init__(self, target=None, fold=None, ensemble_models=None, debug_mode=None):
         Hyperparameters.__init__(self)
         
         # Define dictionaries attributes for data, generators and predictions
         self.target = target
         self.fold = fold
         self.ensemble_models = self.convert_string_to_boolean(ensemble_models)
-        self.n_cpus = int(n_cpus)
         self.debug_mode = debug_mode
         self.Predictions = None
+        self.Predictions_chunk = None
         self.pred_versions = None
         self.res_versions = None
         self.outer_fold_versions = None
@@ -1609,62 +1736,70 @@ class PredictionsEids(Hyperparameters):
         else:
             self.Predictions = pd.read_csv(
                 self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
+        self.Predictions.drop(columns=['id'], inplace=True)
         self.outer_fold_versions = [of for of in self.Predictions.columns.values if 'outer_fold_' in of]
-        for col in self.id_vars:
-            self.Predictions[col] = self.Predictions[col].astype(str)
-        self.Predictions.set_index('id', drop=False, inplace=True)
         self.Predictions.index.name = 'column_names'
         self.pred_versions = [of.replace('outer_fold_', 'pred_') for of in self.outer_fold_versions]
-        self.res_versions = [of.replace('outer_fold_', 'res_') for of in self.outer_fold_versions]
         
         # Prepare target values on instance 0 as a reference
         target_0s = pd.read_csv(self.path_store + 'data-features_eids.csv', usecols=['eid', self.target])
-        target_0s.eid = target_0s.eid.astype(str)
         target_0s.set_index('eid', inplace=True)
-        self.target_0s = target_0s[self.target]
+        target_0s = target_0s[self.target]
+        target_0s.name = 'target_0'
+        target_0s = target_0s[self.Predictions['eid'].unique()]
+        self.Predictions = self.Predictions.merge(target_0s, on='eid')
         
-        # Generate an empty dataframe to store the mean prediction value for each eid (corrected for the target)
-        row_names = self.Predictions['eid'].unique()
-        col_names = self.Predictions.columns.values
-        Predictions_eids = np.empty((len(row_names), len(col_names),))
-        Predictions_eids.fill(np.nan)
-        Predictions_eids = pd.DataFrame(Predictions_eids)
-        Predictions_eids.index = row_names + '_*'
-        Predictions_eids.columns = col_names
-        Predictions_eids['id'] = row_names + '_*'
-        Predictions_eids['eid'] = row_names
-        Predictions_eids['instance'] = '*'
-        self.Predictions_eids = Predictions_eids
+        # Compute biological ages reported to target_0
+        correction = self.Predictions['target_0'] - self.Predictions[self.target]
+        for pred in self.pred_versions:
+            self.Predictions[pred] = self.Predictions[pred] + correction
+        self.Predictions[self.target] = self.Predictions['target_0']
+        self.Predictions.drop(columns=['target_0'], inplace=True)
+        self.Predictions.index.name = 'column_names'
+        # self.Predictions = self.Predictions.iloc[:1000, :]
+    
+    def processing(self):
+        if self.fold == 'train':
+            # Prepare template to which each model will be appended
+            Predictions = self.Predictions[['eid'] + self.demographic_vars]
+            Predictions = Predictions.groupby('eid', as_index=True).mean()
+            Predictions.index.name = 'column_names'
+            Predictions['eid'] = Predictions.index.values
+            Predictions['instance'] = '*'
+            Predictions['id'] = Predictions['eid'].astype(str) + '_*'
+            self.Predictions_eids = Predictions.copy()
+            self.Predictions_eids['outer_fold'] = -1
+            for i in range(self.n_CV_outer_folds):
+                Predictions_i = Predictions.copy()
+                Predictions_i['outer_fold'] = i
+                self.Predictions_eids = self.Predictions_eids.append(Predictions_i)
+            
+            # Append each model one by one because the folds are different
+            print(str(len(self.pred_versions)) + ' models to compute.')
+            for pred_version in self.pred_versions:
+                print("Computing results for version " + str(pred_version.replace('pred_', '')))
+                of_version = pred_version.replace('pred_', 'outer_fold_')
+                Predictions_version = self.Predictions[['eid', pred_version, of_version]]
+                Predictions_version.rename(columns={of_version: 'outer_fold'}, inplace=True)
+                # Use placeholder for NaN in outer_folds
+                Predictions_version['outer_fold'][Predictions_version['outer_fold'].isna()] = -1
+                Predictions_version_eids = Predictions_version.groupby(['eid', 'outer_fold'], as_index=False).mean()
+                self.Predictions_eids = self.Predictions_eids.merge(Predictions_version_eids, on=['eid', 'outer_fold'])
+                self.Predictions_eids[of_version] = self.Predictions_eids['outer_fold']
+                self.Predictions_eids[of_version][self.Predictions_eids[of_version] == -1] = np.nan
+                del Predictions_version
+                _ = gc.collect
+            self.Predictions_eids.drop(columns=['outer_fold'], inplace=True)
+        else:
+            self.Predictions_eids = self.Predictions.groupby('eid').mean()
+            self.Predictions_eids['eid'] = self.Predictions_eids.index.values
+            self.Predictions_eids['instance'] = '*'
+            self.Predictions_eids['id'] = self.Predictions_eids['eid'].astype(str) + '_' + \
+                                          self.Predictions_eids['instance']
         
-        # Compute residuals
-        for pred in [pred for pred in self.Predictions.columns.values if 'pred_' in pred]:
-            self.Predictions[pred.replace('pred_', 'res_')] = self.Predictions['Age'] - self.Predictions[pred]
-    
-    def average_predictions_parallel(self):
-        PA_split = np.array_split(self.Predictions_eids, self.n_cpus)
-        pool = Pool(self.n_cpus)
-        print('Parallelizing the processing over ' + str(self.n_cpus) + ' CPUs. ' +
-              str(len(self.Predictions_eids.index)) + ' eids must be processed.')
-        self.Predictions_eids = pd.concat(pool.map(self.average_predictions, PA_split))
-        pool.close()
-        pool.join()
-    
-    def average_predictions(self, PA_fold):
-        eids = PA_fold['eid'].unique()
-        print('Starting... In one of the CPUs ' + str(len(eids)) + ' eids are to be processed.')
-        for i, eid in enumerate(eids):
-            if i % 1000 == 0:
-                print('In one of the CPUs, ' + str(i) + ' eids have been processed.')
-            Preds_eid = self.Predictions[self.Predictions['eid'] == eid]
-            PA_fold.loc[eid + '_*', self.demographic_vars] = \
-                Preds_eid[self.demographic_vars].mean().values
-            target_eid = self.target_0s[eid]
-            PA_fold.loc[eid + '_*', self.target] = target_eid
-            Mean_res = Preds_eid[self.res_versions].mean(skipna=True)
-            PA_fold.loc[eid + '_*', self.pred_versions] = target_eid - Mean_res.values
-            PA_fold.loc[eid + '_*', self.outer_fold_versions] = Preds_eid[self.outer_fold_versions].mean(skipna=True)
-        print('Completed. In one of the CPUs, all the ' + str(len(eids)) + ' eids have been processed.')
-        return PA_fold
+        # Re-order the columns
+        self.Predictions_eids = self.Predictions_eids[
+            self.id_vars + self.demographic_vars + self.pred_versions + self.outer_fold_versions]
     
     def postprocessing(self):
         # For ensemble models, append the new models to the non ensemble models
@@ -1693,7 +1828,7 @@ class PredictionsEids(Hyperparameters):
             outer_version = pred_version.replace('pred_', 'outer_fold_')
             Predictions_version = self.Predictions_eids[['id', outer_version, pred_version]]
             Predictions_version.rename(columns={outer_version: 'outer_fold', pred_version: 'pred'}, inplace=True)
-            Predictions_version.dropna(inplace=True)
+            Predictions_version.dropna(subset=['pred'], inplace=True)
             Predictions_version.to_csv(self.path_store + 'Predictions_eids_' + '_'.join(pred_version.split('_')[1:]) +
                                        '_' + self.fold + '.csv', index=False)
     
@@ -1707,8 +1842,9 @@ class PredictionsEids(Hyperparameters):
 
 class PerformancesGenerate(Metrics):
     
-    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, optimizer=None,
-                 learning_rate=None, weight_decay=None, dropout_rate=None, fold=None, pred_type=None, debug_mode=False):
+    def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
+                 n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
+                 data_augmentation_factor=None, fold=None, pred_type=None, debug_mode=False):
         
         Metrics.__init__(self)
         
@@ -1717,27 +1853,22 @@ class PerformancesGenerate(Metrics):
         self.view = view
         self.transformation = transformation
         self.architecture = architecture
+        self.n_fc_layers = n_fc_layers
+        self.n_fc_nodes = n_fc_nodes
         self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.dropout_rate = dropout_rate
+        self.data_augmentation_factor = data_augmentation_factor
         self.fold = fold
         self.pred_type = pred_type
-        
         if debug_mode:
-            self.n_bootstrap_iterations = 10
+            self.n_bootstrap_iterations = 3
         else:
             self.n_bootstrap_iterations = 1000
-        
-        if type(learning_rate) == str:
-            learning_rate_version = learning_rate
-        else:
-            learning_rate_version = np.format_float_positional(learning_rate)
-        weight_decay_version = weight_decay if type(weight_decay) == str else str(weight_decay)
-        dropout_rate_version = dropout_rate if type(dropout_rate) == str else str(dropout_rate)
-        self.version = self.target + '_' + self.organ + '_' + self.view + '_' + self.transformation + '_' + \
-                       self.architecture + '_' + self.optimizer + '_' + learning_rate_version + '_' + \
-                       weight_decay_version + '_' + dropout_rate_version
+        self.version = target + '_' + organ + '_' + view + '_' + transformation + '_' + architecture + '_' + \
+                       n_fc_layers + '_' + n_fc_nodes + '_' + optimizer + '_' + learning_rate + '_' + weight_decay + \
+                       '_' + dropout_rate + '_' + data_augmentation_factor
         self.names_metrics = self.dict_metrics_names[self.dict_prediction_types[target]]
         self.data_features = None
         self.Predictions = None
@@ -1760,7 +1891,6 @@ class PerformancesGenerate(Metrics):
         Predictions = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + self.version + '_' +
                                   self.fold + '.csv')
         Predictions['id'] = Predictions['id'].astype(str)
-        # Predictions.rename(columns={'Pred_' + self.version: 'pred'}, inplace=True) TODO delete
         self.Predictions = Predictions.merge(self.data_features, how='inner', on=['id'])
     
     # Initialize performances dataframes and compute sample sizes
@@ -1889,10 +2019,10 @@ class PerformancesMerge(Metrics):
         self.fold = fold
         self.pred_type = pred_type
         self.ensemble_models = self.convert_string_to_boolean(ensemble_models)
-        self.names_metrics = self.dict_metrics_names[self.dict_prediction_types[self.target]]
+        self.names_metrics = self.dict_metrics_names[self.dict_prediction_types[target]]
         # list the models that need to be merged
-        self.list_models = glob.glob(self.path_store + 'Performances_' + self.pred_type + '_' + self.target + '_*_' +
-                                     self.fold + '_str.csv')
+        self.list_models = glob.glob(self.path_store + 'Performances_' + pred_type + '_' + target + '_*_' + fold +
+                                     '_str.csv')
         # get rid of ensemble models
         if self.ensemble_models:
             self.list_models = [model for model in self.list_models if any(e in model for e in self.ensemble_types)]
@@ -1923,7 +2053,7 @@ class PerformancesMerge(Metrics):
                 [name_metric, name_metric + '_folds_sd', name_metric + '_sd', name_metric + '_str'])
         
         # merge all the columns together. First description of the model, then sample sizes and metrics for each fold
-        names_col_Performances = ['version'] + self.names_model_parameters  # .copy() TODO remove
+        names_col_Performances = ['version'] + self.names_model_parameters
         # special outer fold 'all'
         names_col_Performances.extend(
             ['_'.join([name, 'all']) for name in names_sample_sizes + names_metrics_with_folds_sd_and_sd])
@@ -2043,8 +2173,8 @@ class PerformancesTuning(Metrics):
     
     def load_data(self):
         for fold in self.folds:
-            path = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + '_' \
-                   + fold + '.csv'
+            path = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+                   '_' + fold + '.csv'
             self.PERFORMANCES[fold] = pd.read_csv(path).set_index('version', drop=False)
             self.PERFORMANCES[fold]['organ'] = self.PERFORMANCES[fold]['organ'].astype(str)
             self.PERFORMANCES[fold].index.name = 'columns_names'
@@ -2063,10 +2193,10 @@ class PerformancesTuning(Metrics):
         Perf_col_name = main_metric_name + '_all'
         for model in self.models:
             Performances_model = self.Performances[self.Performances['model'] == model]
-            Performances_model.sort_values([Perf_col_name, 'learning_rate', 'dropout_rate', 'weight_decay',
-                                            'data_augmentation_factor'],
-                                           ascending=[main_metric_mode == 'min', False, False, False, False],
-                                           inplace=True)
+            Performances_model.sort_values([Perf_col_name, 'n_fc_layers', 'n_fc_nodes','learning_rate', 'dropout_rate',
+                                            'weight_decay', 'data_augmentation_factor'],
+                                           ascending=[main_metric_mode == 'min', True, True, False, False, False,
+                                                      False], inplace=True)
             best_version = Performances_model['version'][
                 Performances_model[Perf_col_name] == Performances_model[Perf_col_name].max()].values[0]
             versions_to_drop = [version for version in Performances_model['version'].values if
@@ -2076,10 +2206,10 @@ class PerformancesTuning(Metrics):
                                                                                   versions_to_drop]
             for fold in self.folds:
                 self.PERFORMANCES[fold].drop(versions_to_drop, inplace=True)
-                self.PREDICTIONS[fold].drop(cols_to_drop, inplace=True, axis=1)
+                self.PREDICTIONS[fold].drop(cols_to_drop, axis=1, inplace=True)
         
         # drop 'model' column
-        self.Performances.drop(['model'], inplace=True, axis=1)
+        self.Performances.drop(['model'], axis=1, inplace=True)
         
         # Display results
         for fold in self.folds:
@@ -2107,13 +2237,13 @@ class EnsemblesPredictions(Metrics):
         self.target = target
         self.pred_type = pred_type
         self.ensembles_performance_cutoff_percent = 0
-        self.parameters = {'target': self.target, 'organ': '*', 'view': '*', 'transformation': '*', 'architecture': '*',
-                           'n_fc_layers':'*', 'n_fc_nodes':'*', 'optimizer': '*', 'learning_rate': '*',
+        self.parameters = {'target': target, 'organ': '*', 'view': '*', 'transformation': '*', 'architecture': '*',
+                           'n_fc_layers': '*', 'n_fc_nodes': '*', 'optimizer': '*', 'learning_rate': '*',
                            'weight_decay': '*', 'dropout_rate': '*', 'data_augmentation_factor': '*'}
         self.version = self._parameters_to_version(self.parameters)
         self.main_metric_name = self.dict_main_metrics_names[target]
         self.init_perf = -np.Inf if self.main_metrics_modes[self.main_metric_name] == 'max' else np.Inf
-        path_perf = self.path_store + 'PERFORMANCES_tuned_ranked_' + self.pred_type + '_' + self.target + '_val.csv'
+        path_perf = self.path_store + 'PERFORMANCES_tuned_ranked_' + pred_type + '_' + target + '_val.csv'
         self.Performances = pd.read_csv(path_perf).set_index('version', drop=False)
         self.Performances['organ'] = self.Performances['organ'].astype(str)
         self.list_ensemble_levels = ['transformation', 'view', 'organ']
@@ -2124,13 +2254,14 @@ class EnsemblesPredictions(Metrics):
     # Get rid of columns and rows for the versions for which all samples as NANs
     def _drop_na_pred_versions(self, PREDS, Performances):
         # Select the versions for which only NAs are available
-        pred_versions = [col for col in PREDS['train'].columns.values if 'pred_' in col]
+        pred_versions = [col for col in PREDS['val'].columns.values if 'pred_' in col]
         to_drop = []
         for pv in pred_versions:
             for fold in PREDS.keys():
                 if PREDS[fold][pv].notna().sum() == 0:
                     to_drop.append(pv)
                     break
+        
         # Drop the corresponding columns from preds, and rows from performances
         of_to_drop = [p.replace('pred_', 'outer_fold_') for p in to_drop]
         index_to_drop = [p.replace('pred_', '') for p in to_drop
@@ -2188,7 +2319,7 @@ class EnsemblesPredictions(Metrics):
             # weighted by both performance and subcategories
             self._weighted_weights_by_category(weights_with_names, Performances, ensemble_level)
             # weighted by the performance of the ensemble models right below it
-            self._weighted_weights_by_ensembles(Predictions, Performances, parameters, ensemble_level)
+            #self._weighted_weights_by_ensembles(Predictions, Performances, parameters, ensemble_level)
         
         # for each fold, build the ensemble model
         for fold in self.folds:
@@ -2207,11 +2338,16 @@ class EnsemblesPredictions(Metrics):
                 #    Ensemble_predictions_weighted_by_ensembles.sum(axis=1, skipna=False)
     
     def _build_single_ensemble_wrapper(self, Performances, parameters, version, list_ensemble_levels, ensemble_level):
+        print('Building the ensemble model ' + version)
         Predictions = self.PREDICTIONS['val']
         # Select the outerfolds columns for the model
-        ensemble_outerfolds_cols = [name_col for name_col in Predictions.columns.values if
-                                    bool(re.compile('outer_fold_' + version).match(name_col))]
+        ensemble_outerfolds_cols = [col for col in Predictions.columns.values if
+                                    bool(re.compile('outer_fold_' + version).match(col))]
+        ensemble_preds_cols = [col.replace('outer_fold_', 'pred_') for col in ensemble_outerfolds_cols]
         Ensemble_outerfolds = Predictions[ensemble_outerfolds_cols]
+        # Select the rows for the model
+        Ensemble_preds = Predictions[ensemble_preds_cols]
+        Ensemble_outerfolds = Ensemble_outerfolds[~Ensemble_preds.isna().all(1)]
         
         # Evaluate if the ensemble model should be built
         # 1 - separately on instance 0-1 and 2-3 (for ensemble at the top level, since overlap between is 0 otherwise)
@@ -2219,14 +2355,19 @@ class EnsemblesPredictions(Metrics):
         # 3 - on all the folds at once (if the folds are not shared)
         if (ensemble_level == 'organ') & (self.pred_type == 'instances'):  # 1-Compute instances 0-1 and 2-3 separately
             PREDICTIONS_01 = {}
+            # PREDICTIONS_15 = {}
             PREDICTIONS_23 = {}
             for fold in self.folds:
                 PREDICTIONS_01[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['0', '1'])]
+                #PREDICTIONS_15[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['1.5'])]
                 PREDICTIONS_23[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['2', '3'])]
             Performances_01 = self._drop_na_pred_versions(PREDICTIONS_01, Performances)
+            #Performances_15 = self._drop_na_pred_versions(PREDICTIONS_15, Performances)
             Performances_23 = self._drop_na_pred_versions(PREDICTIONS_23, Performances)
             self._build_single_ensemble(PREDICTIONS_01, Performances_01, parameters, version, list_ensemble_levels,
                                         ensemble_level)
+            #self._build_single_ensemble(PREDICTIONS_15, Performances_01, parameters, version, list_ensemble_levels,
+            #                            ensemble_level)
             self._build_single_ensemble(PREDICTIONS_23, Performances_23, parameters, version, list_ensemble_levels,
                                         ensemble_level)
             for fold in self.folds:
@@ -2236,10 +2377,13 @@ class EnsemblesPredictions(Metrics):
                     self.PREDICTIONS[fold][pred_version] = np.nan
                     self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['0', '1'])] = \
                         PREDICTIONS_01[fold][pred_version]
+                    #self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['1.5'])] = \
+                    #    PREDICTIONS_15[fold][pred_version]
                     self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['2', '3'])] = \
                         PREDICTIONS_23[fold][pred_version]
         
-        elif Ensemble_outerfolds.transpose().nunique().max() > 1:  # 2-Compute on all folds at once
+        elif len(Ensemble_outerfolds.dropna().index) == 0 or Ensemble_outerfolds.transpose().nunique().max() > 1:
+            # 2-Compute on all folds at once
             self._build_single_ensemble(self.PREDICTIONS, Performances, parameters, version, list_ensemble_levels,
                                         ensemble_level)
             for fold in self.folds:
@@ -2329,7 +2473,6 @@ class EnsemblesPredictions(Metrics):
             ensemble_level = None
         
         # compute the ensemble model for the parent
-        print('Building the ensemble model ' + version_parent)
         self._build_single_ensemble_wrapper(Performances_parent, parameters_parent, version_parent,
                                             list_ensemble_levels_parent, ensemble_level)
     
@@ -2357,8 +2500,8 @@ class ResidualsGenerate(Hyperparameters):
         self.fold = fold
         self.pred_type = pred_type
         self.debug_mode = debug_mode
-        self.Residuals = pd.read_csv(self.path_store + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' +
-                                     self.target + '_' + self.fold + '.csv')
+        self.Residuals = pd.read_csv(self.path_store + 'PREDICTIONS_withEnsembles_' + pred_type + '_' + target + '_' +
+                                     fold + '.csv')
         self.list_models = [col_name.replace('pred_', '') for col_name in self.Residuals.columns.values
                             if 'pred_' in col_name]
     
@@ -2369,7 +2512,7 @@ class ResidualsGenerate(Hyperparameters):
             print('Generating residuals for model ' + model)
             df_model = self.Residuals[['Age', 'pred_' + model]]
             no_na_indices = [not b for b in df_model['pred_' + model].isna()]
-            df_model = df_model.dropna()
+            df_model.dropna(inplace=True)
             if (len(df_model.index)) > 0:
                 age = df_model.loc[:, ['Age']]
                 res = df_model['Age'] - df_model['pred_' + model]
@@ -2469,6 +2612,8 @@ class SelectBest(Metrics):
         self.RESIDUALS = {}
         self.PERFORMANCES = {}
         self.CORRELATIONS = {}
+        # TODO remove below
+        self.folds = ['val', 'test']
     
     def _load_data(self):
         for fold in self.folds:
@@ -2550,6 +2695,8 @@ class SelectCorrelationsNAs(Hyperparameters):
         Hyperparameters.__init__(self)
         self.target = target
         self.CORRELATIONS = {'*': {'': {}, '_sd': {}, '_str': {}}}
+        #TODO remove below
+        self.folds = ['val', 'test']
     
     def load_data(self):
         for models_type in ['', '_bestmodels']:
@@ -2611,9 +2758,7 @@ class GWASPreprocessing(Hyperparameters):
     
     def _preprocess_residuals(self):
         # Load residuals
-        Residuals = pd.read_csv(
-            "/n/groups/patel/Alan/Aging/Medical_Images/RESIDUALS_bestmodels_eids_Age_test.csv")  # TODO change to normal path
-        # Residuals = pd.read_csv(self.path_store + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
+        Residuals = pd.read_csv(self.path_store + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
         Residuals['id'] = Residuals['eid']
         Residuals.rename(columns={'id': 'FID', 'eid': 'IID'}, inplace=True)
         Residuals = Residuals[Residuals['Ethnicity.White'] == 1]
@@ -2743,8 +2888,7 @@ class PlotsLoggers(Hyperparameters):
         Hyperparameters.__init__(self)
         self.target = target
         self.display_learning_rate = display_learning_rate
-        Predictions = pd.read_csv(self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target +
-                                  '_val.csv')
+        Predictions = pd.read_csv(self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + target + '_val.csv')
         self.list_versions = [col_name.replace('pred_', '') for col_name in Predictions.columns.values
                               if 'pred_' in col_name]
     
@@ -2807,8 +2951,8 @@ class PlotsScatterplots(Hyperparameters):
         # Load the predictions
         self.PREDICTIONS = {}
         for fold in self.folds:
-            self.PREDICTIONS[fold] = pd.read_csv(self.path_store + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_'
-                                                 + self.target + '_' + fold + '.csv')
+            self.PREDICTIONS[fold] = pd.read_csv(self.path_store + 'PREDICTIONS_withEnsembles_' + pred_type + '_' +
+                                                 target + '_' + fold + '.csv')
         # print scatter plot for each model
         self.list_versions = [col_name.replace('pred_', '') for col_name in self.PREDICTIONS['test'].columns.values
                               if 'pred_' in col_name]
@@ -2849,7 +2993,7 @@ class PlotsAttentionMaps(DeepLearning):
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, fold=None, debug_mode=False):
         # Partial initialization with placeholders to get access to parameters and functions
-        DeepLearning.__init__(self, target, organ, view, transformation, 'VGG16', 'Adam', 0, 0, 0, False)
+        DeepLearning.__init__(self, target, organ, view, transformation, 'InceptionResNetV2', 'Adam', 0, 0, 0, False)
         
         # Parameters
         self.fold = fold
@@ -2862,12 +3006,11 @@ class PlotsAttentionMaps(DeepLearning):
             self.N_samples_attentionmaps = 2
         
         # Pick the best model based on the performances
-        path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_instances_' + self.target + '_' + \
-                    self.fold + '.csv'
+        path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_instances_' + target + '_' + fold + '.csv'
         Performances = pd.read_csv(path_perf).set_index('version', drop=False)
         Performances = Performances[(Performances['organ'] == organ)
-                                    & (Performances['view'] == self.view)
-                                    & (Performances['transformation'] == self.transformation)]
+                                    & (Performances['view'] == view)
+                                    & (Performances['transformation'] == transformation)]
         version = Performances['version'].values[0]
         del Performances
         
@@ -2876,8 +3019,8 @@ class PlotsAttentionMaps(DeepLearning):
         DeepLearning.__init__(self, target, organ, view, transformation, self.parameters['architecture'],
                               self.parameters['optimizer'], self.parameters['learning_rate'],
                               self.parameters['weight_decay'], self.parameters['dropout_rate'], False)
-        self.dir_images = '../images/' + self.organ + '/' + self.view + '/' + self.transformation + '/'
-        self.prediction_type = self.dict_prediction_types[self.target]
+        self.dir_images = '../images/' + organ + '/' + view + '/' + transformation + '/'
+        self.prediction_type = self.dict_prediction_types[target]
         self.Residuals = None
         self.df_to_plot = None
         self.df_outer_fold = None

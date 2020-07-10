@@ -2,7 +2,7 @@
 #define parameters
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-folds=( "train" "val" "test" )
+folds=( "test" )
 pred_types=( "instances" "eids" )
 memory=16G
 n_cpu_cores=1

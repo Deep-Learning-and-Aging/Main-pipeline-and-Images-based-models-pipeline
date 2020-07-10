@@ -9,10 +9,10 @@ if len(sys.argv) != 3:
     sys.argv.append('eids')  # pred_type
 
 # Compute results
-Ensemble_Predictions = EnsemblesPredictions(target=sys.argv[1], pred_type=sys.argv[2])
-Ensemble_Predictions.load_data()
-Ensemble_Predictions.generate_ensemble_predictions()
-Ensemble_Predictions.save_predictions()
+Ensembles_Predictions = EnsemblesPredictions(target=sys.argv[1], pred_type=sys.argv[2])
+Ensembles_Predictions.load_data()
+Ensembles_Predictions.generate_ensemble_predictions()
+Ensembles_Predictions.save_predictions()
 
 # Exit
 print('Done.')
