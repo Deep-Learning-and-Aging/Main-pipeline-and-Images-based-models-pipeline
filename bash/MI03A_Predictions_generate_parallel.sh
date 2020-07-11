@@ -2,21 +2,17 @@
 regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
-#organs=( "Brain" "Carotids" "Heart" "Liver" "Pancreas" "Spine" "Hips" "Knees" )
+organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
 organs=( "Liver" )
 architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "ResNet152V2" "Xception" "InceptionV3" )
 architectures=( "InceptionV3" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
 optimizers=( "Adam" )
-learning_rates=( "0.000001" )
-weight_decays=( "0.0" )
-dropout_rates=( "0.0" )
-#weight_decays=( "0.0" "0.0001" "0.001" )
-#dropout_rates=( "0.0" "0.1" "0.2" )
-data_augmentation_factors=( "0.2")
+learning_rates=( "0.0001" )
+weight_decays=( "0.1" )
+dropout_rates=( "0.5" )
+data_augmentation_factors=( "1.0")
 folds=( "train" "val" "test" )
 #folds=( "val" "test" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
@@ -28,36 +24,36 @@ declare -a IDs=()
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then
-			views=( "sagittal" "coronal" "transverse" )
-			data_augmentation_factor="0.0"
+			views=( "Sagittal" "Coronal" "Transverse" )
 		elif [ $organ == "Eyes" ]; then
-			views=( "fundus" "OCT" )
-			data_augmentation_factor="0.2"
-        elif [ $organ == "Carotids" ]; then
-			views=( "longaxis" "shortaxis" "CIMT120" "CIMT150" "mixed" )
-			data_augmentation_factor="0.2"
+			views=( "Fundus" "OCT" )
+		elif [ $organ == "Carotids" ]; then
+			views=( "Shortaxis" "Longaxis" "CIMT120" "CIMT150" "Mixed" )
 		elif [ $organ == "Heart" ]; then
-			views=( "2chambers" "3chambers" "4chambers" )
-			data_augmentation_factor="0.2"
-		elif [ $organ == "FullBody" ]; then
-			views=( "figure" "skeleton" "flesh" "mixed" )
-			data_augmentation_factor="0.2"
+			views=( "MRI" )
+		elif [ $organ == "Abdomen" ]; then
+			views=( "Liver" "Pancreas" )
 		elif [ $organ == "Spine" ]; then
-			views=( "sagittal" "coronal" )
-			data_augmentation_factor="0.2"
+			views=( "Sagittal" "Coronal" )
+		elif [ $organ == "FullBody" ]; then
+			views=( "Figure" "Skeleton" "Flesh" "Mixed" )
 		else
-			views=( "main" )
-			data_augmentation_factor="0.2"
+			views=( "MRI" )
 		fi
-		if [ $organ == "Heart" ] || [ $organ == "Liver" ] || [ $organ == "Pancreas" ]; then
-			transformations=( "raw" "contrast" )
+		if [ $organ == "Brain" ]; then
+			transformations=( "Raw" "Reference" )
+		elif [ $organ == "Heart" ]; then
+			transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
+		elif [ $organ == "Abdomen" ]; then
+			transformations=( "Raw" "Contrast" )
 		else
-			transformations=( "raw" )
+			transformations=( "Raw" )
 		fi
 		for view in "${views[@]}"; do
 			for transformation in "${transformations[@]}"; do
 				for architecture in "${architectures[@]}"; do
 					for optimizer in "${optimizers[@]}"; do
+						for n_fc_layers
 						for learning_rate in "${learning_rates[@]}"; do
 							for weight_decay in "${weight_decays[@]}"; do
 								for dropout_rate in "${dropout_rates[@]}"; do

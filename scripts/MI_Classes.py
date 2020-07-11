@@ -120,14 +120,16 @@ class Hyperparameters:
                                      'FullBody': ['Figure', 'Skeleton', 'Flesh', 'Mixed']}
         self.dict_organsviews_to_transformations = \
             {'Heart_MRI': ['2chambersRaw', '2chambersContrast', '3chambersRaw', '3chambersContrast', '4chambersRaw',
-                           '4chambersContrast'],
-             'Abdomen_Liver': ['Raw', 'Contrast'],
-             'Abdomen_Pancreas': ['Raw', 'Contrast']}
+                           '4chambersContrast']}
         self.dict_organsviews_to_transformations.update(
-            dict.fromkeys(['Brain_Sagittal', 'Brain_Coronal', 'Brain_Transverse', 'Eyes_Fundus', 'Eyes_OCT',
-                           'Carotids_Longaxis', 'Carotids_Shortaxis', 'Carotids_CIMT120', 'Carotids_CIMT150',
-                           'Carotids_Mixed', 'Spine_Sagittal', 'Spine_Coronal', 'Hips_MRI', 'Knees_MRI',
-                           'FullBody_Figure', 'FullBody_Skeleton', 'FullBody_Flesh', 'FullBody_Mixed'], 'Raw'))
+            dict.fromkeys(['Brain_Sagittal', 'Brain_Coronal', 'Brain_Transverse'], ['Raw', 'Reference']))
+        self.dict_organsviews_to_transformations.update(
+            dict.fromkeys(['Abdomen_Liver', 'Abdomen_Pancreas'], ['Raw', 'Contrast']))
+        self.dict_organsviews_to_transformations.update(
+            dict.fromkeys(['Eyes_Fundus', 'Eyes_OCT', 'Carotids_Longaxis', 'Carotids_Shortaxis', 'Carotids_CIMT120',
+                           'Carotids_CIMT150', 'Carotids_Mixed', 'Spine_Sagittal', 'Spine_Coronal', 'Hips_MRI',
+                           'Knees_MRI', 'FullBody_Figure', 'FullBody_Skeleton', 'FullBody_Flesh', 'FullBody_Mixed'],
+                          ['Raw']))
         self.organsviews_not_to_augment = []
         self.organs_instances23 = ['Brain', 'Carotids', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody']
         
@@ -523,6 +525,7 @@ class PreprocessingFolds(Metrics):
             list_ids_view = []
             self.list_ids_per_view_transformation[view] = {}
             for transformation in self.dict_organsviews_to_transformations[self.organ + '_' + view]:
+                list_ids_transformation = []
                 path = '../images/' + self.organ + '/' + view + '/' + transformation + '/'
                 # for paired organs, take the unions of the ids available on the right and the left sides
                 if self.organ in self.left_right_organs:
@@ -533,8 +536,7 @@ class PreprocessingFolds(Metrics):
                     list_ids_transformation += os.listdir(path)
                 self.list_ids_per_view_transformation[view][transformation] = \
                     [im.replace('.jpg', '') for im in list_ids_transformation]
-                list_ids_view += self.list_ids_per_view_transformation[view]
-            list_ids += self.list_ids_per_view[view]
+                list_ids += self.list_ids_per_view_transformation[view][transformation]
         self.list_ids = np.unique(list_ids).tolist()
         self.list_ids.sort()
     
@@ -600,7 +602,7 @@ class PreprocessingFolds(Metrics):
     def _split_data(self):
         # generate inner fold split for each outer fold
         for view in self.views:
-            for transformation in self.transformations:
+            for transformation in self.dict_organsviews_to_transformations[self.organ + '_' + view]:
                 print('Splitting data for view ' + view + ', and transformation ' + transformation)
                 normalizing_values = {}
                 for outer_fold in self.outer_folds:
@@ -621,7 +623,7 @@ class PreprocessingFolds(Metrics):
                     for fold in self.folds:
                         data_fold = \
                             self.data.iloc[self.data['eid'].isin(self.EIDS[fold][outer_fold]).values &
-                                           self.data['id'].isin(self.list_ids_per_view[view]).values, :]
+                                           self.data['id'].isin(self.list_ids_per_view_transformation[view][transformation]).values, :]
                         data_fold['outer_fold'] = outer_fold
                         data_fold = data_fold[self.id_vars + ['outer_fold'] + self.demographic_vars]
                         # normalize the variables
@@ -697,25 +699,24 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.seed = seed
         # Parameters for data augmentation: (rotation range, width shift range, height shift range, zoom range)
         self.augmentation_parameters = \
-            pd.DataFrame(index=['Brain_sagittal', 'Brain_coronal', 'Brain_transverse', 'Eyes_fundus', 'Eyes_OCT',
-                                'Carotids_shortaxis', 'Carotids_longaxis', 'Carotids_CIMT120', 'Carotids_CIMT150',
-                                'Carotids_mixed', 'Heart_2chambers', 'Heart_3chambers', 'Heart_4chambers', 'Liver_main',
-                                'Pancreas_main', 'FullBody_figure', 'FullBody_skeleton', 'FullBody_flesh',
-                                'FullBody_mixed', 'Spine_sagittal', 'Spine_coronal', 'Hips_main', 'Knees_main'],
+            pd.DataFrame(index=['Brain_Sagittal', 'Brain_Coronal', 'Brain_Transverse', 'Eyes_Fundus', 'Eyes_OCT',
+                                'Carotids_Shortaxis', 'Carotids_Longaxis', 'Carotids_CIMT120', 'Carotids_CIMT150',
+                                'Carotids_Mixed', 'Heart_MRI', 'Abdomen_Liver', 'Abdomen_Pancreas', 'Spine_Sagittal',
+                                'Spine_Coronal', 'Hips_MRI', 'Knees_MRI', 'FullBody_Figure', 'FullBody_Skeleton',
+                                'FullBody_Flesh', 'FullBody_Mixed'],
                          columns=['rotation', 'width_shift', 'height_shift', 'zoom'])
-        self.augmentation_parameters.loc['Brain_sagittal', :] = [20, 0.05, 0.1, 0.0]
-        self.augmentation_parameters.loc['Brain_coronal', :] = [10, 0.05, 0.1, 0.0]
-        self.augmentation_parameters.loc['Brain_transverse', :] = [10, 0.05, 0.1, 0.0]
-        self.augmentation_parameters.loc['Eyes_fundus', :] = [20, 0.02, 0.02, 0]
+        self.augmentation_parameters.loc['Brain_Sagittal', :] = [20, 0.05, 0.1, 0.0]
+        self.augmentation_parameters.loc['Brain_Coronal', :] = [10, 0.05, 0.1, 0.0]
+        self.augmentation_parameters.loc['Brain_Transverse', :] = [10, 0.05, 0.1, 0.0]
+        self.augmentation_parameters.loc['Eyes_Fundus', :] = [20, 0.02, 0.02, 0]
         self.augmentation_parameters.loc['Eyes_OCT', :] = [30, 0.1, 0.2, 0]
-        self.augmentation_parameters.loc[['Carotids_shortaxis', 'Carotids_longaxis', 'Carotids_CIMT120',
+        self.augmentation_parameters.loc[['Carotids_Shortaxis', 'Carotids_Longaxis', 'Carotids_CIMT120',
                                           'Carotids_CIMT150'], :] = [0, 0.2, 0.0, 0.0]
-        self.augmentation_parameters.loc[['Heart_2chambers', 'Heart_3chambers', 'Heart_4chambers', 'Liver_main',
-                                          'Pancreas_main', 'Spine_sagittal'], :] = [10, 0.1, 0.1, 0.0]
-        self.augmentation_parameters.loc[['FullBody_figure', 'FullBody_skeleton', 'FullBody_flesh',
-                                          'FullBody_mixed'], :] = [10, 0.05, 0.02, 0.0]
-        self.augmentation_parameters.loc['Spine_sagittal', :] = [0, 0.1, 0.1, 0]
-        self.augmentation_parameters.loc[['Spine_coronal', 'Hips_main', 'Knees_main'], :] = [10, 0.1, 0.1, 0.1]
+        self.augmentation_parameters.loc[['Heart_MRI', 'Abdomen_Liver', 'Abdomen_Pancreas',
+                                          'Spine_Sagittal'], :] = [10, 0.1, 0.1, 0.0]
+        self.augmentation_parameters.loc[['Spine_Coronal', 'Hips_MRI', 'Knees_MRI'], :] = [10, 0.1, 0.1, 0.1]
+        self.augmentation_parameters.loc[['FullBody_Figure', 'FullBody_Skeleton', 'FullBody_Flesh',
+                                          'FullBody_Mixed'], :] = [10, 0.05, 0.02, 0.0]
         organ_view = organ + '_' + view
         ImageDataGenerator.__init__(self, rescale=1. / 255.,
                                     rotation_range=self.augmentation_parameters.loc[organ_view, 'rotation'],
@@ -937,29 +938,27 @@ class DeepLearning(Metrics):
         
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
         self.dict_organ_view_to_image_size = {
-            'Brain_coronal': (316, 316),  # initial size (88, 88)
-            'Brain_sagittal': (316, 316),  # initial size (88, 88)
-            'Brain_transverse': (316, 316),  # initial size (88, 88)
-            'Carotids_shortaxis': (337, 291),  # initial size (505, 436)
-            'Carotids_longaxis': (337, 291),  # initial size (505, 436)
+            'Brain_Coronal': (316, 316),  # initial size (88, 88)
+            'Brain_Sagittal': (316, 316),  # initial size (88, 88)
+            'Brain_Transverse': (316, 316),  # initial size (88, 88)
+            'Carotids_Shortaxis': (337, 291),  # initial size (505, 436)
+            'Carotids_Longaxis': (337, 291),  # initial size (505, 436)
             'Carotids_CIMT120': (337, 291),  # initial size (505, 436)
             'Carotids_CIMT150': (337, 291),  # initial size (505, 436)
-            'Carotids_mixed': (337, 291),  # initial size (505, 436)
-            'Eyes_fundus': (316, 316),  # initial size (1388, 1388)
+            'Carotids_Mixed': (337, 291),  # initial size (505, 436)
+            'Eyes_Fundus': (316, 316),  # initial size (1388, 1388)
             'Eyes_OCT': (312, 320),  # initial size (500, 512)
-            'Heart_2chambers': (316, 316),  # initial size (200, 200)
-            'Heart_3chambers': (316, 316),  # initial size (200, 200)
-            'Heart_4chambers': (316, 316),  # initial size (200, 200)
-            'Liver_main': (288, 364),  # initial size (364, 288)
-            'Pancreas_main': (288, 350),  # initial size (350, 288)
-            'FullBody_figure': (541, 181),  # initial size (811, 272)
-            'FullBody_skeleton': (541, 181),  # initial size (811, 272)
-            'FullBody_flesh': (541, 181),  # initial size (811, 272)
-            'FullBody_mixed': (541, 181),  # initial size (811, 272)
-            'Spine_sagittal': (466, 211),  # initial size (1513, 684)
-            'Spine_coronal': (315, 313),  # initial size (724, 720)
-            'Hips_main': (329, 303),  # initial size (626, 680)
-            'Knees_main': (347, 286)  # initial size (851, 700)
+            'Heart_MRI': (316, 316),  # initial size (200, 200)
+            'Abdomen_Liver': (288, 364),  # initial size (364, 288)
+            'Abdomen_Pancreas': (288, 350),  # initial size (350, 288)
+            'FullBody_Figure': (541, 181),  # initial size (811, 272)
+            'FullBody_Skeleton': (541, 181),  # initial size (811, 272)
+            'FullBody_Flesh': (541, 181),  # initial size (811, 272)
+            'FullBody_Mixed': (541, 181),  # initial size (811, 272)
+            'Spine_Sagittal': (466, 211),  # initial size (1513, 684)
+            'Spine_Coronal': (315, 313),  # initial size (724, 720)
+            'Hips_MRI': (329, 303),  # initial size (626, 680)
+            'Knees_MRI': (347, 286)  # initial size (851, 700)
         }
         self.dict_architecture_to_image_size = {'MobileNet': (224, 224), 'MobileNetV2': (224, 224),
                                                 'NASNetMobile': (224, 224), 'NASNetLarge': (331, 331)}
@@ -1031,7 +1030,7 @@ class DeepLearning(Metrics):
     def _load_data_features(self):
         for fold in self.folds:
             self.DATA_FEATURES[fold] = pd.read_csv(
-                self.path_store + 'data-features_' + self.organ + '_' + self.view + '_' +
+                self.path_store + 'data-features_' + self.organ + '_' + self.view + '_' + self.transformation + '_' +
                 self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
             for col_name in self.id_vars + ['outer_fold']:
                 self.DATA_FEATURES[fold][col_name] = self.DATA_FEATURES[fold][col_name].astype(str)
@@ -1434,10 +1433,10 @@ class Training(DeepLearning):
                                              monitor='val_' + self.main_metric.name, baseline=self.baseline_performance,
                                              verbose=1, save_best_only=True, save_weights_only=True,
                                              mode=self.main_metric_mode, save_freq='epoch')
-        patience_reduce_lr = min(6, 3 * self.GENERATORS['train'].n_subepochs_per_epoch)
+        patience_reduce_lr = min(7, 3 * self.GENERATORS['train'].n_subepochs_per_epoch)
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=patience_reduce_lr, verbose=1,
                                                  mode='min', min_delta=0, cooldown=0, min_lr=0)
-        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=10, verbose=0,
+        early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=15, verbose=0,
                                        mode=self.main_metric_mode,
                                        baseline=self.baseline_performance)
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, early_stopping, reduce_lr_on_plateau]

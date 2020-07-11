@@ -18,16 +18,16 @@ if len(sys.argv) != 14:
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('Heart')  # organ
-    sys.argv.append('4chambers')  # view
-    sys.argv.append('raw')  # transformation
+    sys.argv.append('MRI')  # view
+    sys.argv.append('4chambersRaw')  # transformation
     sys.argv.append('InceptionV3')  # architecture
-    sys.argv.append('0')  # n_fc_layers
-    sys.argv.append('4')  # n_fc_nodes
+    sys.argv.append('1')  # n_fc_layers
+    sys.argv.append('1024')  # n_fc_nodes
     sys.argv.append('Adam')  # optimizer
     sys.argv.append('0.0001')  # learning_rate
-    sys.argv.append('0.0')  # weight decay
-    sys.argv.append('0.0')  # dropout_rate
-    sys.argv.append('2.0')  # data_augmentation_factor
+    sys.argv.append('0.1')  # weight decay
+    sys.argv.append('0.5')  # dropout_rate
+    sys.argv.append('1.0')  # data_augmentation_factor
     sys.argv.append('0')  # outer_fold
 
 # Compute results

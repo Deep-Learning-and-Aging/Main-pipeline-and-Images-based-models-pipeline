@@ -1,10 +1,9 @@
 #!/bin/bash
 targets=( "Age" )
-organs=( "Brain" "Carotids" "Eyes" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" ) #"PhysicalActivity" )
-organs=( "Brain" "Carotids" "Eyes" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
-organs=( "Heart" )
+organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
+#organs=( "Heart" )
 n_cpu_cores=1
-time=5
+time=30
 memory=8G
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
