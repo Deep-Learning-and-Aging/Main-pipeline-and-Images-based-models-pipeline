@@ -1,0 +1,13 @@
+IDs_MI03C=$(./MI03C_Predictions_merge_parallel.sh)
+IDs_MI03D=$(./MI03D_Predictions_eids_parallel.sh $IDs_MI03C)
+IDs_MI04A=$(./MI04A_Performances_generate_parallel.sh $IDs_MI03D)
+IDs_MI04B=$(./MI04B05C_Performances_merge_parallel.sh False $IDs_MI04A)
+IDs_MI04C=$(./MI04C_Performances_tuning_parallel.sh $IDs_MI04C)
+IDs_MI05A=$(./MI05A_Ensembles_predictions_generate_and_merge_parallel.sh $IDs_MI04C)
+IDs_MI05B=$(./MI05B_Ensembles_performances_generate_parallel.sh $IDs_MI05A)
+IDs_MI05C=$(./MI04B05C_Performances_merge_parallel.sh True $IDs_MI05B)
+IDs_MI06A=$(./MI06A_Residuals_generate_parallel.sh $IDs_MI05C)
+IDs_MI06B=$(./MI06B_Residuals_correlations_parallel.sh $IDs_MI06A) 
+IDs_MI07A=$(./MI07A_Select_best_parallel.sh $IDs_MI06B)
+IDs_MI07B=$(./MI07B_Select_correlationsNAs_parallel.sh $IDs_MI07A)
+

@@ -1,16 +1,15 @@
 import sys
-from MI_Classes import PreprocessingFolds
+from MI_Classes import GWASPreprocessing
 
 # Default parameters
-if len(sys.argv) != 3:
+if len(sys.argv) != 2:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Heart')  # organ
 
 # Compute results
-Preprocessing_Folds = PreprocessingFolds(target=sys.argv[1], organ=sys.argv[2])
-Preprocessing_Folds.generate_folds()
+GWAS_Preprocessing = GWASPreprocessing(target=sys.argv[1])
+GWAS_Preprocessing.compute_gwas_input()
 
 # Exit
 print('Done.')

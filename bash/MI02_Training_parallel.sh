@@ -2,9 +2,9 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 #targets=( "Sex" )
-organs=( "Brain" "Eyes" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
+organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
 organs=( "Brain" "Eyes" "Carotids" "Heart" "FullBody" )
-#organs=( "Heart" "FullBody" )
+organs=( "Eyes" )
 #organs=( "Brain" "Carotids" "Spine" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionResNetV2" "InceptionV3" )
@@ -18,8 +18,9 @@ optimizers=( "Adam" )
 #learning_rates=( "0.01" "0.001" "0.0001" "0.00001" "0.000001" )
 learning_rates=( "0.0001" )
 weight_decays=( "0.0" "0.1" "0.2" "0.3" "0.4" )
-#weight_decays=( "0.0" )
+weight_decays=( "0.0" )
 dropout_rates=( "0.5" )
+dropout_rates=( "0.0" )
 #dropout_rates=( "0.25" "0.75" )
 data_augmentation_factors=( "1.0" )
 #outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
@@ -32,31 +33,31 @@ time=600
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then
-			views=( "sagittal" "coronal" "transverse" )
-			views=( "sagittal" )
+			views=( "Sagittal" "Coronal" "Transverse" )
+			views=( "Sagittal" )
 		elif [ $organ == "Eyes" ]; then
-			views=( "fundus" "OCT" )
-			views=( "fundus" )
+			views=( "Fundus" "OCT" )
+			views=( "Fundus" )
         elif [ $organ == "Carotids" ]; then
-			views=( "longaxis" "shortaxis" "CIMT120" "CIMT150" "mixed" )
-			views=( "longaxis" )
+			views=( "Longaxis" "Shortaxis" "CIMT120" "CIMT150" "Mixed" )
+			views=( "Longaxis" )
 		elif [ $organ == "Heart" ]; then
-			views=( "2chambers" "3chambers" "4chambers" )
-			views=( "4chambers" )
-		elif [ $organ == "FullBody" ]; then
-			views=( "figure" "skeleton" "flesh" "mixed" )
-			views=( "mixed" )
+			views=( "MRI" )
+		elif [ $organ == "Abdomen" ]; then
+			views=( "Liver" "Pancreas" )
 		elif [ $organ == "Spine" ]; then
-			views=( "sagittal" "coronal" )
-			views=( "coronal" )
+			views=( "Sagittal" "Coronal" )
+		elif [ $organ == "FullBody" ]; then
+			views=( "Figure" "Skeleton" "Flesh" "Mixed" )
 		else
-			views=( "main" )
+			views=( "MRI" )
 		fi
-		if [ $organ == "Heart" ] || [ $organ == "Liver" ] || [ $organ == "Pancreas" ]; then
-			transformations=( "raw" "contrast" )
-            transformations=( "contrast" )
+		if [ $organ == "Heart" ]; then
+			transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
+		elif [ $organ == "Abdomen" ]; then
+			transformations=( "Raw" "Contrast" )
 		else
-			transformations=( "raw" )
+			transformations=( "Raw" )
 		fi
 		for view in "${views[@]}"; do
 			for transformation in "${transformations[@]}"; do

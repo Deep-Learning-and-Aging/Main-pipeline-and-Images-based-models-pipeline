@@ -107,23 +107,29 @@ class Hyperparameters:
         self.targets_binary = ['Sex']
         self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
         self.dict_side_predictors = {'Age': ['Sex'] + self.ethnicities_vars, 'Sex': ['Age'] + self.ethnicities_vars}
-        self.organs = ['Brain', 'Carotids', 'Eyes', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine', 'Hips', 'Knees',
-                       'PhysicalActivity']
-        self.left_right_organs = ['Carotids', 'Eyes', 'Hips', 'Knees']
-        self.dict_organs_to_views = {'Brain': ['sagittal', 'coronal', 'transverse'],
-                                     'Carotids': ['longaxis', 'shortaxis', 'CIMT120', 'CIMT150', 'mixed'],
-                                     'Eyes': ['fundus', 'OCT'],
-                                     'Heart': ['2chambers', '3chambers', '4chambers'],
-                                     'Liver': ['main'],
-                                     'Pancreas': ['main'],
-                                     'FullBody': ['figure', 'skeleton', 'flesh', 'mixed'],
-                                     'Spine': ['sagittal', 'coronal'],
-                                     'Hips': ['main'],
-                                     'Knees': ['main'],
-                                     'PhysicalActivity': ['main']}
-        self.organsviews_not_to_augment = ['PhysicalActivity_main']
-        self.organs_instances23 = ['Brain', 'Carotids', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine', 'Hips',
-                                   'Knees']
+        self.organs = ['Brain', 'Eyes', 'Carotids', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody']
+        self.left_right_organs = ['Eyes', 'Carotids', 'Hips', 'Knees']
+        self.dict_organs_to_views = {'Brain': ['Sagittal', 'Coronal', 'Transverse'],
+                                     'Eyes': ['Fundus', 'OCT'],
+                                     'Carotids': ['Longaxis', 'Shortaxis', 'CIMT120', 'CIMT150', 'Mixed'],
+                                     'Heart': ['MRI'],
+                                     'Abdomen': ['Liver', 'Pancreas'],
+                                     'Spine': ['Sagittal', 'Coronal'],
+                                     'Hips': ['MRI'],
+                                     'Knees': ['MRI'],
+                                     'FullBody': ['Figure', 'Skeleton', 'Flesh', 'Mixed']}
+        self.dict_organsviews_to_transformations = \
+            {'Heart_MRI': ['2chambersRaw', '2chambersContrast', '3chambersRaw', '3chambersContrast', '4chambersRaw',
+                           '4chambersContrast'],
+             'Abdomen_Liver': ['Raw', 'Contrast'],
+             'Abdomen_Pancreas': ['Raw', 'Contrast']}
+        self.dict_organsviews_to_transformations.update(
+            dict.fromkeys(['Brain_Sagittal', 'Brain_Coronal', 'Brain_Transverse', 'Eyes_Fundus', 'Eyes_OCT',
+                           'Carotids_Longaxis', 'Carotids_Shortaxis', 'Carotids_CIMT120', 'Carotids_CIMT150',
+                           'Carotids_Mixed', 'Spine_Sagittal', 'Spine_Coronal', 'Hips_MRI', 'Knees_MRI',
+                           'FullBody_Figure', 'FullBody_Skeleton', 'FullBody_Flesh', 'FullBody_Mixed'], 'Raw'))
+        self.organsviews_not_to_augment = []
+        self.organs_instances23 = ['Brain', 'Carotids', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody']
         
         # Others
         if '/Users/Alan/' in os.getcwd():
@@ -479,11 +485,11 @@ class PreprocessingFolds(Metrics):
     """
     Gather all the hyperparameters of the algorithm
     """
-    
     def __init__(self, target, organ, regenerate_data):
         Metrics.__init__(self)
         self.target = target
         self.organ = organ
+        self.list_ids_per_view_transformation = None
         
         # Check if these folds have already been generated
         if not regenerate_data:
@@ -498,8 +504,8 @@ class PreprocessingFolds(Metrics):
             self.variables_to_normalize.append(target)
         self.dict_image_quality_col = {'Liver': 'Abdominal_images_quality'}
         self.dict_image_quality_col.update(
-            dict.fromkeys(['Brain', 'Carotids', 'Eyes', 'Heart', 'Liver', 'Pancreas', 'FullBody', 'Spine', 'Hips',
-                           'Knees', 'PhysicalActivity', 'ECG', 'ArterialStiffness'], None))
+            dict.fromkeys(['Brain', 'Eyes', 'Carotids', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody'],
+                          None))
         self.image_quality_col = self.dict_image_quality_col[organ]
         self.views = self.dict_organs_to_views[organ]
         self.list_ids = None
@@ -510,27 +516,27 @@ class PreprocessingFolds(Metrics):
         self.data_fold = None
     
     def _get_list_ids(self):
-        # get the list of the ids available for the organ
-        if self.organ in self.organs:
-            list_ids = []
-            # if different views are available, take the union of the ids
-            for view in self.views:
-                path = '../images/' + self.organ + '/' + view + '/' + 'raw' + '/'
-                list_ids_view = []
+        self.list_ids_per_view_transformation = {}
+        list_ids = []
+        # if different views are available, take the union of the ids
+        for view in self.views:
+            list_ids_view = []
+            self.list_ids_per_view_transformation[view] = {}
+            for transformation in self.dict_organsviews_to_transformations[self.organ + '_' + view]:
+                path = '../images/' + self.organ + '/' + view + '/' + transformation + '/'
                 # for paired organs, take the unions of the ids available on the right and the left sides
                 if self.organ in self.left_right_organs:
                     for side in ['right', 'left']:
-                        list_ids_view += os.listdir(path + side + '/')
-                    list_ids_view = np.unique(list_ids_view).tolist()
+                        list_ids_transformation += os.listdir(path + side + '/')
+                    list_ids_transformation = np.unique(list_ids_transformation).tolist()
                 else:
-                    list_ids_view += os.listdir(path)
-                self.list_ids_per_view[view] = [im.replace('.jpg', '') for im in list_ids_view]
-                list_ids += self.list_ids_per_view[view]
-            self.list_ids = np.unique(list_ids).tolist()
-            self.list_ids.sort()
-        else:
-            list_ids_raw = pd.read_csv(self.path_store + 'IDs_' + self.organ + '.csv')
-            self.list_ids = list_ids_raw.values.squeeze().astype(str)
+                    list_ids_transformation += os.listdir(path)
+                self.list_ids_per_view_transformation[view][transformation] = \
+                    [im.replace('.jpg', '') for im in list_ids_transformation]
+                list_ids_view += self.list_ids_per_view_transformation[view]
+            list_ids += self.list_ids_per_view[view]
+        self.list_ids = np.unique(list_ids).tolist()
+        self.list_ids.sort()
     
     def _filter_and_format_data(self):
         """
@@ -594,45 +600,47 @@ class PreprocessingFolds(Metrics):
     def _split_data(self):
         # generate inner fold split for each outer fold
         for view in self.views:
-            print('Splitting data for view ' + view)
-            normalizing_values = {}
-            for outer_fold in self.outer_folds:
-                print('Splitting data for outer fold ' + outer_fold)
-                # compute values for scaling of variables
-                data_train = self.data.iloc[self.data['eid'].isin(self.EIDS['train'][outer_fold]).values &
-                                            self.data['id'].isin(self.list_ids_per_view[view]).values, :]
-                for var in self.variables_to_normalize:
-                    var_mean = data_train[var].mean()
-                    if len(data_train[var].unique()) < 2:
-                        print('Variable ' + var + ' has a single value in fold ' + outer_fold +
-                              '. Using 1 as std for normalization.')
-                        var_std = 1
-                    else:
-                        var_std = data_train[var].std()
-                    normalizing_values[var] = {'mean': var_mean, 'std': var_std}
-                # generate folds
-                for fold in self.folds:
-                    data_fold = \
-                        self.data.iloc[self.data['eid'].isin(self.EIDS[fold][outer_fold]).values &
-                                       self.data['id'].isin(self.list_ids_per_view[view]).values, :]
-                    data_fold['outer_fold'] = outer_fold
-                    data_fold = data_fold[self.id_vars + ['outer_fold'] + self.demographic_vars]
-                    # normalize the variables
+            for transformation in self.transformations:
+                print('Splitting data for view ' + view + ', and transformation ' + transformation)
+                normalizing_values = {}
+                for outer_fold in self.outer_folds:
+                    print('Splitting data for outer fold ' + outer_fold)
+                    # compute values for scaling of variables
+                    data_train = self.data.iloc[self.data['eid'].isin(self.EIDS['train'][outer_fold]).values &
+                                                self.data['id'].isin(self.list_ids_per_view_transformation[view][transformation]).values, :]
                     for var in self.variables_to_normalize:
-                        data_fold[var + '_raw'] = data_fold[var]
-                        data_fold[var] = (data_fold[var] - normalizing_values[var]['mean']) \
-                                         / normalizing_values[var]['std']
-                    # report issue if NAs were detected, which most likely comes from a sample whose id did not match
-                    n_mismatching_samples = data_fold.isna().sum().max()
-                    if n_mismatching_samples > 0:
-                        print(data_fold[data_fold.isna().any(axis=1)])
-                        print('/!\\ WARNING! ' + str(n_mismatching_samples) + ' ' + fold + ' images ids out of ' +
-                              str(len(data_fold.index)) + ' did not match the dataframe!')
-                    data_fold.to_csv(self.path_store + 'data-features_' + self.organ + '_' + view + '_' + self.target +
-                                     '_' + fold + '_' + outer_fold + '.csv', index=False)
-                    print('For outer_fold ' + outer_fold + ', the ' + fold + ' fold has a sample size of ' +
-                          str(len(data_fold.index)))
-                    self.data_fold = data_fold
+                        var_mean = data_train[var].mean()
+                        if len(data_train[var].unique()) < 2:
+                            print('Variable ' + var + ' has a single value in fold ' + outer_fold +
+                                  '. Using 1 as std for normalization.')
+                            var_std = 1
+                        else:
+                            var_std = data_train[var].std()
+                        normalizing_values[var] = {'mean': var_mean, 'std': var_std}
+                    # generate folds
+                    for fold in self.folds:
+                        data_fold = \
+                            self.data.iloc[self.data['eid'].isin(self.EIDS[fold][outer_fold]).values &
+                                           self.data['id'].isin(self.list_ids_per_view[view]).values, :]
+                        data_fold['outer_fold'] = outer_fold
+                        data_fold = data_fold[self.id_vars + ['outer_fold'] + self.demographic_vars]
+                        # normalize the variables
+                        for var in self.variables_to_normalize:
+                            data_fold[var + '_raw'] = data_fold[var]
+                            data_fold[var] = (data_fold[var] - normalizing_values[var]['mean']) \
+                                             / normalizing_values[var]['std']
+                        # report issue if NAs were detected, which most likely comes from a sample whose id did not match
+                        n_mismatching_samples = data_fold.isna().sum().max()
+                        if n_mismatching_samples > 0:
+                            print(data_fold[data_fold.isna().any(axis=1)])
+                            print('/!\\ WARNING! ' + str(n_mismatching_samples) + ' ' + fold + ' images ids out of ' +
+                                  str(len(data_fold.index)) + ' did not match the dataframe!')
+                        data_fold.to_csv(self.path_store + 'data-features_' + self.organ + '_' + view + '_' +
+                                         transformation + '_' + self.target + '_' + fold + '_' + outer_fold + '.csv',
+                                         index=False)
+                        print('For outer_fold ' + outer_fold + ', the ' + fold + ' fold has a sample size of ' +
+                              str(len(data_fold.index)))
+                        self.data_fold = data_fold
     
     def generate_folds(self):
         self._get_list_ids()
