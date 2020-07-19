@@ -90,7 +90,7 @@ class Hyperparameters:
         self.ensemble_types = ['*']  # ['*', '?', ','] for multiple types of ensemble models
         self.modes = ['', '_sd', '_str']
         self.id_vars = ['id', 'eid', 'instance']
-        self.instances = ['0', '1', '1.5', '2', '3']
+        self.instances = ['0', '1', '1.50', '1.51', '1.52', '1.53', '1.54', '2', '3']
         self.ethnicities_vars = ['Ethnicity.White', 'Ethnicity.British', 'Ethnicity.Irish', 'Ethnicity.White_Other',
                                  'Ethnicity.Mixed', 'Ethnicity.White_and_Black_Caribbean',
                                  'Ethnicity.White_and_Black_African', 'Ethnicity.White_and_Asian',
@@ -331,14 +331,16 @@ class PreprocessingMain(Hyperparameters):
         dict_UKB_fields_to_names = {'34-0.0': 'Year_of_birth', '52-0.0': 'Month_of_birth',
                                     '53-0.0': 'Date_attended_center_0', '53-1.0': 'Date_attended_center_1',
                                     '53-2.0': 'Date_attended_center_2', '53-3.0': 'Date_attended_center_3',
-                                    '90010-0.0': 'Date_attended_center_1.5',  # Start time of wear for accelerometer
+                                    '90010-0.0': 'Date_attended_center_1.50',  # Start time of wear for accelerometer
+                                    '90010-1.0': 'Date_attended_center_1.51', '90010-2.0': 'Date_attended_center_1.52',
+                                    '90010-3.0': 'Date_attended_center_1.53', '90010-4.0': 'Date_attended_center_1.54',
                                     '31-0.0': 'Sex', '22001-0.0': 'Sex_genetic', '21000-0.0': 'Ethnicity',
                                     '21000-1.0': 'Ethnicity_1', '21000-2.0': 'Ethnicity_2',
                                     '22414-2.0': 'Abdominal_images_quality'}
         self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
                                     usecols=['eid', '31-0.0', '22001-0.0', '21000-0.0', '21000-1.0', '21000-2.0',
-                                             '34-0.0', '52-0.0', '53-0.0', '53-1.0', '90010-0.0', '53-2.0', '53-3.0',
-                                             '22414-2.0'])
+                                             '34-0.0', '52-0.0', '53-0.0', '53-1.0', '90010-0.0', '90010-1.0',
+                                             '90010-2.0', '90010-3.0', '90010-4.0', '53-2.0', '53-3.0', '22414-2.0'])
         
         # Formatting
         self.data_raw.rename(columns=dict_UKB_fields_to_names, inplace=True)
@@ -711,7 +713,7 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.augmentation_parameters.loc['Eyes_Fundus', :] = [20, 0.02, 0.02, 0]
         self.augmentation_parameters.loc['Eyes_OCT', :] = [30, 0.1, 0.2, 0]
         self.augmentation_parameters.loc[['Carotids_Shortaxis', 'Carotids_Longaxis', 'Carotids_CIMT120',
-                                          'Carotids_CIMT150'], :] = [0, 0.2, 0.0, 0.0]
+                                          'Carotids_CIMT150', 'Carotids_Mixed'], :] = [0, 0.2, 0.0, 0.0]
         self.augmentation_parameters.loc[['Heart_MRI', 'Abdomen_Liver', 'Abdomen_Pancreas',
                                           'Spine_Sagittal'], :] = [10, 0.1, 0.1, 0.0]
         self.augmentation_parameters.loc[['Spine_Coronal', 'Hips_MRI', 'Knees_MRI'], :] = [10, 0.1, 0.1, 0.1]

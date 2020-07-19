@@ -20,10 +20,8 @@ fi
 # Define parameters
 args=( 
 	--lmm
-	--bed=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_cal_chr{1:$NC}_v2.bed
-	--bim=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_snp_chr{1:$NC}_v2.bim
 	--fam=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS.fam
-	--remove=/n/groups/patel/Alan/Aging/Medical_Images/data/bolt.in_plink_but_not_imputed.FID_IID.${chromosomes}.txt 
+	--remove=/n/groups/patel/Alan/Aging/Medical_Images/data/bolt.in_plink_but_not_imputed.FID_IID.txt 
 	--remove=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_remove_${target}_${organ}.tab
 	--phenoFile=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_data_${target}_${organ}.tab
 	--phenoCol=${organ}
@@ -37,22 +35,33 @@ args=(
 	--LDscoresFile=/n/groups/patel/bin/BOLT-LMM_v2.3.2/tables/LDSCORE.1000G_EUR.tab.gz
 	--geneticMapFile=/n/groups/patel/bin/BOLT-LMM_v2.3.2/tables/genetic_map_hg19_withX.txt.gz
 	--numThreads=10
-	--statsFile=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_${target}_${organ}_${chromosome}${debug}.stats.gz
+	--statsFile=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_${target}_${organ}_${chromosomes}${debug}.stats.gz
 	--verboseStats
 )
 
-# Add chromosome X. Still need all other chromosomes included for the optimal LMM
+# Add parameters that depend on the type and  number of chromosomes
 if [ $chromosomes == "X" ]; then
 	args+=(
 		--bed=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_cal_chrX_v2.bed
 		--bim=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_snp_chrX_v2.bim
+		--numLeaveOutChunks 2
+		--LDscoresMatchBp
+		--bed=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_cal_chr1_v2.bed
+		--bim=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_snp_chr1_v2.bim
 	)
+else
+	for i in $(seq 1 $NC); do
+		args+=(
+			--bed=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_cal_chr${i}_v2.bed
+			--bim=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_snp_chr${i}_v2.bim
+		)
+	done
 fi
 
 # Add arguments for imputed data GWAS
 if [ $# -eq 3 ] || [ $debug == "" ]; then
 	args+=(
-		--bgenSampleFileList=/n/groups/patel/uk_biobank/project_52887_genetics/bgenSampleFileList_${chromosomes}.txt
+		--bgenSampleFileList=/n/groups/patel/uk_biobank/project_52887_genetics/bgenSampleFileList${debug}.txt
 		--bgenMinMAF=1e-3
 		--bgenMinINFO=0.3
 		--noBgenIDcheck

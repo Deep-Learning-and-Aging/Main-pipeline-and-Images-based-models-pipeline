@@ -1,0 +1,17 @@
+WARNING: Ignoring indiv not in genotype data: FID=4906436, IID=4906436
+WARNING: Ignoring indiv not in genotype data: FID=1648580, IID=1648580
+WARNING: Ignoring indiv not in genotype data: FID=1353885, IID=1353885
+WARNING: Ignoring indiv not in genotype data: FID=2173402, IID=2173402
+WARNING: Ignoring indiv not in genotype data: FID=1513894, IID=1513894
+WARNING: Ignoring indiv not in genotype data: FID=4906436, IID=4906436
+WARNING: Ignoring indiv not in genotype data: FID=1648580, IID=1648580
+WARNING: Ignoring indiv not in genotype data: FID=1353885, IID=1353885
+WARNING: Ignoring indiv not in genotype data: FID=2173402, IID=2173402
+WARNING: Ignoring indiv not in genotype data: FID=1513894, IID=1513894
+NOTE: Using all-1s vector (constant term) in addition to specified covariates
+WARNING: Covariate Assessment_center has a large number of distinct values (22)
+         Should this covariate be quantitative rather than categorical?
+NOTE: Using all-1s vector (constant term) in addition to specified covariates
+WARNING: Covariate Assessment_center has a large number of distinct values (22)
+         Should this covariate be quantitative rather than categorical?
+slurmstepd: error: *** JOB 13702260 ON compute-e-16-233 CANCELLED AT 2020-07-18T20:35:49 DUE TO TIME LIMIT ***

@@ -1,0 +1,26 @@
+cd /n/groups/patel/bin/BOLT-LMM_v2.3.2
+
+./bolt \
+--lmm \
+--bed=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_cal_chrX_v2.bed \
+--bim=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_snp_chrX_v2.bim \
+--bed=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_cal_chr{1..2}_v2.bed \
+--bim=/n/groups/patel/uk_biobank/project_52887_genetics/ukb_snp_chr{1..2}_v2.bim \
+--fam=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS.fam \
+--remove=/n/groups/patel/Alan/Aging/Medical_Images/data/bolt.in_plink_but_not_imputed.FID_IID.txt \
+--remove=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_remove_Age_Liver.tab \
+--phenoFile=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_data_Age_Liver.tab \
+--phenoCol=Liver \
+--covarFile=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_data_Age_Liver.tab \
+--covarCol=Assessment_center \
+--covarCol=Sex \
+--covarCol=Ethnicity \
+--covarMaxLevels=30 \
+--qCovarCol=Age \
+--qCovarCol=PC{1:20} \
+--LDscoresFile=/n/groups/patel/bin/BOLT-LMM_v2.3.2/tables/LDSCORE.1000G_EUR.tab.gz \
+--geneticMapFile=/n/groups/patel/bin/BOLT-LMM_v2.3.2/tables/genetic_map_hg19_withX.txt.gz \
+--numThreads=10 \
+--statsFile=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_Age_Liver.stats.gz \
+--verboseStats \
+

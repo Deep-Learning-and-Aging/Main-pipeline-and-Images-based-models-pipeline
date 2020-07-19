@@ -2,144 +2,226 @@
 regenerate_performances=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-# All organs
-#organs=( "Brain" "Eyes" "Hearing" "Carotids" "Vascular" "BloodPressure" "Heart" "ECG" "Lungs" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" "Heel" "Hand" "Anthropometry" "ImmuneSystem" "Blood" "Urine" )
-# Biomarkers
-organs=( "Brain" "Eyes" "Hearing" "Carotids" "Vascular" "BloodPressure" "Heart" "ECG" "Lungs" "Heel" "Hand" "Anthropometry" "ImmuneSystem" "Blood" "Urine" )
-# Images
-#organs=( "Brain" "Eyes" "Carotids" "Heart" "Liver" "Pancreas" "FullBody" "Spine" "Hips" "Knees" )
-#organs=( "Carotids" )
-n_fc_layersS=( "0" )
-n_fc_nodesS=( "0" )
-#optimizers=( "Adam" "RMSprop" "Adadelta" )
-optimizers=( "Adam" )
-optimizers=( "0" )
-learning_rates=( "0.000001" )
-learning_rates=( "0" )
-weight_decays=( "0.0" )
-weight_decays=( "0" )
-dropout_rates=( "0" )
-data_augmentation_factors=( "0" )
 folds=( "train" "val" "test" )
-#folds=( "val" "test" )
-#folds=( "train" )
 pred_types=( "instances" "eids" )
-pred_types=( "instances" )
 memory=2G
 n_cpu_cores=1
 n_gpus=1
 declare -a IDs=()
-for target in "${targets[@]}"; do
-	for organ in "${organs[@]}"; do
-		if [ $organ == "Brain" ]; then
-			views=( "GreyMatterVolumes" "dMRIWeightedMeans" "SubcorticalVolumes" "AllBiomarkers" "sagittal" "coronal" "transverse" )
-			#views=( "sagittal" )
-			views=( "GreyMatterVolumes" "dMRIWeightedMeans" "SubcorticalVolumes" "AllBiomarkers" )
-		elif [ $organ == "Eyes" ]; then
-			views=( "Autorefraction" "Acuity" "IntraocularPressure" "AllBiomarkers" "fundus" "OCT" )
-			views=( "Autorefraction" "Acuity" "IntraocularPressure" "AllBiomarkers" )
-		elif [ $organ == "Hearing" ]; then
-			views=( "HearingTest" )
-        elif [ $organ == "Carotids" ]; then
-			views=( "BiomarkersUltrasound" "shortaxis" "longaxis" "CIMT120" "CIMT150" "mixed" )
-			views=( "BiomarkersUltrasound" )
-		elif [ $organ == "Vascular" ]; then
-			views=( "BiomarkersArterialStiffness" )
-		elif [ $organ == "BloodPressure" ]; then
-			views=( "Biomarkers" )
-		elif [ $organ == "Heart" ]; then
-			views=( "Size" "PWA" "AllBiomarkers" "2chambers" "3chambers" "4chambers" )
-			#views=( "4chambers" )
-			views=( "Size" "PWA" "AllBiomarkers" )
-		elif [ $organ == "ECG" ]; then
-			views=( "BiomarkersAtRest" )
-		elif [ $organ == "Lungs" ]; then
-			views=( "Spirometry" )
-		elif [ $organ == "Liver" ]; then
-			views=( "MRI" )
-		elif [ $organ == "Pancreas" ]; then
-			views=( "MRI" )
-		elif [ $organ == "FullBody" ]; then
-			views=( "figure" "skeleton" "flesh" "mixed" )
-			#views=( "mixed" )
-		elif [ $organ == "Spine" ]; then
-			views=( "sagittal" "coronal" )
-			#views=( "coronal" )
-		elif [ $organ == "Hips" ]; then
-			views=( "MRI" )
-		elif [ $organ == "Knees" ]; then
-			views=( "MRI" )
-		elif [ $organ == "Heel" ]; then
-			views=( "BoneDensitometry" )
-		elif [ $organ == "Hand" ]; then
-			views=( "GripStrenght" )
-		elif [ $organ == "Anthropometry" ]; then
-			views=( "Impedance" "BodySize" "AllBiomarkers" )
-		elif [ $organ == "ImmuneSystem" ]; then
-			views=( "BloodCount" )
-		elif [ $organ == "Blood" ]; then
-			views=( "Biochemistry" )
-		elif [ $organ == "Urine" ]; then
-			views=( "Biochemistry" )
-		else
-			echo "Organ $organ does not match any view!"
-		fi
-		if [ $organ == "Heart" ] || [ $organ == "Liver" ] || [ $organ == "Pancreas" ]; then
-			transformations=( "raw" "contrast" )
-            #transformations=( "raw" )
-		else
-			transformations=( "raw" )
-		fi
-		for view in "${views[@]}"; do
-			organview="${organ}_${view}"
-			if [ $organview == "Brain_sagittal" ] || [ $organview == "Brain_coronal" ] || [ $organview == "Brain_transverse" ] || [ $organview == "Eyes_fundus" ] || [ $organview == "Eyes_OCT" ] || [ $organview == "Carotids_shortaxis" ] || [ $organview == "Carotids_longaxis" ] || [ $organview == "Carotids_CIMT120" ] || [ $organview == "Carotids_CIMT150" ] || [ $organview == "Carotids_mixed" ] || [ $organview == "Heart_2chambers" ] || [ $organview == "Heart_3chambers" ] || [ $organview == "Heart_4chambers" ] || [ $organview == "Liver_MRI" ] || [ $organview == "Pancreas_MRI" ] || [ $organview == "FullBody_figure" ] || [ $organview == "FullBody_skeleton" ] || [ $organview == "FullBody_flesh" ] || [ $organview == "FullBody_mixed" ] || [ $organview == "Spine_sagittal" ] || [ $organview == "Spine_coronal" ] || [ $organview == "Hips_MRI" ] || [ $organview == "Knees_MRI" ] ; then
-				architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3"     "InceptionResNetV2" )
-				architectures=( "InceptionV3" )
+# For reference, order of the organs (by similarity): Brain, Eyes, Hearing, Lungs, BloodPressure, Artery,  Carotids, Heart,  Abdomen, Spine, Hips, Knees, FullBody, Anthropometry, Heel, Hand, PhysicalActivity, BloodCount, BloodBiochemistry, Urine
+organs_groups=( "Biomarkers" "TimeSeries" "Images" "Videos" )
+for organs_group in "${targets[@]}"; do
+	if [ $organs_group == "Biomarkers" ]; then
+		organs=( "Brain" "Eyes" "Hearing" "Lungs" "BloodPressure" "Artery" "Carotids" "Heart" "Abdomen" "Anthropometry" "Heel" "Hand" "PhysicalActivity" "BloodCount" "BloodChemistry" "UrineChemistry" )
+		architectures=( "ElasticNet" "LightGBM" "NeuralNetwork" )
+		n_fc_layer="0"
+		n_fc_nodes="0"
+		optimizer="0"
+		learning_rate="0"
+		weight_decay="0"
+		dropout_rate="0"
+		data_augmentation_factor="0"
+	elif [ $organs_group == "TimeSeries" ]; then
+		organs=( "Artery" "Heart" "PhysicalActivity" )
+		architectures=( TODO )
+		n_fc_layer=TODO
+		n_fc_nodes=TODO
+		optimizer=TODO
+		learning_rate=TODO
+		weight_decay=TODO
+		dropout_rate=TODO
+		data_augmentation_factor=TODO
+	elif [ $organs_group == "Images" ]; then
+		organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
+		#architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
+		architectures=( "InceptionV3" )
+		n_fc_layer="1"
+		n_fc_nodes="1024"
+		optimizer="Adam"
+		learning_rate="0.001"
+		weight_decay="0.1"
+		dropout_rate="0.5"
+		data_augmentation_factor="1.0"
+	elif [ $organs_group == "Videos" ]; then
+		organs=( "Heart" )
+		architectures=( "3DCNN" )
+		n_fc_layer=TODO
+		n_fc_nodes=TODO
+		optimizer=TODO
+		learning_rate=TODO
+		weight_decay=TODO
+		dropout_rate=TODO
+		data_augmentation_factor=TODO
+	else
+		echo "organs_group must be either Biomarkers, TimeSeries, Images, Videos"
+	fi
+	for target in "${targets[@]}"; do
+		for organ in "${organs[@]}"; do
+			if [ $organ == "Brain" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "GreyMatterVolumes" "dMRIWeightedMeans" "SubcorticalVolumes" "AllBiomarkers" )
+				elif [ $organs_group == "Images" ]; then
+					views=( "Sagittal" "Coronal" "Transverse" )
+				fi
+			elif [ $organ == "Eyes" ]; then
+				if [ $organs_group == Biomarkers ]; then
+					views=( "Autorefraction" "Acuity" "IntraocularPressure" "AllBiomarkers" )
+				elif [ $organs_group == "Images" ]; then
+					views=( "Fundus" "OCT" )
+				fi
+			elif [ $organ == "Hearing" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "HearingTest" )
+				fi
+			elif [ $organ == "Lungs" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "Spirometry" )
+				fi
+			elif [ $organ == "BloodPressure" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "Biomarkers" )
+				fi
+			elif [ $organ == "Artery" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "Biomarker" )
+				elif [ $organs_group == "TimeSeries" ]; then
+					views=( "PWA" )
+				fi
+			elif [ $organ == "Carotids" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "BiomarkersUltrasound" )
+				elif [ $organs_group == "Images" ]; then
+					views=( "Shortaxis" "Longaxis" "CIMT120" "CIMT150" "Mixed" )
+				fi
+			elif [ $organ == "Heart" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "MRI" "ECG" )
+				elif [ $organs_group == "TimeSeries" ]; then
+					views=( "ECG" )
+				elif [ $organs_group == "Images" ]; then
+					views=( "MRI" )
+				elif [ $organs_group == "Videos" ]; then
+					views=( "MRI" )
+				fi
+			elif [ $organ == "Abdomen" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "Liver" )
+				elif [ $organs_group == "Images" ]; then
+					views=( "Liver" "Pancreas" )
+				fi
+			elif [ $organ == "Spine" ]; then
+				if [ $organs_group == "Images" ]; then
+					views=( "Sagittal" "Coronal" )
+				fi
+			elif [ $organ == "Hips" ]; then
+				if [ $organs_group == "Images" ]; then
+					views=( "MRI" )
+				fi
+			elif [ $organ == "Knees" ]; then
+				if [ $organs_group == "Images" ]; then
+					views=( "MRI" )
+				fi
+			elif [ $organ == "FullBody" ]; then
+				if [ $organs_group == "Images" ]; then
+					views=( "Figure" "Skeleton" "Flesh" "Mixed" )
+				fi
+			elif [ $organ == "Anthropometry" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "Impedance" "BodySize" "AllBiomarkers" )
+				fi
+			elif [ $organ == "Heel" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "BoneDensitometry" )
+				fi
+			elif [ $organ == "Hand" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "GripStrenght" )
+				fi
+			elif [ $organ == "PhysicalActivity" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "Biomarkers" )
+				elif [ $organs_group == "TimeSeries" ]; then
+					views= ( TODO )
+				fi
+			elif [ $organ == "BloodCount" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "BloodCount" )
+				fi
+			elif [ $organ == "BloodBiochemistry" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "Biochemistry" )
+				fi
+			elif [ $organ == "Urine" ]; then
+				if [ $organs_group == "Biomarkers" ]; then
+					views=( "Biochemistry" )
+				fi
 			else
-				architectures=( "ElasticNet" "LightGbm" "NeuralNetwork" )
-				#architectures=( "ElasticNet" )
+				echo "Organ $organ does not match any view!"
 			fi
-			if [ $organview == "Heart_2chambers" ] || [ $organview == "Heart_3chambers" ] || [ $organview == "Heart_4chambers" ] || [ $organview == "Liver_MRI" ] || [ $organview == "Pancreas_MRI" ]; then
-				transformations=( "raw" "contrast" )
-  	          #transformations=( "raw" )
+			if [ $organs_group == "Biomarkers" ]; then
+				if [ $organ == "Heart" ]; then
+					if [ $view == "MRI" ]; then
+						transformations=( "Size" "PWA" "AllBiomarkers" )
+					elif [ $view == "ECG" ]; then
+						transformations=( "Biomarkers" )
+					fi
+				elif [ $organ == "Abdomen"]; then
+					if [ $view == "Liver" ]; then
+						transformations=( "Biomarkers" )
+					fi
+				else
+					transformations=( "Raw" )
+				fi
+			elif [ $organs_group == "Images" ]; then
+				if [ $organ == "Brain" ]; then
+					transformations=( "Raw" "Reference" )
+				elif [ $organ == "Heart" ]; then
+					transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
+				elif [ $organ == "Abdomen" ]; then
+					transformations=( "Raw" "Contrast" )
+				else
+					transformations=( "Raw" )
+				fi
 			else
-				transformations=( "raw" )
+				transformations=( "Raw" )
 			fi
-			for transformation in "${transformations[@]}"; do
-				for architecture in "${architectures[@]}"; do
-					for n_fc_layers in "${n_fc_layersS[@]}"; do
-						for n_fc_nodes in "${n_fc_nodesS[@]}"; do
-							for optimizer in "${optimizers[@]}"; do
-								for learning_rate in "${learning_rates[@]}"; do
-									for weight_decay in "${weight_decays[@]}"; do
-										for dropout_rate in "${dropout_rates[@]}"; do
-											for data_augmentation_factor in "${data_augmentation_factors[@]}"; do
-												for fold in "${folds[@]}"; do
-													for pred_type in "${pred_types[@]}"; do
-														version=${pred_type}_${target}_${organ}_${view}_${transformation}_${architecture}_${n_fc_layers}_${n_fc_nodes}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${data_augmentation_factor}_${fold}
-														name=MI04A-$version
-														job_name="$name.job"
-														out_file="../eo/$name.out"
-														err_file="../eo/$name.err"
-														time=90
-														time=20 #debug mode
-														#allocate more time for the training fold because of the larger sample size
-														if [ $fold = "train" ]; then
-															time=$(( 8*$time ))
-														fi
-														#check if the predictions have already been generated. If not, do not run the model.
-														if ! test -f "../data/Predictions_${version}.csv"; then
-															echo The predictions at "../data/Predictions_${version}.csv" cannot be found. The job cannot be run.
-															break
-														fi
-														#if regenerate_performances option is on or if the performances have not yet been generated, run the job
-														if ! test -f "../data/Performances_${version}.csv" || $regenerate_performances; then
-															echo Submitting job for $version
-															ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $fold $pred_type)
-															IDs+=($ID)
-														#else
-														#	echo Performance for $version have already been generated.
-														fi
+			for view in "${views[@]}"; do
+				for transformation in "${transformations[@]}"; do
+					for architecture in "${architectures[@]}"; do
+						for n_fc_layers in "${n_fc_layersS[@]}"; do
+							for n_fc_nodes in "${n_fc_nodesS[@]}"; do
+								for optimizer in "${optimizers[@]}"; do
+									for learning_rate in "${learning_rates[@]}"; do
+										for weight_decay in "${weight_decays[@]}"; do
+											for dropout_rate in "${dropout_rates[@]}"; do
+												for data_augmentation_factor in "${data_augmentation_factors[@]}"; do
+													for fold in "${folds[@]}"; do
+														for pred_type in "${pred_types[@]}"; do
+															version=${pred_type}_${target}_${organ}_${view}_${transformation}_${architecture}_${n_fc_layers}_${n_fc_nodes}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${data_augmentation_factor}_${fold}
+															name=MI04A-$version
+															job_name="$name.job"
+															out_file="../eo/$name.out"
+															err_file="../eo/$name.err"
+															time=90
+															time=20 #debug mode
+															#allocate more time for the training fold because of the larger sample size
+															if [ $fold = "train" ]; then
+																time=$(( 8*$time ))
+															fi
+															#check if the predictions have already been generated. If not, do not run the model.
+															if ! test -f "../data/Predictions_${version}.csv"; then
+																echo The predictions at "../data/Predictions_${version}.csv" cannot be found. The job cannot be run.
+																break
+															fi
+															#if regenerate_performances option is on or if the performances have not yet been generated, run the job
+															if ! test -f "../data/Performances_${version}.csv" || $regenerate_performances; then
+																echo Submitting job for $version
+																ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04A05B_Performances_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $fold $pred_type)
+																IDs+=($ID)
+															#else
+															#	echo Performance for $version have already been generated.
+															fi
+														done
 													done
 												done
 											done
@@ -154,6 +236,7 @@ for target in "${targets[@]}"; do
 		done
 	done
 done
+
 # Produce the list of job dependencies fr the next step
 printf -v IDs_list '%s:' "${IDs[@]}"
 dependencies="${IDs_list%:}"
