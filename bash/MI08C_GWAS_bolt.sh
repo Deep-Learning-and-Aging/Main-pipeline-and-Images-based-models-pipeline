@@ -37,7 +37,7 @@ args=(
 	--LDscoresFile=/n/groups/patel/bin/BOLT-LMM_v2.3.2/tables/LDSCORE.1000G_EUR.tab.gz
 	--geneticMapFile=/n/groups/patel/bin/BOLT-LMM_v2.3.2/tables/genetic_map_hg19_withX.txt.gz
 	--numThreads=10
-	--statsFile=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_${target}_${organ}_${chromosome}${debug}.stats.gz
+	--statsFile=/n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_${target}_${organ}_${chromosomes}${debug}.stats.gz
 	--verboseStats
 )
 

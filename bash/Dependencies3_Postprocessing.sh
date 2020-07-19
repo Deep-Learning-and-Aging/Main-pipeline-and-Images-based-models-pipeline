@@ -11,6 +11,6 @@ IDs_MI06B=$(./MI06B_Residuals_correlations_parallel.sh $IDs_MI06A)
 IDs_MI07A=$(./MI07A_Select_best_parallel.sh $IDs_MI06B)
 IDs_MI07B=$(./MI07B_Select_correlationsNAs_parallel.sh $IDs_MI07A)
 IDs_MI08A=$(sbatch MI08A_GWAS_preprocessing.sh --dependency=$IDs_MI07A)
-IDs_MI08B=$(sbatch MI08B_GWAS_remove.sh --dependency=$IDs_MI08A)
+IDs_MI08B=$(./MI08B_GWAS_remove_parallel.sh $IDs_MI08A)
 IDs_MI08C=$(./MI08C_GWAS_bolt_parallel.sh $IDs_MI08B)
 
