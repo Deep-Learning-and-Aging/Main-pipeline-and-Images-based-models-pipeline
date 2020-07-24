@@ -2,14 +2,15 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 folds=( "train" "val" "test" )
+folds=( "val" )
 n_cpu_cores=1
 declare -a IDs=()
 for fold in "${folds[@]}"; do
 	if [ $fold == "train" ]; then
 		time=180
-		memory=40G
+		memory=64G
 	else
-		time=10
+		time=30
 		memory=8G
 	fi
 	for target in "${targets[@]}"; do

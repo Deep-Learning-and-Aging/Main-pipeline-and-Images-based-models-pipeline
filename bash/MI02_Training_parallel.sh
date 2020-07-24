@@ -2,10 +2,11 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
-#organs=( "Hips" )
+organs=( "Eyes" "Heart" "Abdomen" "Spine" "Hips" )
+organs=( "Hips" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionResNetV2" "InceptionV3" )
-architectures=( "InceptionV3" )
+architectures=( "InceptionResNetV2" )
 #n_fc_layersS=( "0" "1" "2" "3" "4" "5" )
 n_fc_layersS=( "1" )
 #n_fc_nodesS=( "16" "64" "128" "256" "512" "1024" )
@@ -21,12 +22,12 @@ dropout_rates=( "0.5" )
 #data_augmentation_factors=( "0.0" "0.1" "0.5" "1.0" "2.0" )
 data_augmentation_factors=( "1.0" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
-#outer_folds=( "0" )
+outer_folds=( "0" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
 time=600
-#time=350
+time=3
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then

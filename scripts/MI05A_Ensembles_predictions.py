@@ -1,6 +1,9 @@
 import sys
 from MI_Classes import EnsemblesPredictions
 
+# Options
+regenerate_models = False  # Only compute ensemble model if it was not already computed
+
 # Default parameters
 if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
@@ -9,7 +12,8 @@ if len(sys.argv) != 3:
     sys.argv.append('eids')  # pred_type
 
 # Compute results
-Ensembles_Predictions = EnsemblesPredictions(target=sys.argv[1], pred_type=sys.argv[2])
+Ensembles_Predictions = EnsemblesPredictions(target=sys.argv[1], pred_type=sys.argv[2],
+                                             regenerate_models=regenerate_models)
 Ensembles_Predictions.load_data()
 Ensembles_Predictions.generate_ensemble_predictions()
 Ensembles_Predictions.save_predictions()

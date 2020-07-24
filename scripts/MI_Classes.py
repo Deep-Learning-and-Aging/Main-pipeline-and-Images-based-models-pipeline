@@ -31,7 +31,7 @@ from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_scor
 from sklearn import linear_model
 
 # CPUs
-from multiprocessing import Pool
+#from multiprocessing import Pool # TODO remove if useless
 # GPUs
 from GPUtil import GPUtil
 # tensorflow
@@ -53,6 +53,7 @@ from tensorflow_addons.metrics import RSquare, F1Score
 # Plots
 import matplotlib.pyplot as plt
 import seaborn as sns
+from bioinfokit import visuz
 
 # Model's attention
 import innvestigate
@@ -109,7 +110,7 @@ class Hyperparameters:
         self.dict_side_predictors = {'Age': ['Sex'] + self.ethnicities_vars, 'Sex': ['Age'] + self.ethnicities_vars}
         self.organs = ['Brain', 'Eyes', 'Carotids', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody']
         self.left_right_organs = ['Eyes', 'Carotids', 'Hips', 'Knees']
-        self.dict_organs_to_views = {'Brain': ['Sagittal', 'Coronal', 'Transverse'],
+        self.dict_organs_to_views = {'Brain': ['Imaging'],
                                      'Eyes': ['Fundus', 'OCT'],
                                      'Carotids': ['Longaxis', 'Shortaxis', 'CIMT120', 'CIMT150', 'Mixed'],
                                      'Heart': ['MRI'],
@@ -119,10 +120,10 @@ class Hyperparameters:
                                      'Knees': ['MRI'],
                                      'FullBody': ['Figure', 'Skeleton', 'Flesh', 'Mixed']}
         self.dict_organsviews_to_transformations = \
-            {'Heart_MRI': ['2chambersRaw', '2chambersContrast', '3chambersRaw', '3chambersContrast', '4chambersRaw',
+            {'Brain_Imaging': ['SagittalRaw', 'SagittalReference', 'CoronalRaw', 'CoronalReference', 'TransverseRaw',
+                               'TransverseReference'],
+             'Heart_MRI': ['2chambersRaw', '2chambersContrast', '3chambersRaw', '3chambersContrast', '4chambersRaw',
                            '4chambersContrast']}
-        self.dict_organsviews_to_transformations.update(
-            dict.fromkeys(['Brain_Sagittal', 'Brain_Coronal', 'Brain_Transverse'], ['Raw', 'Reference']))
         self.dict_organsviews_to_transformations.update(
             dict.fromkeys(['Abdomen_Liver', 'Abdomen_Pancreas'], ['Raw', 'Contrast']))
         self.dict_organsviews_to_transformations.update(
@@ -340,7 +341,8 @@ class PreprocessingMain(Hyperparameters):
         self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
                                     usecols=['eid', '31-0.0', '22001-0.0', '21000-0.0', '21000-1.0', '21000-2.0',
                                              '34-0.0', '52-0.0', '53-0.0', '53-1.0', '90010-0.0', '90010-1.0',
-                                             '90010-2.0', '90010-3.0', '90010-4.0', '53-2.0', '53-3.0', '22414-2.0'])
+                                             '90010-2.0', '90010-3.0', '90010-4.0', '53-2.0', '53-3.0', '22414-2.0'],
+                                    nrows=1)
         
         # Formatting
         self.data_raw.rename(columns=dict_UKB_fields_to_names, inplace=True)
@@ -701,15 +703,12 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.seed = seed
         # Parameters for data augmentation: (rotation range, width shift range, height shift range, zoom range)
         self.augmentation_parameters = \
-            pd.DataFrame(index=['Brain_Sagittal', 'Brain_Coronal', 'Brain_Transverse', 'Eyes_Fundus', 'Eyes_OCT',
-                                'Carotids_Shortaxis', 'Carotids_Longaxis', 'Carotids_CIMT120', 'Carotids_CIMT150',
-                                'Carotids_Mixed', 'Heart_MRI', 'Abdomen_Liver', 'Abdomen_Pancreas', 'Spine_Sagittal',
-                                'Spine_Coronal', 'Hips_MRI', 'Knees_MRI', 'FullBody_Figure', 'FullBody_Skeleton',
-                                'FullBody_Flesh', 'FullBody_Mixed'],
+            pd.DataFrame(index=['Brain_Imaging', 'Eyes_Fundus', 'Eyes_OCT', 'Carotids_Shortaxis', 'Carotids_Longaxis',
+                                'Carotids_CIMT120', 'Carotids_CIMT150', 'Carotids_Mixed', 'Heart_MRI', 'Abdomen_Liver',
+                                'Abdomen_Pancreas', 'Spine_Sagittal', 'Spine_Coronal', 'Hips_MRI', 'Knees_MRI',
+                                'FullBody_Figure', 'FullBody_Skeleton', 'FullBody_Flesh', 'FullBody_Mixed'],
                          columns=['rotation', 'width_shift', 'height_shift', 'zoom'])
-        self.augmentation_parameters.loc['Brain_Sagittal', :] = [20, 0.05, 0.1, 0.0]
-        self.augmentation_parameters.loc['Brain_Coronal', :] = [10, 0.05, 0.1, 0.0]
-        self.augmentation_parameters.loc['Brain_Transverse', :] = [10, 0.05, 0.1, 0.0]
+        self.augmentation_parameters.loc['Brain_Imaging', :] = [10, 0.05, 0.1, 0.0]
         self.augmentation_parameters.loc['Eyes_Fundus', :] = [20, 0.02, 0.02, 0]
         self.augmentation_parameters.loc['Eyes_OCT', :] = [30, 0.1, 0.2, 0]
         self.augmentation_parameters.loc[['Carotids_Shortaxis', 'Carotids_Longaxis', 'Carotids_CIMT120',
@@ -940,9 +939,7 @@ class DeepLearning(Metrics):
         
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
         self.dict_organ_view_to_image_size = {
-            'Brain_Coronal': (316, 316),  # initial size (88, 88)
-            'Brain_Sagittal': (316, 316),  # initial size (88, 88)
-            'Brain_Transverse': (316, 316),  # initial size (88, 88)
+            'Brain_Imaging': (316, 316),  # initial size (88, 88)
             'Carotids_Shortaxis': (337, 291),  # initial size (505, 436)
             'Carotids_Longaxis': (337, 291),  # initial size (505, 436)
             'Carotids_CIMT120': (337, 291),  # initial size (505, 436)
@@ -2241,11 +2238,12 @@ class PerformancesTuning(Metrics):
 
 class EnsemblesPredictions(Metrics):
     
-    def __init__(self, target=None, pred_type=None):
+    def __init__(self, target=None, pred_type=None, regenerate_models=False):
         # Parameters
         Metrics.__init__(self)
         self.target = target
         self.pred_type = pred_type
+        self.regenerate_models = regenerate_models
         self.ensembles_performance_cutoff_percent = 0
         self.parameters = {'target': target, 'organ': '*', 'view': '*', 'transformation': '*', 'architecture': '*',
                            'n_fc_layers': '*', 'n_fc_nodes': '*', 'optimizer': '*', 'learning_rate': '*',
@@ -2435,17 +2433,13 @@ class EnsemblesPredictions(Metrics):
                                                                           on=['id'])
         
         # build and save a dataset for this specific ensemble model
-        for ensemble_type in self.ensemble_types:
-            version_type = version.replace('*', ensemble_type)
-            if 'pred_' + version_type in self.PREDICTIONS['test'].columns.values:
-                for fold in self.folds:
-                    df_single_ensemble = self.PREDICTIONS[fold][
-                        ['id', 'outer_fold_' + version, 'pred_' + version_type]]
-                    df_single_ensemble.rename(
-                        columns={'outer_fold_' + version: 'outer_fold', 'pred_' + version_type: 'pred'}, inplace=True)
-                    df_single_ensemble.dropna(inplace=True, subset=['pred'])
-                    df_single_ensemble.to_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + version_type +
-                                              '_' + fold + '.csv', index=False)
+        for fold in self.folds:
+            df_single_ensemble = self.PREDICTIONS[fold][['id', 'outer_fold_' + version, 'pred_' + version]]
+            df_single_ensemble.rename(columns={'outer_fold_' + version: 'outer_fold', 'pred_' + version: 'pred'},
+                                      inplace=True)
+            df_single_ensemble.dropna(inplace=True, subset=['pred'])
+            df_single_ensemble.to_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + version + '_' + fold +
+                                      '.csv', index=False)
     
     def _recursive_ensemble_builder(self, Performances_grandparent, parameters_parent, version_parent,
                                     list_ensemble_levels_parent):
@@ -2470,8 +2464,24 @@ class EnsemblesPredictions(Metrics):
             ensemble_level = None
         
         # compute the ensemble model for the parent
-        self._build_single_ensemble_wrapper(Performances_parent, version_parent, list_ensemble_levels_parent,
-                                            ensemble_level)
+        # Check if ensemble model has already been computed. If it has, load the predictions. If it has not, compute it.
+        if not self.regenerate_models and \
+                os.exist(self.path_store + 'Predictions_' + self.pred_type + '_' + version + '_test.csv', index=False):
+            for fold in self.folds:
+                df_single_ensemble = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + version +
+                                                 '_' + fold + '.csv', index=False)
+                df_single_ensemble.rename(columns={'pred_' + version: 'pred'}, inplace=True)
+                # Add the ensemble predictions to the dataframe
+                if fold == 'train':
+                    self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer',
+                                                                          on=['id', 'outer_fold_' + version])
+                    self.PREDICTIONS[fold]['outer_fold_' + version] = self.PREDICTIONS[fold]['outer_fold']
+                else:
+                    df_single_ensemble.drop('outer_fold', axis=1, inplace=True)
+                    self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer', on=['id'])
+        else:
+            self._build_single_ensemble_wrapper(Performances_parent, version_parent, list_ensemble_levels_parent,
+                                                ensemble_level)
     
     def generate_ensemble_predictions(self):
         self._recursive_ensemble_builder(self.Performances, self.parameters, self.version, self.list_ensemble_levels)
@@ -2600,10 +2610,10 @@ class SelectBest(Metrics):
     
     def __init__(self, target=None, pred_type=None):
         Metrics.__init__(self)
-        
         self.target = target
         self.pred_type = pred_type
         self.organs = None
+        self.organs_with_suborgans = ['Brain', 'Heart', 'Abdomen']
         self.best_models = None
         self.PREDICTIONS = {}
         self.RESIDUALS = {}
@@ -2612,8 +2622,8 @@ class SelectBest(Metrics):
     
     def _load_data(self):
         for fold in self.folds:
-            path_pred = self.path_store + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' + self.target \
-                        + '_' + fold + '.csv'
+            path_pred = self.path_store + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' + self.target + '_' + \
+                        fold + '.csv'
             path_res = self.path_store + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + fold + '.csv'
             path_perf = self.path_store + 'PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + self.target + \
                         '_' + fold + '.csv'
@@ -2629,16 +2639,16 @@ class SelectBest(Metrics):
     
     def _select_versions(self):
         Performances = self.PERFORMANCES['val']
-        idx_Ensembles = Performances['organ'].isin(self.ensemble_types).values
-        idx_withoutEnsembles = [not b for b in idx_Ensembles]
-        Perf_Ensembles = Performances[idx_Ensembles]
-        Perf_withoutEnsembles = Performances[idx_withoutEnsembles]
-        self.organs = ['*']
-        self.best_models = [Perf_Ensembles['version'].values[0]]
-        for organ in Perf_withoutEnsembles['organ'].unique():
-            Perf_organ = Perf_withoutEnsembles[Perf_withoutEnsembles['organ'] == organ]
-            self.organs.append(organ)
-            self.best_models.append(Perf_organ['version'].values[0])
+        for organ in Performances['organ'].unique():
+            if organ in self.organs_with_suborgans:
+                for view in self.dict_organs_to_views[organ]:
+                    Perf_organview = Performances[Performances['organ'] == organ & Performances['view'] == view]
+                    self.organs.append(organ + view)
+                    self.best_models.append(Perf_organview['version'].values[0])
+            else:
+                Perf_organ = Performances[Performances['organ'] == organ]
+                self.organs.append(organ)
+                self.best_models.append(Perf_organ['version'].values[0])
     
     def _take_subsets(self):
         base_cols = self.id_vars + self.demographic_vars
@@ -2811,6 +2821,72 @@ class GWASPreprocessing(Hyperparameters):
         self._preprocess_covars()
         self._merge_main_data()
         self._list_removed()
+
+
+class GWASPostprocessing(Hyperparameters):
+    
+    def __init__(self):
+        Hyperparameters.__init__(self)
+        #TODO remove path_sore below
+        self.path_store = '../data4/'
+        self.targets = ['Age']
+        self.organs = ['Liver']
+        self.target = None
+        self.organ = None
+        self.GWAS = None
+        self.FDR_correction = 5e-8
+        self.dict_chr_to_colors = {'1': '#b9b8b5', '2': '#222222', '3': '#f3c300', '4': '#875692', '5': '#f38400',
+                                   '6': '#a1caf1', '7': '#be0032', '8': '#c2b280', '9': '#848482', '10': '#008856',
+                                   '11': '#555555', '12': '#0067a5', '13': '#f99379', '14': '#604e97', '15': '#f6a600',
+                                   '16': '#b3446c', '17': '#dcd300', '18': '#882d17', '19': '#8db600', '20': '#654522',
+                                   '21': '#e25822', '22': '#232f00', '23': '#e68fac'}
+        self.dict_colors = {'light_gray': '#b9b8b5', 'black': '#222222', 'vivid_yellow': '#f3c300',
+                            'strong_purple': '#875692', 'vivid_orange': '#f38400', 'very_light_blue': '#a1caf1',
+                            'vivid_red': '#be0032', 'grayish_yellow': '#c2b280', 'medium_gray': '#848482',
+                            'vivid_green': '#008856', 'dark_gray': '#555555', 'strong_blue': '#0067a5',
+                            'strong_yellowish pink': '#f99379', 'violet': '#604e97', 'vivid_orange_yellow': '#f6a600',
+                            'strong_purplish_red': '#b3446c', 'vivid_greenish_yellow': '#dcd300',
+                            'strong_reddish_brown': '#882d17', 'vivid_yellow_green': '#8db600',
+                            'vivid_yellowish_brown': '#654522', 'vivid_reddish_orange': '#e25822',
+                            'deep_olive_green': '#232f00', 'strong_purplish_pink': '#e68fac'}
+    
+    def _processing(self):
+        self.GWAS = pd.read_csv(self.path_store + 'GWAS_' + self.target + '_' + self.organ + '_X.stats', sep='\t')
+        GWAS_autosome = pd.read_csv(self.path_store + 'GWAS_' + self.target + '_' + self.organ + '_autosome.stats',
+                                    sep='\t')
+        self.GWAS[self.GWAS['CHR'] != 23] = GWAS_autosome
+        self.GWAS_volcano = self.GWAS[self.GWAS['P_BOLT_LMM_INF'] < self.FDR_correction]
+        # Define dict snps to genes
+        self.dict_genes = {"rs116720794": "gene1", "rs10482810": "gene2"}
+    
+    def _save_data(self):
+        self.GWAS.to_csv(self.path_store + 'GWAS_' + self.target + '_' + self.organ + '.csv', index=False)
+        self.GWAS_volcano.to_csv(self.path_store + 'GWAS_volcano_' + self.target + '_' + self.organ + '.csv',
+                                 index=False)
+    
+    def _Manhattan_plot(self):
+        color = [self.dict_chr_to_colors[str(chr)] for chr in self.GWAS['CHR'].unique()]
+        # SNPs
+        # visuz.marker.mhat(df=self.GWAS, chr='CHR', pv='P_BOLT_LMM_INF', gwas_sign_line=True, gwasp=self.FDR_correction,
+        #                  color=color, gstyle=2, r=600, markernames=True, markeridcol='SNP')
+        # os.rename('manhatten.png', '../figures/GWAS/GWAS_ManhattanPlot_' + target + '_' + organ + '_SNPs.png')
+        # Genes
+        visuz.marker.mhat(df=self.GWAS, chr='CHR', pv='P_BOLT_LMM_INF', gwas_sign_line=True, gwasp=self.FDR_correction,
+                          color=color, gstyle=2, r=600, dim=(9, 4), axtickfontsize=1, markernames=(self.dict_genes), markeridcol='SNP')
+        os.rename('manhatten.png', '../figures/GWAS/GWAS_ManhattanPlot_' + self.target + '_' + self.organ +
+                  '_Genes.png')
+    
+    def processing_all_targets_and_organs(self):
+        if not os.path.exists('../figures/GWAS/'):
+            os.makedirs('../figures/GWAS/')
+        for target in self.targets:
+            for organ in self.organs:
+                print('Processing data for target ' + target + ' and organ ' + organ)
+                self.target = target
+                self.organ = organ
+                self._processing()
+                self._save_data()
+                self._Manhattan_plot()
 
 
 class PlotsCorrelations(Hyperparameters):

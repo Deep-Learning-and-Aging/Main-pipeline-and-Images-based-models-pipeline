@@ -4,7 +4,7 @@ targets=( "Age" )
 organs=( "Liver" )
 chromosomesS=( "autosome" "X" )
 n_cpus=1 #TODO 10
-time=60
+time=600
 
 #loop through the jobs to submit
 declare -a IDs=()

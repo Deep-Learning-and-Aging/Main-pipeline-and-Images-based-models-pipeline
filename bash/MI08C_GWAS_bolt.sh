@@ -64,5 +64,13 @@ echo "${args[@]}"
 
 # Run the job
 cd /n/groups/patel/bin/BOLT-LMM_v2.3.2/
-./bolt "${args[@]}" && echo "Done"
+./bolt "${args[@]}"
+
+#Unzip the output files
+gunzip /n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_${target}_${organ}_${chromosomes}${debug}.stats.gz
+if [ $# -eq 3 ] || [ $debug == "" ]; then
+	gunzip /n/groups/patel/Alan/Aging/Medical_Images/data4/GWAS_${target}_${organ}_${chromosomes}${debug}.bgen.stats.gz
+fi
+
+echo "Done"
 
