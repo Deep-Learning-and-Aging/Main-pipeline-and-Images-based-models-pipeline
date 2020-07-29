@@ -1,12 +1,12 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
-organs=( "Eyes" "Heart" "Abdomen" "Spine" "Hips" )
-organs=( "Hips" )
+organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
+organs=( "Eyes" "Vascular" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
+#organs=( "Hips" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionResNetV2" "InceptionV3" )
-architectures=( "InceptionResNetV2" )
+architectures=( "InceptionV3" )
 #n_fc_layersS=( "0" "1" "2" "3" "4" "5" )
 n_fc_layersS=( "1" )
 #n_fc_nodesS=( "16" "64" "128" "256" "512" "1024" )
@@ -22,20 +22,20 @@ dropout_rates=( "0.5" )
 #data_augmentation_factors=( "0.0" "0.1" "0.5" "1.0" "2.0" )
 data_augmentation_factors=( "1.0" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
-outer_folds=( "0" )
+#outer_folds=( "0" )
 memory=8G
 n_cpu_cores=1
 n_gpus=1
 time=600
-time=3
+#time=3
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then
-			views=( "Sagittal" "Coronal" "Transverse" )
+			views=( "MRI" )
 		elif [ $organ == "Eyes" ]; then
 			views=( "Fundus" "OCT" )
-        elif [ $organ == "Carotids" ]; then
-			views=( "Shortaxis" "Longaxis" "CIMT120" "CIMT150" "Mixed" )
+        elif [ $organ == "Vascular" ]; then
+			views=( "Carotids" )
 		elif [ $organ == "Heart" ]; then
 			views=( "MRI" )
 		elif [ $organ == "Abdomen" ]; then
@@ -48,7 +48,9 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		fi
 		if [ $organ == "Brain" ]; then
-			transformations=( "Raw" "Reference" )
+			transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
+		elif [ $organ == "Vascular" ]; then
+			transformations=( "Mixed" "Longaxis" "CIMT120" "CIMT150" "Shortaxis" )
 		elif [ $organ == "Heart" ]; then
 			transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
 		elif [ $organ == "Abdomen" ]; then

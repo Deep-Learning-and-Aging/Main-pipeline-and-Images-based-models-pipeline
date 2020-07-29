@@ -2,7 +2,7 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 folds=( "train" "val" "test" )
-folds=( "val" )
+#folds=( "val" )
 n_cpu_cores=1
 declare -a IDs=()
 for fold in "${folds[@]}"; do

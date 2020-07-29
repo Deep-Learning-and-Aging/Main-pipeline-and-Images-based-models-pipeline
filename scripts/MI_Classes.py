@@ -29,9 +29,21 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, \
     precision_score, recall_score, confusion_matrix, average_precision_score
 from sklearn import linear_model
+from sklearn.utils.validation import check_is_fitted
+from sklearn.model_selection import KFold, PredefinedSplit, cross_validate
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import ElasticNet
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.preprocessing import StandardScaler
+
+# Other tools for ensemble models building (Samuel Diai's InnerCV class)
+from hyperopt import fmin, tpe, space_eval, Trials, hp, STATUS_OK
+from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
 
 # CPUs
-#from multiprocessing import Pool # TODO remove if useless
+from multiprocessing import Pool  # TODO remove if useless
 # GPUs
 from GPUtil import GPUtil
 # tensorflow
@@ -88,7 +100,6 @@ class Hyperparameters:
         self.folds = ['train', 'val', 'test']
         self.n_CV_outer_folds = 10
         self.outer_folds = [str(x) for x in list(range(self.n_CV_outer_folds))]
-        self.ensemble_types = ['*']  # ['*', '?', ','] for multiple types of ensemble models
         self.modes = ['', '_sd', '_str']
         self.id_vars = ['id', 'eid', 'instance']
         self.instances = ['0', '1', '1.50', '1.51', '1.52', '1.53', '1.54', '2', '3']
@@ -110,20 +121,23 @@ class Hyperparameters:
         self.dict_side_predictors = {'Age': ['Sex'] + self.ethnicities_vars, 'Sex': ['Age'] + self.ethnicities_vars}
         self.organs = ['Brain', 'Eyes', 'Carotids', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody']
         self.left_right_organs = ['Eyes', 'Carotids', 'Hips', 'Knees']
-        self.dict_organs_to_views = {'Brain': ['Imaging'],
+        self.dict_organs_to_views = {'Brain': ['MRI'],
                                      'Eyes': ['Fundus', 'OCT'],
-                                     'Carotids': ['Longaxis', 'Shortaxis', 'CIMT120', 'CIMT150', 'Mixed'],
+                                     'Vascular': ['Carotids'],
                                      'Heart': ['MRI'],
                                      'Abdomen': ['Liver', 'Pancreas'],
                                      'Spine': ['Sagittal', 'Coronal'],
                                      'Hips': ['MRI'],
                                      'Knees': ['MRI'],
-                                     'FullBody': ['Figure', 'Skeleton', 'Flesh', 'Mixed']}
+                                     'FullBody': ['Figure', 'Skeleton', 'Flesh', 'Mixed'],
+                                     'PhysicalActivity': 'FullWeek'}
         self.dict_organsviews_to_transformations = \
-            {'Brain_Imaging': ['SagittalRaw', 'SagittalReference', 'CoronalRaw', 'CoronalReference', 'TransverseRaw',
+            {'Brain_MRI': ['SagittalRaw', 'SagittalReference', 'CoronalRaw', 'CoronalReference', 'TransverseRaw',
                                'TransverseReference'],
+             'Vascular_Carotids': ['Mixed', 'Longaxis', 'CIMT120', 'CIMT150', 'Shortaxis'],
              'Heart_MRI': ['2chambersRaw', '2chambersContrast', '3chambersRaw', '3chambersContrast', '4chambersRaw',
-                           '4chambersContrast']}
+                           '4chambersContrast'],
+             'PhysicalActivity_FullWeek': 'RecurrencePlots'}
         self.dict_organsviews_to_transformations.update(
             dict.fromkeys(['Abdomen_Liver', 'Abdomen_Pancreas'], ['Raw', 'Contrast']))
         self.dict_organsviews_to_transformations.update(
@@ -132,7 +146,8 @@ class Hyperparameters:
                            'Knees_MRI', 'FullBody_Figure', 'FullBody_Skeleton', 'FullBody_Flesh', 'FullBody_Mixed'],
                           ['Raw']))
         self.organsviews_not_to_augment = []
-        self.organs_instances23 = ['Brain', 'Carotids', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody']
+        self.organs_instances23 = ['Brain', 'Eyes', 'Vascular', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees',
+                                   'FullBody', 'PhysicalActivity']
         
         # Others
         if '/Users/Alan/' in os.getcwd():
@@ -1629,7 +1644,7 @@ class PredictionsMerge(Hyperparameters):
         self.list_models = glob.glob(self.path_store + 'Predictions_instances_' + self.target + '_*_' + self.fold +
                                      '.csv')
         # get rid of ensemble models
-        self.list_models = [model for model in self.list_models if not any(e in model for e in self.ensemble_types)]
+        self.list_models = [model for model in self.list_models if not '*' in model]
         self.list_models.sort()
     
     def preprocessing(self):
@@ -1737,8 +1752,7 @@ class PredictionsEids(Hyperparameters):
             self.Predictions = pd.read_csv(
                 self.path_store + 'PREDICTIONS_withEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
             cols_to_drop = [col for col in self.Predictions.columns.values
-                            if any(s in col for s in ['pred_', 'outer_fold_']) &
-                            (not any(c in col for c in self.ensemble_types))]
+                            if any(s in col for s in ['pred_', 'outer_fold_']) & ('*' not in col)]
             self.Predictions.drop(cols_to_drop, axis=1, inplace=True)
         else:
             self.Predictions = pd.read_csv(
@@ -2032,9 +2046,9 @@ class PerformancesMerge(Metrics):
                                      '_str.csv')
         # get rid of ensemble models
         if self.ensemble_models:
-            self.list_models = [model for model in self.list_models if any(e in model for e in self.ensemble_types)]
+            self.list_models = [model for model in self.list_models if '*' in model]
         else:
-            self.list_models = [model for model in self.list_models if not any(e in model for e in self.ensemble_types)]
+            self.list_models = [model for model in self.list_models if not '*' in model]
         self.Performances = None
         self.Performances_alphabetical = None
         self.Performances_ranked = None
@@ -2236,11 +2250,155 @@ class PerformancesTuning(Metrics):
             Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
 
 
+class InnerCV:
+    """ This class has been coded by Samuel Diai """
+    
+    def __init__(self, model, inner_splits, n_iter):
+        self.inner_splits = inner_splits
+        self.n_iter = n_iter
+        self.model_name = model
+        if model == 'ElasticNet':
+            self.model = ElasticNet(max_iter=2000)
+        elif model == 'RandomForest':
+            self.model = RandomForestRegressor()
+        elif model == 'GradientBoosting':
+            self.model = GradientBoostingRegressor()
+        elif model == 'Xgboost':
+            self.model = XGBRegressor()
+        elif model == 'LightGbm':
+            self.model = LGBMRegressor()
+        elif model == 'NeuralNetwork':
+            self.model = MLPRegressor(solver='adam',
+                                      activation='relu',
+                                      hidden_layer_sizes=(128, 64, 32),
+                                      batch_size=1000,
+                                      early_stopping=True)
+    
+    def get_model(self, params):
+        estim = self.model
+        for key, value in params.items():
+            if hasattr(estim, key):
+                setattr(estim, key, value)
+            else:
+                continue
+        return estim
+    
+    def get_hyper_distribution(self):
+        if self.model_name == 'ElasticNet':
+            return {
+                'alpha': hp.loguniform('alpha', low=np.log(0.01), high=np.log(10)),
+                'l1_ratio': hp.uniform('l1_ratio', low=0.01, high=0.99)
+            }
+        elif self.model_name == 'RandomForest':
+            return {
+                'n_estimators': hp.randint('n_estimators', upper=300) + 150,
+                'max_features': hp.choice('max_features', ['auto', 0.9, 0.8, 0.7, 0.6, 0.5, 0.4]),
+                'max_depth': hp.choice('max_depth', [None, 10, 8, 6])
+            }
+        elif self.model_name == 'GradientBoosting':
+            return {
+                'n_estimators': hp.randint('n_estimators', upper=300) + 150,
+                'max_features': hp.choice('max_features', ['auto', 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3]),
+                'learning_rate': hp.uniform('learning_rate', low=0.01, high=0.3),
+                'max_depth': hp.randint('max_depth', 10) + 5
+            }
+        elif self.model_name == 'Xgboost' or self.model_name == 'CoxXgboost' or self.model_name == 'AftXgboost':
+            return {
+                'colsample_bytree': hp.uniform('colsample_bytree', low=0.2, high=0.7),
+                'gamma': hp.uniform('gamma', low=0.1, high=0.5),
+                'learning_rate': hp.uniform('learning_rate', low=0.02, high=0.2),
+                'max_depth': hp.randint('max_depth', 10) + 5,
+                'n_estimators': hp.randint('n_estimators', 300) + 150,
+                'subsample': hp.uniform('subsample', 0.2, 0.8)
+            }
+        elif self.model_name == 'LightGbm':
+            return {
+                'num_leaves': hp.randint('num_leaves', 40) + 5,
+                'min_child_samples': hp.randint('min_child_samples', 400) + 100,
+                'min_child_weight': hp.choice('min_child_weight', [1e-5, 1e-3, 1e-2, 1e-1, 1, 1e1, 1e2, 1e3, 1e4]),
+                'subsample': hp.uniform('subsample', low=0.2, high=0.8),
+                'colsample_bytree': hp.uniform('colsample_bytree', low=0.4, high=0.6),
+                'reg_alpha': hp.choice('reg_alpha', [0, 1e-1, 1, 2, 5, 7, 10, 50, 100]),
+                'reg_lambda': hp.choice('reg_lambda', [0, 1e-1, 1, 5, 10, 20, 50, 100]),
+                'n_estimators': hp.randint('n_estimators', 300) + 150
+            }
+        elif self.model_name == 'NeuralNetwork':
+            return {
+                'learning_rate_init': hp.loguniform('learning_rate_init', low=np.log(5e-5), high=np.log(2e-2)),
+                'alpha': hp.uniform('alpha', low=1e-6, high=1e3)
+            }
+    
+    def create_folds(self, X, y):
+        """
+        X columns : eid + features except target
+        y columns : eid + target
+        """
+        X_eid = X.drop_duplicates('eid')
+        y_eid = y.drop_duplicates('eid')
+        eids = X_eid.eid
+        
+        ## Kfold on the eid, then regroup all ids
+        inner_cv = KFold(n_splits=self.inner_splits, shuffle=False, random_state=0)
+        list_test_folds = [elem[1] for elem in inner_cv.split(X_eid, y_eid)]
+        list_test_folds_eid = [eids[elem].values for elem in list_test_folds]
+        list_test_folds_id = [X.index[X.eid.isin(list_test_folds_eid[elem])].values for elem in
+                              range(len(list_test_folds_eid))]
+        return list_test_folds_id
+    
+    def optimize_hyperparameters(self, X, y, scoring):
+        """
+        input X  : dataframe with features + eid
+        input y : dataframe with target + eid
+        """
+        if 'instance' in X.columns:
+            X = X.drop(columns=['instance'])
+        if 'instance' in y.columns:
+            y = y.drop(columns=['instance'])
+        list_test_folds_id = self.create_folds(X, y)
+        X = X.drop(columns=['eid'])
+        y = y.drop(columns=['eid'])
+        
+        ## Create custom Splits
+        list_test_folds_id_index = [np.array([X.index.get_loc(elem) for elem in list_test_folds_id[fold_num]]) for
+                                    fold_num in range(len(list_test_folds_id))]
+        test_folds = np.zeros(len(X), dtype='int')
+        for fold_count in range(len(list_test_folds_id)):
+            test_folds[list_test_folds_id_index[fold_count]] = fold_count
+        inner_cv = PredefinedSplit(test_fold=test_folds)
+        
+        def objective(hyperparameters):
+            estimator_ = self.get_model(hyperparameters)
+            pipeline = Pipeline([('scaler', StandardScaler()), ('estimator', estimator_)])
+            scores = cross_validate(pipeline, X.values, y, scoring=scoring, cv=inner_cv, verbose=10)
+            return {'status': STATUS_OK, 'loss': -scores['test_score'].mean(),
+                    'attachments': {'split_test_scores_and_params': (scores['test_score'], hyperparameters)}}
+        
+        space = self.get_hyper_distribution()
+        trials = Trials()
+        best = fmin(objective, space, algo=tpe.suggest, max_evals=self.n_iter, trials=trials, verbose=0) #TODO disp
+        best_params = space_eval(space, best)
+        ## Recreate best estim :
+        estim = self.get_model(best_params)
+        pipeline_best = Pipeline([('scaler', StandardScaler()), ('estimator', estim)])
+        pipeline_best.fit(X.values, y)
+        return pipeline_best
+
+
+# Useful for EnsemblesPredictions. This function needs to be global to allow pool to pickle it.
+def compute_ensemble_folds(ensemble_inputs):
+    cv = InnerCV(model='ElasticNet', inner_splits=10, n_iter=30)
+    model = cv.optimize_hyperparameters(ensemble_inputs[0], ensemble_inputs[1], scoring='r2')
+    return model
+
+
 class EnsemblesPredictions(Metrics):
     
     def __init__(self, target=None, pred_type=None, regenerate_models=False):
         # Parameters
         Metrics.__init__(self)
+        #TODO remove below
+        self.PREDICTIONS_outerfold = None
+        self.folds = ['val', 'test']
         self.target = target
         self.pred_type = pred_type
         self.regenerate_models = regenerate_models
@@ -2258,6 +2416,8 @@ class EnsemblesPredictions(Metrics):
         self.PREDICTIONS = {}
         self.weights_by_category = None
         self.weights_by_ensembles = None
+        self.N_ensemble_CV_split = 10
+        self.N_ensemble_iterations = 2 #TODO
     
     # Get rid of columns and rows for the versions for which all samples as NANs
     def _drop_na_pred_versions(self, PREDS, Performances):
@@ -2272,8 +2432,7 @@ class EnsemblesPredictions(Metrics):
         
         # Drop the corresponding columns from preds, and rows from performances
         of_to_drop = [p.replace('pred_', 'outer_fold_') for p in to_drop]
-        index_to_drop = [p.replace('pred_', '') for p in to_drop
-                         if not np.any([c in p for c in self.ensemble_types])]
+        index_to_drop = [p.replace('pred_', '') for p in to_drop if not '*' in p ]
         for fold in PREDS.keys():
             PREDS[fold].drop(to_drop + of_to_drop, axis=1, inplace=True)
         return Performances.drop(index_to_drop)
@@ -2308,6 +2467,15 @@ class EnsemblesPredictions(Metrics):
             weights.append(weight)
         weights = np.array(weights)
         self.weights_by_ensembles = weights / weights.sum()
+
+    def _compute_ensemble_folds(self, ensemble_inputs):
+        print('entered cef')
+        print(ensemble_inputs)
+        cv = InnerCV(model='ElasticNet', inner_splits=self.N_ensemble_CV_split, n_iter=self.N_ensemble_iterations)
+        print('B\n\n')
+        model = cv.optimize_hyperparameters(ensemble_inputs[0], ensemble_inputs[1], scoring='r2')
+        print('C')
+        return model
     
     def _build_single_ensemble(self, PREDICTIONS, Performances, version, list_ensemble_levels, ensemble_level):
         # define which models should be integrated into the ensemble model, and how they should be weighted
@@ -2349,8 +2517,8 @@ class EnsemblesPredictions(Metrics):
         
         # Evaluate if the ensemble model should be built
         # 1 - separately on instance 0-1 and 2-3 (for ensemble at the top level, since overlap between is 0 otherwise)
-        # 2 - piece by piece on each outer_fold
-        # 3 - on all the folds at once (if the folds are not shared)
+        # 2 - on all the folds at once (if the folds are not shared)
+        # 3 - piece by piece on each outer_fold
         if (ensemble_level == 'organ') & (self.pred_type == 'instances'):  # 1-Compute instances 0-1 and 2-3 separately
             PREDICTIONS_01 = {}
             # PREDICTIONS_15 = {}
@@ -2367,55 +2535,61 @@ class EnsemblesPredictions(Metrics):
             #                             ensemble_level)
             self._build_single_ensemble(PREDICTIONS_23, Performances_23, version, list_ensemble_levels, ensemble_level)
             for fold in self.folds:
-                for ensemble_type in self.ensemble_types:
-                    self.PREDICTIONS[fold]['outer_fold_' + version.replace('*', ensemble_type)] = np.nan
-                    pred_version = 'pred_' + version.replace('*', ensemble_type)
-                    self.PREDICTIONS[fold][pred_version] = np.nan
-                    self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['0', '1'])] = \
-                        PREDICTIONS_01[fold][pred_version]
-                    # self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['1.5'])] = \
-                    #     PREDICTIONS_15[fold][pred_version]
-                    self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['2', '3'])] = \
-                        PREDICTIONS_23[fold][pred_version]
+                self.PREDICTIONS[fold]['outer_fold_' + version] = np.nan
+                pred_version = 'pred_' + version
+                self.PREDICTIONS[fold][pred_version] = np.nan
+                self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['0', '1'])] = \
+                    PREDICTIONS_01[fold][pred_version]
+                # self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['1.5'])] = \
+                #     PREDICTIONS_15[fold][pred_version]
+                self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['2', '3'])] = \
+                    PREDICTIONS_23[fold][pred_version]
         
         elif len(Ensemble_outerfolds.dropna().index) == 0 or Ensemble_outerfolds.transpose().nunique().max() > 1:
             # 2-Compute on all folds at once
             self._build_single_ensemble(self.PREDICTIONS, Performances, version, list_ensemble_levels, ensemble_level)
             for fold in self.folds:
-                for ensemble_type in self.ensemble_types:
-                    self.PREDICTIONS[fold]['outer_fold_' + version.replace('*', ensemble_type)] = np.nan
+                self.PREDICTIONS[fold]['outer_fold_' + version] = np.nan
         
         else:  # 3-Compute fold by fold
-            PREDICTIONS_ENSEMBLE = {}
+            PREDICTIONS_OUTERFOLDS = {}
+            ENSEMBLE_INPUTS = {}
             for outer_fold in self.outer_folds:
                 # take the subset of the rows that correspond to the outer_fold
                 col_outer_fold = ensemble_outerfolds_cols[0]
-                PREDICTIONS_outerfold = {}
+                PREDICTIONS_OUTERFOLDS[outer_fold] = {}
+                XS_outer_fold = {}
+                YS_outer_fold = {}
                 for fold in self.folds:
                     self.PREDICTIONS[fold]['outer_fold_' + version] = self.PREDICTIONS[fold][col_outer_fold]
-                    PREDICTIONS_outerfold[fold] = self.PREDICTIONS[fold][
+                    PREDICTIONS_OUTERFOLDS[outer_fold][fold] = self.PREDICTIONS[fold][
                         self.PREDICTIONS[fold]['outer_fold_' + version] == float(outer_fold)]
-                
-                # build the ensemble model
-                self._build_single_ensemble(PREDICTIONS_outerfold, Performances, version, list_ensemble_levels,
-                                            ensemble_level)
-                
-                # merge the predictions on each outer_fold
+                    X = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'eid', 'instance'] + ensemble_preds_cols]
+                    X.set_index('id', inplace=True)
+                    XS_outer_fold[fold] = X
+                    y = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'eid', self.target]]
+                    y.set_index('id', inplace=True)
+                    YS_outer_fold[fold] = y
+                ENSEMBLE_INPUTS[outer_fold] = [XS_outer_fold['val'], YS_outer_fold['val']]
+            # Build ensemble model
+            pool = Pool(self.N_ensemble_CV_split)
+            MODELS = pool.map(compute_ensemble_folds, list(ENSEMBLE_INPUTS.values()))
+            pool.close()
+            pool.join()
+            
+            self.MODELS = MODELS
+            # Concatenate all outer folds
+            PREDICTIONS_ENSEMBLE = {}
+            for outer_fold in self.outer_folds:
+                #cv = InnerCV(model='ElasticNet', inner_splits=self.N_ensemble_CV_split,
+                #             n_iter=self.N_ensemble_iterations)
+                #model = cv.optimize_hyperparameters(XS_outer_fold['val'], YS_outer_fold['val'], scoring='r2')
                 for fold in self.folds:
-                    for ensemble_type in self.ensemble_types:
-                        PREDICTIONS_outerfold[fold]['outer_fold_' + version.replace('*', ensemble_type)] = \
-                            float(outer_fold)
-                    
-                    # Save all the ensemble models if available
-                    if ensemble_level is None:
-                        df_outer_fold = PREDICTIONS_outerfold[fold][['id', 'outer_fold_' + version, 'pred_' + version]]
-                    else:
-                        cols = ['id']
-                        for ensemble_type in self.ensemble_types:
-                            cols += ['outer_fold_' + version.replace('*', ensemble_type),
-                                     'pred_' + version.replace('*', ensemble_type)]
-                        df_outer_fold = PREDICTIONS_outerfold[fold][cols]
-                    
+                    X = PREDICTIONS_OUTERFOLDS[outer_fold][fold][ensemble_preds_cols]
+                    PREDICTIONS_OUTERFOLDS[outer_fold][fold]['pred_' + version] = MODELS[int(outer_fold)].predict(X)
+                    PREDICTIONS_OUTERFOLDS[outer_fold][fold]['outer_fold_' + version] = float(outer_fold)
+                    df_outer_fold = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'outer_fold_' + version,
+                                                                              'pred_' + version]]
                     # Initiate, or append if some previous outerfolds have already been concatenated
                     if fold not in PREDICTIONS_ENSEMBLE.keys():
                         PREDICTIONS_ENSEMBLE[fold] = df_outer_fold
@@ -2466,16 +2640,17 @@ class EnsemblesPredictions(Metrics):
         # compute the ensemble model for the parent
         # Check if ensemble model has already been computed. If it has, load the predictions. If it has not, compute it.
         if not self.regenerate_models and \
-                os.exist(self.path_store + 'Predictions_' + self.pred_type + '_' + version + '_test.csv', index=False):
+                os.path.exists(self.path_store + 'Predictions_' + self.pred_type + '_' + version_parent + '_test.csv'):
             for fold in self.folds:
-                df_single_ensemble = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + version +
-                                                 '_' + fold + '.csv', index=False)
-                df_single_ensemble.rename(columns={'pred_' + version: 'pred'}, inplace=True)
+                print('The model ' + version_parent + ' has already been computed. Loading it...')
+                df_single_ensemble = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' +
+                                                 version_parent + '_' + fold + '.csv')
+                df_single_ensemble.rename(columns={'pred': 'pred_' + version_parent}, inplace=True)
                 # Add the ensemble predictions to the dataframe
                 if fold == 'train':
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer',
-                                                                          on=['id', 'outer_fold_' + version])
-                    self.PREDICTIONS[fold]['outer_fold_' + version] = self.PREDICTIONS[fold]['outer_fold']
+                                                                          on=['id', 'outer_fold_' + version_parent])
+                    self.PREDICTIONS[fold]['outer_fold_' + version_parent] = self.PREDICTIONS[fold]['outer_fold']
                 else:
                     df_single_ensemble.drop('outer_fold', axis=1, inplace=True)
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer', on=['id'])
@@ -2944,11 +3119,10 @@ class PlotsCorrelations(Hyperparameters):
         self._plot_correlations(data=self.Correlations_bestmodels, title_save=title_bestmodels)
         
         # Plot the "ensemble models only" correlation plots
-        for ensemble_type in self.ensemble_types:
-            index_ensembles_only = [idx for idx in self.Correlations.columns.values if ensemble_type in idx]
-            Correlations_Ensembles_only = self.Correlations.loc[index_ensembles_only, index_ensembles_only]
-            title_e = title.replace('AllModels', 'Ensembles' + ensemble_type + 'Only')
-            self._plot_correlations(data=Correlations_Ensembles_only, title_save=title_e)
+        index_ensembles_only = [idx for idx in self.Correlations.columns.values if '*' in idx]
+        Correlations_Ensembles_only = self.Correlations.loc[index_ensembles_only, index_ensembles_only]
+        title_e = title.replace('AllModels', 'EnsemblesOnly')
+        self._plot_correlations(data=Correlations_Ensembles_only, title_save=title_e)
 
 
 class PlotsLoggers(Hyperparameters):

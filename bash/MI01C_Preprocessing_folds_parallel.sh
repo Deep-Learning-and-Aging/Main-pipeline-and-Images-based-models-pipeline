@@ -1,6 +1,6 @@
 #!/bin/bash
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
+organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
 #organs=( "Heart" )
 n_cpu_cores=1
 time=30

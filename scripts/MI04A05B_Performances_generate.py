@@ -12,7 +12,7 @@ if len(sys.argv) != 15:
     sys.argv.append('Age')  # target
     sys.argv.append('Carotids')  # organ
     sys.argv.append('BiomarkersUltrasound')  # view
-    sys.argv.append('raw')  # transformation
+    sys.argv.append('Raw')  # transformation
     sys.argv.append('ElasticNet')  # architecture
     sys.argv.append('0')  # n_fc_layers
     sys.argv.append('0')  # n_fc_nodes
@@ -22,7 +22,7 @@ if len(sys.argv) != 15:
     sys.argv.append('0')  # dropout
     sys.argv.append('0')  # data_augmentation_factor
     sys.argv.append('val')  # fold
-    sys.argv.append('eids')  # pred_type
+    sys.argv.append('instances')  # pred_type
 
 
 # Default parameters for ensemble models

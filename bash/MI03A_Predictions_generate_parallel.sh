@@ -2,7 +2,7 @@
 regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
+organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
 organs=( "Hips" )
 architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
@@ -25,11 +25,11 @@ declare -a IDs=()
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then
-			views=( "Sagittal" "Coronal" "Transverse" )
+			views=( "MRI" )
 		elif [ $organ == "Eyes" ]; then
 			views=( "Fundus" "OCT" )
-		elif [ $organ == "Carotids" ]; then
-			views=( "Shortaxis" "Longaxis" "CIMT120" "CIMT150" "Mixed" )
+		elif [ $organ == "Vascular" ]; then
+			views=( "Carotids" )
 		elif [ $organ == "Heart" ]; then
 			views=( "MRI" )
 		elif [ $organ == "Abdomen" ]; then
@@ -42,7 +42,9 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		fi
 		if [ $organ == "Brain" ]; then
-			transformations=( "Raw" "Reference" )
+			transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
+		elif [ $organ == "Vascular" ]; then
+			transformations=( "Mixed" "Longaxis" "CIMT120" "CIMT150" "Shortaxis" )
 		elif [ $organ == "Heart" ]; then
 			transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
 		elif [ $organ == "Abdomen" ]; then
@@ -67,7 +69,7 @@ for target in "${targets[@]}"; do
 													out_file="../eo/$name.out"
 													err_file="../eo/$name.err"
 													# time as a function of the dataset
-													if [ $organ == "Carotids" ]; then
+													if [ $organ == "Vascular" ]; then
 														time=40 # 9k samples
 														time=10
 													elif [ $organ == "Brain" ] || [ $organ == "Heart" ] || [ $organ == "Abdomen" ] || [ $organ == "Spine" ] || [ $organ == "Hips" ] || [ $organ == "Knees" ] || [ $organ == "FullBody" ]; then
@@ -78,7 +80,7 @@ for target in "${targets[@]}"; do
 														time=170
 													fi
 													# double the time for datasets for which each image is available for both the left and the right side
-													if [ $organ == "Eyes" ] || [ $organ == "Carotids" ] || [ $organs == "Hips" ] || [ $organs == "Knees" ]; then
+													if [ $organ == "Eyes" ] || [ $organ == "Vascular" ] || [ $organs == "Hips" ] || [ $organs == "Knees" ]; then
 														time=$(( 2*$time ))
 													fi
 													# time multiplicator as a function of architecture
