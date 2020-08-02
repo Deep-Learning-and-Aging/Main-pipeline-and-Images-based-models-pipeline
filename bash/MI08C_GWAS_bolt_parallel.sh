@@ -14,12 +14,18 @@ for target in "${targets[@]}"; do
 			mem_per_cpu=5G #TODO 32
 		fi
 		for chromosomes in "${chromosomesS[@]}"; do
-			version=MI08C_${target}_${organ}_${chromosomes}
-			job_name="$version.job"
-			out_file="../eo/$version.out"
-			err_file="../eo/$version.err"
-			ID=$(sbatch --dependency=$1 --parsable -t $time -n 1 -c 10 --mem-per-cpu $mem_per_cpu --error=$err_file --output=$out_file --job-name=$job_name MI08C_GWAS_bolt.sh $target $organ $chromosomes)
-			IDs+=($ID)
+			if [ $chromosome == "X" ]; then
+				analyses=( "lmm" "reml" )
+			elif [ $chromosome == "autosome" ]; then
+				analyses=( "lmm" )
+			fi
+			for analysis in "${analyzes[@]}"; do
+				version=MI08C_${analysis}_${target}_${organ}_${chromosomes}_${analysis}
+				job_name="$version.job"
+				out_file="../eo/$version.out"
+				err_file="../eo/$version.err"
+				ID=$(sbatch --dependency=$1 --parsable -t $time -n 1 -c 10 --mem-per-cpu $mem_per_cpu --error=$err_file --output=$out_file --job-name=$job_name MI08C_GWAS_bolt.sh $target $organ $chromosomes $analysis)
+				IDs+=($ID)
 		done
 	done
 done

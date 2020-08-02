@@ -2,8 +2,7 @@
 regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
-organs=( "Hips" )
+organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Musculoskeletal" )
 architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionV3" )
@@ -34,25 +33,29 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		elif [ $organ == "Abdomen" ]; then
 			views=( "Liver" "Pancreas" )
-		elif [ $organ == "Spine" ]; then
-			views=( "Sagittal" "Coronal" )
-		elif [ $organ == "FullBody" ]; then
-			views=( "Figure" "Skeleton" "Flesh" "Mixed" )
-		else
-			views=( "MRI" )
-		fi
-		if [ $organ == "Brain" ]; then
-			transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
-		elif [ $organ == "Vascular" ]; then
-			transformations=( "Mixed" "Longaxis" "CIMT120" "CIMT150" "Shortaxis" )
-		elif [ $organ == "Heart" ]; then
-			transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
-		elif [ $organ == "Abdomen" ]; then
-			transformations=( "Raw" "Contrast" )
-		else
-			transformations=( "Raw" )
+		elif [ $organ == "Musculoskeletal" ]; then
+			views=( "Spine" "Hips" "Knees" "FullBody" )
 		fi
 		for view in "${views[@]}"; do
+			if [ $organ == "Brain" ]; then
+				transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
+			elif [ $organ == "Eyes" ]; then
+				transformations=( "Raw" )
+			elif [ $organ == "Vascular" ]; then
+				transformations=( "Mixed" "LongAxis" "CIMT120" "CIMT150" "ShortAxis" )
+			elif [ $organ == "Heart" ]; then
+				transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
+			elif [ $organ == "Abdomen" ]; then
+				transformations=( "Raw" "Contrast" )
+			elif [ $organ == "Musculoskeletal" ]; then
+				if [ $view == "Spine" ]; then
+					transformations=( "Sagittal" "Coronal" )
+				elif [ $view == "Hips" ] || [ $view == "Knees" ]; then
+					transformations=( "MRI" )
+				elif [ $view == "FullBody" ]; then
+					transformations=( "Mixed" "Figure" "Skeleton" "Flesh" )
+				fi
+			fi
 			for transformation in "${transformations[@]}"; do
 				for architecture in "${architectures[@]}"; do
 					for optimizer in "${optimizers[@]}"; do
@@ -72,7 +75,7 @@ for target in "${targets[@]}"; do
 													if [ $organ == "Vascular" ]; then
 														time=40 # 9k samples
 														time=10
-													elif [ $organ == "Brain" ] || [ $organ == "Heart" ] || [ $organ == "Abdomen" ] || [ $organ == "Spine" ] || [ $organ == "Hips" ] || [ $organ == "Knees" ] || [ $organ == "FullBody" ]; then
+													elif [ $organ == "Brain" ] || [ $organ == "Heart" ] || [ $organ == "Abdomen" ] || [ $organ == "Musculoskeletal" ]; then
 														time=300 #45k samples
 														time=90
 													elif [ $organ == "Eyes" ]; then
@@ -80,7 +83,7 @@ for target in "${targets[@]}"; do
 														time=170
 													fi
 													# double the time for datasets for which each image is available for both the left and the right side
-													if [ $organ == "Eyes" ] || [ $organ == "Vascular" ] || [ $organs == "Hips" ] || [ $organs == "Knees" ]; then
+													if [ $organ == "Eyes" ] || [ $organ == "Vascular" ] || [ $transformation == "Hips" ] || [ $transformation == "Knees" ]; then
 														time=$(( 2*$time ))
 													fi
 													# time multiplicator as a function of architecture

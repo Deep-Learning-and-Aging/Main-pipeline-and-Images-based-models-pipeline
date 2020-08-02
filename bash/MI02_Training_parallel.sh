@@ -1,9 +1,7 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
-organs=( "Eyes" "Vascular" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" )
-#organs=( "Hips" )
+organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Musculoskeletal" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionResNetV2" "InceptionV3" )
 architectures=( "InceptionV3" )
@@ -40,25 +38,31 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		elif [ $organ == "Abdomen" ]; then
 			views=( "Liver" "Pancreas" )
-		elif [ $organ == "Spine" ]; then
-			views=( "Sagittal" "Coronal" )
-		elif [ $organ == "FullBody" ]; then
-			views=( "Figure" "Skeleton" "Flesh" "Mixed" )
+		elif [ $organ == "Musculoskeletal" ]; then
+			views=( "Spine" "Hips" "Knees" "FullBody" )
 		else
 			views=( "MRI" )
 		fi
-		if [ $organ == "Brain" ]; then
-			transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
-		elif [ $organ == "Vascular" ]; then
-			transformations=( "Mixed" "Longaxis" "CIMT120" "CIMT150" "Shortaxis" )
-		elif [ $organ == "Heart" ]; then
-			transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
-		elif [ $organ == "Abdomen" ]; then
-			transformations=( "Raw" "Contrast" )
-		else
-			transformations=( "Raw" )
-		fi
 		for view in "${views[@]}"; do
+			if [ $organ == "Brain" ]; then
+				transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
+			elif [ $organ == "Eyes" ]; then
+				transformations=( "Raw" )
+			elif [ $organ == "Vascular" ]; then
+				transformations=( "Mixed" "LongAxis" "CIMT120" "CIMT150" "ShortAxis" )
+			elif [ $organ == "Heart" ]; then
+				transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
+			elif [ $organ == "Abdomen" ]; then
+				transformations=( "Raw" "Contrast" )
+			elif [ $organ == "Musculoskeletal" ]; then
+				if [ $view == "Spine" ]; then
+					transformations=( "Sagittal" "Coronal" )
+				elif [ $view == "Hips" ] || [ $view == "Knees" ]; then
+					transformations=( "MRI" )
+				elif [ $view == "FullBody" ]; then
+					transformations=( "Mixed" "Figure" "Skeleton" "Flesh" )
+				fi
+			fi	
 			for transformation in "${transformations[@]}"; do
 				for architecture in "${architectures[@]}"; do
 					for n_fc_layers in "${n_fc_layersS[@]}"; do
@@ -82,7 +86,7 @@ for target in "${targets[@]}"; do
 														similar_models=MI02_${target}_${organ}_${view}_${transformation}_${architecture}_${n_fc_layers}_${n_fc_nodes}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${data_augmentation_factor}_${outer_fold}	
 														if [ $(sacct -u al311 --format=JobID,JobName%100,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ]; then
 															echo SUBMITTING: $version
-															sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI02_Training.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold $time
+															#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI02_Training.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold $time
 														#else
 														#	echo "Pending/Running: $version (or similar model)"
 														fi
