@@ -9,7 +9,7 @@ if len(sys.argv) != 2:
 
 # Compute results
 GWAS_Preprocessing = GWASPreprocessing(target=sys.argv[1])
-GWAS_Preprocessing.compute_gwas_input()
+GWAS_Preprocessing.compute_gwas_inputs()
 
 # Exit
 print('Done.')

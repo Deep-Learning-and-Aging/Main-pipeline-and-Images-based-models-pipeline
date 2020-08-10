@@ -1,10 +1,12 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Musculoskeletal" )
+organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
+#organs=( "Abdomen" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "InceptionResNetV2" "InceptionV3" )
+#architectures=( "InceptionResNetV2" "InceptionV3" )
 architectures=( "InceptionV3" )
+#architectures=( "InceptionResNetV2" )
 #n_fc_layersS=( "0" "1" "2" "3" "4" "5" )
 n_fc_layersS=( "1" )
 #n_fc_nodesS=( "16" "64" "128" "256" "512" "1024" )
@@ -32,7 +34,7 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		elif [ $organ == "Eyes" ]; then
 			views=( "Fundus" "OCT" )
-        elif [ $organ == "Vascular" ]; then
+        elif [ $organ == "Arterial" ]; then
 			views=( "Carotids" )
 		elif [ $organ == "Heart" ]; then
 			views=( "MRI" )
@@ -48,7 +50,7 @@ for target in "${targets[@]}"; do
 				transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
 			elif [ $organ == "Eyes" ]; then
 				transformations=( "Raw" )
-			elif [ $organ == "Vascular" ]; then
+			elif [ $organ == "Arterial" ]; then
 				transformations=( "Mixed" "LongAxis" "CIMT120" "CIMT150" "ShortAxis" )
 			elif [ $organ == "Heart" ]; then
 				transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
@@ -86,12 +88,12 @@ for target in "${targets[@]}"; do
 														similar_models=MI02_${target}_${organ}_${view}_${transformation}_${architecture}_${n_fc_layers}_${n_fc_nodes}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${data_augmentation_factor}_${outer_fold}	
 														if [ $(sacct -u al311 --format=JobID,JobName%100,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ]; then
 															echo SUBMITTING: $version
-															#sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI02_Training.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold $time
+															sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI02_Training.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold $time
 														#else
 														#	echo "Pending/Running: $version (or similar model)"
 														fi
-													else
-														echo "Already converged: $version"
+													#else
+													#	echo "Already converged: $version"
 													fi
 												done
 											done

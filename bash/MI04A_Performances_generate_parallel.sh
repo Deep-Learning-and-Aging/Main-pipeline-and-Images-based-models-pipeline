@@ -3,7 +3,7 @@ regenerate_performances=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 folds=( "train" "val" "test" )
-folds=( "val" "test" )
+#folds=( "val" )
 pred_types=( "instances" "eids" )
 #pred_types=( "instances" )
 memory=2G
@@ -11,14 +11,14 @@ n_cpu_cores=1
 n_gpus=1
 declare -a IDs=()
 # For reference, order of the organs (by similarity): Brain, Eyes, Hearing, Lungs, BloodPressure, Artery,  Carotids, Heart,  Abdomen, Spine, Hips, Knees, FullBody, Anthropometry, Heel, Hand, PhysicalActivity, BloodCount, BloodBiochemistry, Urine
-organs_groups=( "Biomarkers" "TimeSeries" "Images" "Videos" )
-organs_groups=( "Biomarkers" )
+organs_groups=( "Scalars" "TimeSeries" "Images" "Videos" )
+organs_groups=( "Scalars" "TimeSeries" )
 for organs_group in "${organs_groups[@]}"; do
-	if [ $organs_group == "Biomarkers" ]; then
-		organs=( "Brain" "Eyes" "Hearing" "Lungs" "Vascular" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" "Biochemistry" "ImmuneSystem" )
-		organs=( "Eyes" )
+	if [ $organs_group == "Scalars" ]; then
+		organs=( "Brain" "Eyes" "Hearing" "Lungs" "Arterial" "Heart" "Musculoskeletal" "PhysicalActivity" "Biochemistry" "ImmuneSystem" )
+		#organs=( "Eyes" )
 		architectures=( "ElasticNet" "LightGBM" "NeuralNetwork" )
-		architectures=( "ElasticNet" )
+		#architectures=( "ElasticNet" )
 		n_fc_layers="0"
 		n_fc_nodes="0"
 		optimizer="0"
@@ -27,17 +27,17 @@ for organs_group in "${organs_groups[@]}"; do
 		dropout_rate="0"
 		data_augmentation_factor="0"
 	elif [ $organs_group == "TimeSeries" ]; then
-		organs=( "Vascular" "Heart" "PhysicalActivity" )
-		architectures=( TODO )
-		n_fc_layers=TODO
-		n_fc_nodes=TODO
-		optimizer=TODO
-		learning_rate=TODO
-		weight_decay=TODO
-		dropout_rate=TODO
-		data_augmentation_factor=TODO
+		organs=( "Arterial" "Heart" )
+		architectures=( "0" )
+		n_fc_layers="0"
+		n_fc_nodes="0"
+		optimizer="0"
+		learning_rate="0"
+		weight_decay="0"
+		dropout_rate="0"
+		data_augmentation_factor="0"
 	elif [ $organs_group == "Images" ]; then
-		organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" ) # "PhysicalActivity" )
+		organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" ) # "PhysicalActivity" )
 		#architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 		architectures=( "InceptionV3" )
 		n_fc_layers="1"
@@ -58,11 +58,11 @@ for organs_group in "${organs_groups[@]}"; do
 		dropout_rate=TODO
 		data_augmentation_factor=TODO
 	else
-		echo "organs_group must be either Biomarkers, TimeSeries, Images, Videos"
+		echo "organs_group must be either Scalars, TimeSeries, Images, Videos"
 	fi
 	for target in "${targets[@]}"; do
 		for organ in "${organs[@]}"; do
-			if [ $organs_group == "Biomarkers" ]; then
+			if [ $organs_group == "Scalars" ]; then
 				if [ $organ == "Brain" ]; then
 					views=( "All" "Cognitive" "MRI" )
 				elif [ $organ == "Eyes" ]; then
@@ -71,7 +71,7 @@ for organs_group in "${organs_groups[@]}"; do
 					views=( "HearingTest" )
 				elif [ $organ == "Lungs" ]; then
 					views=( "Spirometry" )
-				elif [ $organ == "Vascular" ]; then
+				elif [ $organ == "Arterial" ]; then
 					views=( "All" "BloodPressure" "PulseWaveAnalysis" "Carotids" )
 				elif [ $organ == "Heart" ]; then
 					views=( "All" "ECG" "MRI" )
@@ -82,10 +82,10 @@ for organs_group in "${organs_groups[@]}"; do
 				elif [ $organ == "ImmuneSystem" ]; then
 					views=( "BloodCount" )
 				else
-					echo "Organ $organ does not match any Biomarkers organs."
+					echo "Organ $organ does not match any Scalars organs."
 				fi
 			elif [ $organs_group == "TimeSeries" ]; then
-				if [ $organ == "Vascular" ]; then
+				if [ $organ == "Arterial" ]; then
 					views=( "PulseWaveAnalysis" )
 				elif [ $organ == "Heart" ]; then
 					views=( "ECG" )
@@ -99,7 +99,7 @@ for organs_group in "${organs_groups[@]}"; do
 					views=( "MRI" )
 				elif [ $organ == "Eyes" ]; then
 					views=( "Fundus" "OCT" )
-				elif [ $organ == "Vascular" ]; then
+				elif [ $organ == "Arterial" ]; then
 					views=( "Carotids" )
 				elif [ $organ == "Heart" ]; then
 					views=( "MRI" )
@@ -119,20 +119,20 @@ for organs_group in "${organs_groups[@]}"; do
 					echo "Organ $organ does not match any Videos organs."
 				fi
 			else
-				echo "organs_group ${organs_group} is not among Biomarkers, TimeSeries, Images, or Videos"
+				echo "organs_group ${organs_group} is not among Scalars, TimeSeries, Images, or Videos"
 			fi
 			for view in "${views[@]}"; do
-				if [ $organs_group == "Biomarkers" ]; then
+				if [ $organs_group == "Scalars" ]; then
 					if [ $organ == "Brain" ]; then
 						if [ $view == "All" ]; then
 							transformations=( "Scalars" )
 						elif [ $view == "Cognitive" ]; then
-							transformations=( "AllScalars" "ReactionTime" "MatrixPatternCompletion" "TowerRearranging" "SymbolDigitSubstitution" "PairedAssociativeLearning" "ProspectiveMemory" "NumericMemory" "FluidlIntelligence" "TrailMaking" "PairsMatching" )
+							transformations=( "AllScalars" "ReactionTime" "MatrixPatternCompletion" "TowerRearranging" "SymbolDigitSubstitution" "PairedAssociativeLearning" "ProspectiveMemory" "NumericMemory" "FluidIntelligence" "TrailMaking" "PairsMatching" )
 						elif [ $view == "MRI" ]; then
 							transformations=( "AllScalars" "dMRIWeightedMeans" "SubcorticalVolumes" "GreyMatterVolumes" )
 						fi
 					elif [ $organ == "Heart" ]; then
-						if [ $view == "All" || $view == "ECG" ]; then
+						if [ $view == "All" ] || [ $view == "ECG" ]; then
 							transformations=( "Scalars" )
 						elif [ $view == "MRI" ]; then
 							transformations=( "AllScalars" "Size" "PulseWaveAnalysis" )
@@ -140,12 +140,12 @@ for organs_group in "${organs_groups[@]}"; do
 					elif [ $organ == "Musculoskeletal" ]; then
 						transformations=( "AllScalars" "Anthropometry" "Impedance" "HeelBoneDensitometry" "HandGripStrength" )
 					elif [ $organ == "Biochemistry" ] || [ $organ == "ImmuneSystem" ]; then
-						transformations=( "Biomarkers" )
-					elif [ $organ == "Eyes" ] || [ $organ == "HearingTest" ] || [ $organ == "Lungs" ] || [ $organ == "Vascular" ] || [ $organ == "PhysicalActivity" ]; then
+						transformations=( "Scalars" )
+					elif [ $organ == "Eyes" ] || [ $organ == "HearingTest" ] || [ $organ == "Lungs" ] || [ $organ == "Arterial" ] || [ $organ == "PhysicalActivity" ]; then
 						transformations=( "Scalars" )
 					fi
 				elif [ $organs_group == "TimeSeries" ]; then
-					if [ $organ == "Vascular" || $organ == "ECG" ]; then
+					if [ $organ == "Arterial" ] || [ $organ == "ECG" ]; then
 						transformations=( "TimeSeries" )
 					elif [ $organ == "PhysicalActivity" ]; then
 						transformations=( "FullWeek" "Walking" "Biking" "Sleeping" )
@@ -153,7 +153,7 @@ for organs_group in "${organs_groups[@]}"; do
 				elif [ $organs_group == "Images" ]; then
 					if [ $organ == "Brain" ]; then
 						transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
-					elif [ $organ == "Vascular" ]; then
+					elif [ $organ == "Arterial" ]; then
 						transformations=( "Mixed" "LongAxis" "CIMT120" "CIMT150" "ShortAxis" )
 					elif [ $organ == "Heart" ]; then
 						transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
@@ -179,7 +179,7 @@ for organs_group in "${organs_groups[@]}"; do
 						views=( "3chambersRawVideo" "4chambersRawVideo" "34chambersRawVideo" )
 					fi
 				else
-					echo "organs_group ${organs_group} is not among Biomarkers, TimeSeries, Images, or Videos"
+					echo "organs_group ${organs_group} is not among Scalars, TimeSeries, Images, or Videos"
 				fi
 				for transformation in "${transformations[@]}"; do
 					for architecture in "${architectures[@]}"; do

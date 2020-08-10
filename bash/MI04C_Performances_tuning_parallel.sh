@@ -2,7 +2,7 @@
 targets=( "Age" "Sex" )
 targets=( "Age" )
 pred_types=( "instances" "eids" )
-memory=8G
+memory=32G
 n_cpu_cores=1
 time=60
 declare -a IDs=()

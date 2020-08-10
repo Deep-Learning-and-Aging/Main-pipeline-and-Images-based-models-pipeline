@@ -2,6 +2,7 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 folds=( "train" "val" "test" )
+folds=( "train" )
 #Ensure that the ensemble_model parameter was specified
 if [[ ! ($1 == "True" || $1 == "False") ]]; then
     echo ERROR. Usage: ./MI03C05B_Predictions_eids_parallel.sh ensemble_models    ensemble_models must be either False to generate performances for simple models \(03C\), or True to generate performances for ensemble models \(05B\)
@@ -9,7 +10,7 @@ if [[ ! ($1 == "True" || $1 == "False") ]]; then
 fi
 ensemble_models=$1
 time=20
-memory=32G
+memory=64G
 n_cpu_cores=1
 declare -a IDs=()
 for fold in "${folds[@]}"; do

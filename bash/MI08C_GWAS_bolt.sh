@@ -21,10 +21,15 @@ fi
 # Define parameters
 if [ $analysis == "lmm" ]; then
 	args=( --lmm )
-elif [ $analysis == "reml" ]; then
+elif [ $analysis == "reml" ] || [ $analysis == "reml_correlation" ]; then
 	args=( --reml )
 	if [ $debug == "_debug" ]; then
 		args+=( --remlNoRefine )
+	fi
+	if [ $analysis == "reml_correlation" ]; then
+		# The variable for organ2 is held inside $3, which is $chromosomes
+		organ2=${chromosomes}
+		chromosomes="X"
 	fi
 fi
 
@@ -34,9 +39,7 @@ args+=(
 	--fam=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS.fam
 	--remove=/n/groups/patel/Alan/Aging/Medical_Images/data/bolt.in_plink_but_not_imputed.FID_IID.${chromosomes}.txt 
 	--remove=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_remove_${target}_${organ}.tab
-	--phenoFile=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_data_${target}_${organ}.tab
 	--phenoCol=${organ}
-	--covarFile=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_data_${target}_${organ}.tab
 	--covarCol=Assessment_center
 	--covarCol=Sex
 	--covarCol=Ethnicity
@@ -49,6 +52,21 @@ args+=(
 	--statsFile=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_${target}_${organ}_${chromosomes}${debug}.stats.gz
 	--verboseStats
 )
+
+if [ $analysis == "reml_correlation" ]; then
+	args+=(
+		--phenoFile=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_data_${target}_${organ}_${organ2}.tab
+		--covarFile=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_data_${target}_${organ}_${organ2}.tab
+		--phenoCol=${organ2}
+		--remove=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_remove_${target}_${organ}_${organ2}.tab
+	)
+else
+	args+=(
+		--phenoFile=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_data_${target}_${organ}.tab
+		--covarFile=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_data_${target}_${organ}.tab
+		--remove=/n/groups/patel/Alan/Aging/Medical_Images/data/GWAS_remove_${target}_${organ}.tab
+	)
+fi
 
 # Add chromosome X. Still need all other chromosomes included for the optimal LMM
 if [ $chromosomes == "X" ]; then

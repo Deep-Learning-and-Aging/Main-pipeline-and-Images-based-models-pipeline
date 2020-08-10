@@ -119,12 +119,12 @@ class Hyperparameters:
         self.targets_binary = ['Sex']
         self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
         self.dict_side_predictors = {'Age': ['Sex'] + self.ethnicities_vars, 'Sex': ['Age'] + self.ethnicities_vars}
-        self.organs = ['Brain', 'Eyes', 'Carotids', 'Heart', 'Abdomen', 'Musculoskeletal']
-        self.left_right_organs_views = ['Eyes_Fundus', 'Eyes_OCT', 'Vascular_Carotids', 'Musculoskeletal_Hips',
+        self.organs = ['Brain', 'Eyes', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal']
+        self.left_right_organs_views = ['Eyes_Fundus', 'Eyes_OCT', 'Arterial_Carotids', 'Musculoskeletal_Hips',
                                         'Musculoskeletal_Knees']
         self.dict_organs_to_views = {'Brain': ['MRI'],
                                      'Eyes': ['Fundus', 'OCT'],
-                                     'Vascular': ['Carotids'],
+                                     'Arterial': ['Carotids'],
                                      'Heart': ['MRI'],
                                      'Abdomen': ['Liver', 'Pancreas'],
                                      'Musculoskeletal': ['Spine', 'Hips', 'Knees', 'FullBody'],
@@ -132,7 +132,7 @@ class Hyperparameters:
         self.dict_organsviews_to_transformations = \
             {'Brain_MRI': ['SagittalRaw', 'SagittalReference', 'CoronalRaw', 'CoronalReference', 'TransverseRaw',
                                'TransverseReference'],
-             'Vascular_Carotids': ['Mixed', 'LongAxis', 'CIMT120', 'CIMT150', 'ShortAxis'],
+             'Arterial_Carotids': ['Mixed', 'LongAxis', 'CIMT120', 'CIMT150', 'ShortAxis'],
              'Heart_MRI': ['2chambersRaw', '2chambersContrast', '3chambersRaw', '3chambersContrast', '4chambersRaw',
                            '4chambersContrast'],
              'Musculoskeletal_Spine': ['Sagittal', 'Coronal'],
@@ -144,7 +144,7 @@ class Hyperparameters:
         self.dict_organsviews_to_transformations.update(
             dict.fromkeys(['Musculoskeletal_Hips', 'Musculoskeletal_Knees'], ['MRI']))
         self.organsviews_not_to_augment = []
-        self.organs_instances23 = ['Brain', 'Eyes', 'Vascular', 'Heart', 'Abdomen', 'Musculoskeletal',
+        self.organs_instances23 = ['Brain', 'Eyes', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal',
                                    'PhysicalActivity']
         
         # Others
@@ -418,7 +418,7 @@ class PreprocessingImagesIDs(Hyperparameters):
         # Other organs
         self.eids = None
         self.FOLDS_EIDS = None
-        self.organs_to_field = {'Eyes': '5270', 'Vascular': '4206'}
+        self.organs_to_field = {'Eyes': '5270', 'Arterial': '4206'}
         self.organ = None
         self.organ_id = None
     
@@ -528,7 +528,7 @@ class PreprocessingFolds(Metrics):
             self.variables_to_normalize.append(target)
         self.dict_image_quality_col = {'Liver': 'Abdominal_images_quality'}
         self.dict_image_quality_col.update(
-            dict.fromkeys(['Brain', 'Eyes', 'Carotids', 'Heart', 'Abdomen', 'Musculoskeletal'],
+            dict.fromkeys(['Brain', 'Eyes', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal'],
                           None))
         self.image_quality_col = self.dict_image_quality_col[organ]
         self.views = self.dict_organs_to_views[organ]
@@ -710,14 +710,14 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.seed = seed
         # Parameters for data augmentation: (rotation range, width shift range, height shift range, zoom range)
         self.augmentation_parameters = \
-            pd.DataFrame(index=['Brain_MRI', 'Eyes_Fundus', 'Eyes_OCT', 'Vascular_Carotids', 'Heart_MRI',
+            pd.DataFrame(index=['Brain_MRI', 'Eyes_Fundus', 'Eyes_OCT', 'Arterial_Carotids', 'Heart_MRI',
                                 'Abdomen_Liver', 'Abdomen_Pancreas', 'Musculoskeletal_Spine', 'Musculoskeletal_Hips',
                                 'Musculoskeletal_Knees', 'Musculoskeletal_FullBody'],
                          columns=['rotation', 'width_shift', 'height_shift', 'zoom'])
         self.augmentation_parameters.loc['Brain_MRI', :] = [10, 0.05, 0.1, 0.0]
         self.augmentation_parameters.loc['Eyes_Fundus', :] = [20, 0.02, 0.02, 0]
         self.augmentation_parameters.loc['Eyes_OCT', :] = [30, 0.1, 0.2, 0]
-        self.augmentation_parameters.loc[['Vascular_Carotids'], :] = [0, 0.2, 0.0, 0.0]
+        self.augmentation_parameters.loc[['Arterial_Carotids'], :] = [0, 0.2, 0.0, 0.0]
         self.augmentation_parameters.loc[['Heart_MRI', 'Abdomen_Liver', 'Abdomen_Pancreas',
                                           'Musculoskeletal_Spine'], :] = [10, 0.1, 0.1, 0.0]
         self.augmentation_parameters.loc[['Musculoskeletal_Hips', 'Musculoskeletal_Knees'], :] = [10, 0.1, 0.1, 0.1]
@@ -942,7 +942,6 @@ class DeepLearning(Metrics):
         self.dir_images = '../images/' + organ + '/' + view + '/' + transformation + '/'
         
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
-        TODOHERE
         self.dict_organ_view_transformation_to_image_size = {
             'Eyes_Fundus_Raw': (316, 316),  # initial size (1388, 1388)
             'Eyes_OCT_Raw': (312, 320),  # initial size (500, 512)
@@ -953,11 +952,11 @@ class DeepLearning(Metrics):
         }
         self.dict_organ_view_transformation_to_image_size.update(
             dict.fromkeys(['Brain_MRI_SagittalRaw', 'Brain_MRI_SagittalReference', 'Brain_MRI_CoronalRaw',
-                           'Brain_MRI_CoronalReference', 'Brain_MRI_TransverseRaw', 'Brain_MRI_TransverseConference'],
+                           'Brain_MRI_CoronalReference', 'Brain_MRI_TransverseRaw', 'Brain_MRI_TransverseReference'],
                           (316, 316)))  # initial size (88, 88)
         self.dict_organ_view_transformation_to_image_size.update(
-            dict.fromkeys(['Vascular_Carotids_Mixed', 'Vascular_Carotids_LongAxis', 'Vascular_Carotids_CIMT120',
-                           'Vascular_Carotids_CIMT150', 'Vascular_Carotids_ShortAxis'],
+            dict.fromkeys(['Arterial_Carotids_Mixed', 'Arterial_Carotids_LongAxis', 'Arterial_Carotids_CIMT120',
+                           'Arterial_Carotids_CIMT150', 'Arterial_Carotids_ShortAxis'],
                           (337, 291)))  # initial size (505, 436)
         self.dict_organ_view_transformation_to_image_size.update(
             dict.fromkeys(['Heart_MRI_2chambersRaw', 'Heart_MRI_2chambersContrast', 'Heart_MRI_3chambersRaw',
@@ -984,7 +983,7 @@ class DeepLearning(Metrics):
         self.dict_batch_sizes = {
             # Default, applies to all images with resized input ~100,000 pixels
             'Default': {'VGG16': 32, 'VGG19': 32, 'DenseNet121': 16, 'DenseNet169': 16, 'DenseNet201': 16,
-                        'Xception': 32, 'InceptionV3': 64, 'InceptionResNetV2': 16, 'ResNet50': 32, 'ResNet101': 16,
+                        'Xception': 32, 'InceptionV3': 64, 'InceptionResNetV2': 8, 'ResNet50': 32, 'ResNet101': 16,
                         'ResNet152': 16, 'ResNet50V2': 32, 'ResNet101V2': 16, 'ResNet152V2': 16, 'ResNeXt50': 4,
                         'ResNeXt101': 8, 'EfficientNetB7': 4,
                         'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4}}
@@ -2368,7 +2367,7 @@ class InnerCV:
             def objective(hyperparameters):
                 estimator_ = self.get_model(model_name, hyperparameters)
                 pipeline = Pipeline([('scaler', StandardScaler()), ('estimator', estimator_)])
-                scores = cross_validate(pipeline, X.values, y, scoring=scoring, cv=inner_cv)
+                scores = cross_validate(pipeline, X.values, y, scoring=scoring, cv=inner_cv, n_jobs=self.inner_splits)
                 return {'status': STATUS_OK, 'loss': -scores['test_score'].mean(),
                         'attachments': {'split_test_scores_and_params': (scores['test_score'], hyperparameters)}}
         space = self.get_hyper_distribution(model_name)
@@ -2391,7 +2390,7 @@ class InnerCV:
 
 # Useful for EnsemblesPredictions. This function needs to be global to allow pool to pickle it.
 def compute_ensemble_folds(ensemble_inputs):
-    cv = InnerCV(model=['ElasticNet', 'LightGBM', 'NeuralNetwork'], inner_splits=10, n_iter=30)
+    cv = InnerCV(models=['ElasticNet'], inner_splits=10, n_iter=30) #, 'LightGBM', 'NeuralNetwork']
     model = cv.optimize_hyperparameters(ensemble_inputs[0], ensemble_inputs[1], scoring='r2')
     return model
 
@@ -2402,7 +2401,7 @@ class EnsemblesPredictions(Metrics):
         # Parameters
         Metrics.__init__(self)
         # TODO remove below
-        self.folds = ['val', 'test']
+        #self.folds = ['val', 'test']
         self.target = target
         self.pred_type = pred_type
         self.regenerate_models = regenerate_models
@@ -2634,22 +2633,31 @@ class EnsemblesPredictions(Metrics):
         # Check if ensemble model has already been computed. If it has, load the predictions. If it has not, compute it.
         if not self.regenerate_models and \
                 os.path.exists(self.path_store + 'Predictions_' + self.pred_type + '_' + version_parent + '_test.csv'):
+            print('The model ' + version_parent + ' has already been computed. Loading it...')
             for fold in self.folds:
-                print('The model ' + version_parent + ' has already been computed. Loading it...')
                 df_single_ensemble = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' +
                                                  version_parent + '_' + fold + '.csv')
-                df_single_ensemble.rename(columns={'pred': 'pred_' + version_parent}, inplace=True)
+                df_single_ensemble.rename(columns={'pred': 'pred_' + version_parent,
+                                                   'outer_fold': 'outer_fold_' + version_parent}, inplace=True)
                 # Add the ensemble predictions to the dataframe
                 if fold == 'train':
+                    ensemble_outerfolds_cols = [col for col in self.PREDICTIONS[fold].columns.values if
+                                                bool(re.compile('outer_fold_' + version_parent).match(col))]
+                    self.PREDICTIONS[fold]['outer_fold_' + version_parent] = \
+                        self.PREDICTIONS[fold][ensemble_outerfolds_cols].mean(axis=1).values
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer',
                                                                           on=['id', 'outer_fold_' + version_parent])
-                    self.PREDICTIONS[fold]['outer_fold_' + version_parent] = self.PREDICTIONS[fold]['outer_fold']
                 else:
-                    df_single_ensemble.drop('outer_fold', axis=1, inplace=True)
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer', on=['id'])
         else:
             self._build_single_ensemble_wrapper(Performances_parent, version_parent, list_ensemble_levels_parent,
                                                 ensemble_level)
+        
+        # Print a quick performance approximation along with the sample size for the ensemble model
+        df_model = self.PREDICTIONS['test'][[self.target, 'pred_' + version_parent]].dropna()
+        print('Correlation on test with target for ensemble model ' + version_parent + ' = ' +
+              str(r2_score(df_model[self.target], df_model['pred_' + version_parent])))
+        print('The sample size is ' + str(df_model['pred_' + version_parent].count()))
     
     def generate_ensemble_predictions(self):
         self._recursive_ensemble_builder(self.Performances, self.parameters, self.version, self.list_ensemble_levels)
@@ -2781,7 +2789,7 @@ class SelectBest(Metrics):
         self.target = target
         self.pred_type = pred_type
         self.organs = None
-        self.organs_with_suborgans = {'Brain': ['Cognitive', 'MRI'], 'Vascular': ['PulseWaveAnalysis', 'Carotids'],
+        self.organs_with_suborgans = {'Brain': ['Cognitive', 'MRI'], 'Arterial': ['PulseWaveAnalysis', 'Carotids'],
                                       'Heart': ['ECG', 'MRI'], 'Abdomen': ['Liver', 'Pancreas'],
                                       'Blood': ['BloodCount', 'BloodChemistry']}
         self.best_models = None
@@ -2839,8 +2847,6 @@ class SelectBest(Metrics):
                 self.CORRELATIONS[fold][mode] = self.CORRELATIONS[fold][mode].loc[best_models_corr, best_models_corr]
                 self.CORRELATIONS[fold][mode].index = self.organs
                 self.CORRELATIONS[fold][mode].columns = self.organs
-                
-    def TODOHERE
     
     def select_models(self):
         self._load_data()
@@ -2987,12 +2993,27 @@ class GWASPreprocessing(Hyperparameters):
             remove_organ.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ + '.tab', index=False,
                                 header=False, sep=' ')
     
-    def compute_gwas_input(self):
+    def _preprocessing_genetic_correlations(self):
+        if self.pred_type == 'eids':
+            Residuals = pd.read_csv(self.path_store + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
+            organs_pairs = pd.DataFrame(columns=['organ1', 'organ2'])
+            for counter, organ1 in enumerate(self.organs):
+                for organ2 in self.organs[(counter + 1):]:
+                    organs_pairs = organs_pairs.append({'organ1': organ1, 'organ2': organ2}, ignore_index=True)
+                    cols = self.id_vars + self.demographic_vars + [organ1, organ2]
+                    df_gwas_cor = Residuals[cols]
+                    df_gwas_cor.dropna(inplace=True)
+                    df_gwas_cor.to_csv('GWAS_residuals_pairs_' + self.target + '_' + organ1 + '_' + organ2 +
+                                            '.csv', index=False)
+            organs_pairs.to_csv('GWAS_genetic_correlations_pairs_' + self.target + '.csv', header=False, index=False)
+    
+    def compute_gwas_inputs(self):
         self._generate_fam_file()
         self._preprocess_residuals()
         self._preprocess_covars()
         self._merge_main_data()
         self._list_removed()
+        self._preprocessing_genetic_correlations()
 
 
 class GWASPostprocessing(Hyperparameters):

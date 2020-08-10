@@ -2,7 +2,7 @@ import sys
 from MI_Classes import EnsemblesPredictions
 
 # Options
-regenerate_models = True  # False = Only compute ensemble model if it was not already computed
+regenerate_models = False  # False = Only compute ensemble model if it was not already computed
 
 # Default parameters
 if len(sys.argv) != 3:

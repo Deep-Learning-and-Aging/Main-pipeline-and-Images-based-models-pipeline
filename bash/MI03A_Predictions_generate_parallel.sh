@@ -2,7 +2,7 @@
 regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Musculoskeletal" )
+organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
 architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionV3" )
@@ -27,7 +27,7 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		elif [ $organ == "Eyes" ]; then
 			views=( "Fundus" "OCT" )
-		elif [ $organ == "Vascular" ]; then
+		elif [ $organ == "Arterial" ]; then
 			views=( "Carotids" )
 		elif [ $organ == "Heart" ]; then
 			views=( "MRI" )
@@ -41,7 +41,7 @@ for target in "${targets[@]}"; do
 				transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
 			elif [ $organ == "Eyes" ]; then
 				transformations=( "Raw" )
-			elif [ $organ == "Vascular" ]; then
+			elif [ $organ == "Arterial" ]; then
 				transformations=( "Mixed" "LongAxis" "CIMT120" "CIMT150" "ShortAxis" )
 			elif [ $organ == "Heart" ]; then
 				transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
@@ -72,7 +72,7 @@ for target in "${targets[@]}"; do
 													out_file="../eo/$name.out"
 													err_file="../eo/$name.err"
 													# time as a function of the dataset
-													if [ $organ == "Vascular" ]; then
+													if [ $organ == "Arterial" ]; then
 														time=40 # 9k samples
 														time=10
 													elif [ $organ == "Brain" ] || [ $organ == "Heart" ] || [ $organ == "Abdomen" ] || [ $organ == "Musculoskeletal" ]; then
@@ -83,7 +83,7 @@ for target in "${targets[@]}"; do
 														time=170
 													fi
 													# double the time for datasets for which each image is available for both the left and the right side
-													if [ $organ == "Eyes" ] || [ $organ == "Vascular" ] || [ $transformation == "Hips" ] || [ $transformation == "Knees" ]; then
+													if [ $organ == "Eyes" ] || [ $organ == "Arterial" ] || [ $transformation == "Hips" ] || [ $transformation == "Knees" ]; then
 														time=$(( 2*$time ))
 													fi
 													# time multiplicator as a function of architecture

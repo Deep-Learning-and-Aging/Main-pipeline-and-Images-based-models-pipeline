@@ -3,7 +3,7 @@ targets=( "Age" )
 organs=( "Brain" "Eyes" "Vascular" "Heart" "Abdomen" "Musculoskeletal" )
 #organs=( "Heart" )
 n_cpu_cores=1
-time=30
+time=60
 memory=8G
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
