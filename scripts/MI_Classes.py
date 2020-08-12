@@ -983,7 +983,7 @@ class DeepLearning(Metrics):
         self.dict_batch_sizes = {
             # Default, applies to all images with resized input ~100,000 pixels
             'Default': {'VGG16': 32, 'VGG19': 32, 'DenseNet121': 16, 'DenseNet169': 16, 'DenseNet201': 16,
-                        'Xception': 32, 'InceptionV3': 64, 'InceptionResNetV2': 8, 'ResNet50': 32, 'ResNet101': 16,
+                        'Xception': 32, 'InceptionV3': 32, 'InceptionResNetV2': 8, 'ResNet50': 32, 'ResNet101': 16,
                         'ResNet152': 16, 'ResNet50V2': 32, 'ResNet101V2': 16, 'ResNet152V2': 16, 'ResNeXt50': 4,
                         'ResNeXt101': 8, 'EfficientNetB7': 4,
                         'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4}}
@@ -2390,7 +2390,13 @@ class InnerCV:
 
 # Useful for EnsemblesPredictions. This function needs to be global to allow pool to pickle it.
 def compute_ensemble_folds(ensemble_inputs):
-    cv = InnerCV(models=['ElasticNet'], inner_splits=10, n_iter=30) #, 'LightGBM', 'NeuralNetwork']
+    if len(ensemble_inputs[1]) < 100:
+        print('small sample size:' + str(len(ensemble_inputs[1])))
+        print(ensemble_inputs[1])
+        n_inner_splits = 5
+    else:
+        n_inner_splits = 10
+    cv = InnerCV(models=['ElasticNet'], inner_splits=n_inner_splits, n_iter=30) #, 'LightGBM', 'NeuralNetwork']
     model = cv.optimize_hyperparameters(ensemble_inputs[0], ensemble_inputs[1], scoring='r2')
     return model
 
@@ -2505,9 +2511,9 @@ class EnsemblesPredictions(Metrics):
         ensemble_outerfolds_cols = [col for col in Predictions.columns.values if
                                     bool(re.compile('outer_fold_' + version).match(col))]
         ensemble_preds_cols = [col.replace('outer_fold_', 'pred_') for col in ensemble_outerfolds_cols]
-        Ensemble_outerfolds = Predictions[ensemble_outerfolds_cols]
         # Select the rows for the model
         Ensemble_preds = Predictions[ensemble_preds_cols]
+        Ensemble_outerfolds = Predictions[ensemble_outerfolds_cols]
         Ensemble_outerfolds = Ensemble_outerfolds[~Ensemble_preds.isna().all(1)]
         
         # Evaluate if the ensemble model should be built
@@ -2516,18 +2522,20 @@ class EnsemblesPredictions(Metrics):
         # 3 - piece by piece on each outer_fold
         if (ensemble_level == 'organ') & (self.pred_type == 'instances'):  # 1-Compute instances 0-1 and 2-3 separately
             PREDICTIONS_01 = {}
-            # PREDICTIONS_15 = {}
+            PREDICTIONS_15 = {}
             PREDICTIONS_23 = {}
             for fold in self.folds:
                 PREDICTIONS_01[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['0', '1'])]
-                # PREDICTIONS_15[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['1.5'])]
+                PREDICTIONS_15[fold] = \
+                    self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['1.5', '1.51', '1.52', '1.53',
+                                                                                 '1.54'])]
                 PREDICTIONS_23[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(['2', '3'])]
             Performances_01 = self._drop_na_pred_versions(PREDICTIONS_01, Performances)
-            # Performances_15 = self._drop_na_pred_versions(PREDICTIONS_15, Performances)
+            Performances_15 = self._drop_na_pred_versions(PREDICTIONS_15, Performances)
             Performances_23 = self._drop_na_pred_versions(PREDICTIONS_23, Performances)
             self._build_single_ensemble(PREDICTIONS_01, Performances_01, version, list_ensemble_levels, ensemble_level)
-            # self._build_single_ensemble(PREDICTIONS_15, Performances_01, version, list_ensemble_levels,
-            #                             ensemble_level)
+            self._build_single_ensemble(PREDICTIONS_15, Performances_15, version, list_ensemble_levels,
+                                        ensemble_level)
             self._build_single_ensemble(PREDICTIONS_23, Performances_23, version, list_ensemble_levels, ensemble_level)
             for fold in self.folds:
                 self.PREDICTIONS[fold]['outer_fold_' + version] = np.nan
@@ -2535,6 +2543,7 @@ class EnsemblesPredictions(Metrics):
                 self.PREDICTIONS[fold][pred_version] = np.nan
                 self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['0', '1'])] = \
                     PREDICTIONS_01[fold][pred_version]
+                #TODO
                 # self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['1.5'])] = \
                 #     PREDICTIONS_15[fold][pred_version]
                 self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(['2', '3'])] = \
@@ -2551,12 +2560,13 @@ class EnsemblesPredictions(Metrics):
             ENSEMBLE_INPUTS = {}
             for outer_fold in self.outer_folds:
                 # take the subset of the rows that correspond to the outer_fold
-                col_outer_fold = ensemble_outerfolds_cols[0]
                 PREDICTIONS_OUTERFOLDS[outer_fold] = {}
                 XS_outer_fold = {}
                 YS_outer_fold = {}
                 for fold in self.folds:
-                    self.PREDICTIONS[fold]['outer_fold_' + version] = self.PREDICTIONS[fold][col_outer_fold]
+                    Ensemble_outerfolds_fold = self.PREDICTIONS[fold][ensemble_outerfolds_cols]
+                    self.PREDICTIONS[fold]['outer_fold_' + version] = Ensemble_outerfolds_fold.mean(axis=1,
+                                                                                                    skipna=False)
                     PREDICTIONS_OUTERFOLDS[outer_fold][fold] = self.PREDICTIONS[fold][
                         self.PREDICTIONS[fold]['outer_fold_' + version] == float(outer_fold)]
                     X = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'eid', 'instance'] + ensemble_preds_cols]
@@ -2655,9 +2665,8 @@ class EnsemblesPredictions(Metrics):
         
         # Print a quick performance approximation along with the sample size for the ensemble model
         df_model = self.PREDICTIONS['test'][[self.target, 'pred_' + version_parent]].dropna()
-        print('Correlation on test with target for ensemble model ' + version_parent + ' = ' +
-              str(r2_score(df_model[self.target], df_model['pred_' + version_parent])))
-        print('The sample size is ' + str(df_model['pred_' + version_parent].count()))
+        print('Correlation: ' + str(r2_score(df_model[self.target], df_model['pred_' + version_parent])))
+        print('The sample size is ' + str(df_model['pred_' + version_parent].count()) + '.')
     
     def generate_ensemble_predictions(self):
         self._recursive_ensemble_builder(self.Performances, self.parameters, self.version, self.list_ensemble_levels)

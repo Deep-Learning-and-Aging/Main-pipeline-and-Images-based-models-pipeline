@@ -2,9 +2,10 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 pred_types=( "instances" "eids" )
-memory=8G
-n_cpu_cores=1
-time=60
+pred_types=( "instances" )
+memory=20G
+n_cpu_cores=10
+time=300
 declare -a IDs=()
 for target in "${targets[@]}"; do
 	for pred_type in "${pred_types[@]}"; do
