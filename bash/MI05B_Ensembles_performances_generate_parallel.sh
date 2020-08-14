@@ -34,7 +34,7 @@ do
 	job_name="$name.job"
 	out_file="../eo/$name.out"
 	err_file="../eo/$name.err"
-	time=5
+	time=15 #5
 	#time=2 #debug mode
 	#allocate more time for the training fold because of the larger sample size
 	if [ $fold == "train" ]; then

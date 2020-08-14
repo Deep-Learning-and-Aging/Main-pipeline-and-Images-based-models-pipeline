@@ -9,11 +9,16 @@ if [[ ! ($1 == "True" || $1 == "False") ]]; then
 	exit
 fi
 ensemble_models=$1
-time=20
-memory=64G
 n_cpu_cores=1
 declare -a IDs=()
 for fold in "${folds[@]}"; do
+	if [ $fold == "train" ]; then
+		time=20
+		memory=128G
+	else
+		time=10
+		memory=64G
+	fi
 	for target in "${targets[@]}"; do
 		version=MI03D_${target}_${fold}_${ensemble_models}
 		job_name="$version.job"

@@ -2,17 +2,24 @@
 #define parameters
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-#folds=( "train" "val" "test" )
-folds=( "val" "test" )
+folds=( "train" "val" "test" )
+folds=( "train" )
+#folds=( "val" "test" )
 pred_types=( "instances" "eids" )
-memory=8G
+pred_types=( "instances" )
 n_cpu_cores=1
-time=15
 
 #loop through the jobs to submit
 declare -a IDs=()
 for target in "${targets[@]}"; do
 	for fold in "${folds[@]}"; do
+		if [ $fold == "train" ]; then
+			memory=64G
+			time=120
+		else
+			memory=8G
+			time=15
+		fi
 		for pred_type in "${pred_types[@]}"; do
 			version=MI06B_${target}_${fold}_${pred_type}
 			job_name="$version.job"
