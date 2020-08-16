@@ -3,6 +3,7 @@ regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
+organs=( "Arterial" )
 architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionV3" )
@@ -109,8 +110,8 @@ for target in "${targets[@]}"; do
 													fi
 													if $to_run; then
 														echo Submitting job for $version
-														#ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold)
-														#IDs+=($ID)
+														ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold)
+														IDs+=($ID)
 													#else
 													#	echo Predictions for $version have already been generated.
 													fi

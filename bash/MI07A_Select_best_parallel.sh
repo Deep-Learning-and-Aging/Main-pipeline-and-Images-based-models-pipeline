@@ -2,7 +2,8 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 pred_types=( "instances" "eids" )
-memory=8G
+pred_types=( "eids" )
+memory=128G
 n_cpu_cores=1
 time=15
 #loop through the jobs to submit

@@ -13,7 +13,7 @@ n_cpu_cores=1
 declare -a IDs=()
 for fold in "${folds[@]}"; do
 	if [ $fold == "train" ]; then
-		time=20
+		time=120
 		memory=128G
 	else
 		time=10

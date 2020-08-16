@@ -2728,6 +2728,7 @@ class ResidualsCorrelations(Hyperparameters):
             self.n_bootstrap_iterations_correlations = 1000
         self.Residuals = None
         self.CORRELATIONS = {}
+        self.Correlation_sample_sizes = None
     
     def preprocessing(self):
         # load data
@@ -2770,8 +2771,16 @@ class ResidualsCorrelations(Hyperparameters):
                                     + '+-' + self.CORRELATIONS['_sd'].round(3).applymap(str)
         # Print correlations
         print(self.CORRELATIONS[''])
+        
+        # Generate correlation sample sizes
+        self.Residuals
+        self.Residuals[~self.Residuals.isna()] = 1
+        self.Residuals[self.Residuals.isna()] = 0
+        self.Correlation_sample_sizes = self.Residuals.transpose() @ self.Residuals
     
     def save_correlations(self):
+        self.Correlation_sample_sizes.to_csv(self.path_store + 'ResidualsCorrelations_samplesizes_' + self.pred_type +
+                                             '_' + self.target + '_' + self.fold + '.csv', index=True)
         for mode in self.modes:
             self.CORRELATIONS[mode].to_csv(self.path_store + 'ResidualsCorrelations' + mode + '_' + self.pred_type +
                                            '_' + self.target + '_' + self.fold + '.csv', index=True)
@@ -2783,15 +2792,17 @@ class SelectBest(Metrics):
         Metrics.__init__(self)
         self.target = target
         self.pred_type = pred_type
-        self.organs = None
-        self.organs_with_suborgans = {'Brain': ['Cognitive', 'MRI'], 'Arterial': ['PulseWaveAnalysis', 'Carotids'],
-                                      'Heart': ['ECG', 'MRI'], 'Abdomen': ['Liver', 'Pancreas'],
-                                      'Blood': ['BloodCount', 'BloodChemistry']}
-        self.best_models = None
+        self.organs_with_suborgans = {'Brain': ['Cognitive', 'MRI'], 'Eyes': ['All'], # TODO , 'Fundus', 'OCT'],
+                                      'Arterial': ['PulseWaveAnalysis', 'Carotids'],
+                                      'Heart': ['ECG', 'MRI'], # TODO'Abdomen': ['Liver', 'Pancreas'], 'Musculoskeletal': ['Spine', 'Hips', 'Knees', 'FullBody', 'Scalars'],2
+                                      'Biochemistry': ['Urine', 'Blood']}
+        self.organs = []
+        self.best_models = []
         self.PREDICTIONS = {}
         self.RESIDUALS = {}
         self.PERFORMANCES = {}
         self.CORRELATIONS = {}
+        self.CORRELATIONS_SAMPLESIZES = {}
     
     def _load_data(self):
         for fold in self.folds:
@@ -2806,6 +2817,9 @@ class SelectBest(Metrics):
             self.RESIDUALS[fold] = pd.read_csv(path_res)
             self.PERFORMANCES[fold] = pd.read_csv(path_perf)
             self.PERFORMANCES[fold].set_index('version', drop=False, inplace=True)
+            self.CORRELATIONS_SAMPLESIZES[fold] = pd.read_csv(self.path_store + 'ResidualsCorrelations_samplesizes_' +
+                                                              self.pred_type + '_' + self.target + '_' + fold + '.csv',
+                                                              index_col=0)
             self.CORRELATIONS[fold] = {}
             for mode in self.modes:
                 self.CORRELATIONS[fold][mode] = pd.read_csv(path_corr.replace('_str', mode), index_col=0)
@@ -2813,15 +2827,16 @@ class SelectBest(Metrics):
     def _select_versions(self):
         Performances = self.PERFORMANCES['val']
         for organ in Performances['organ'].unique():
+            print('Selecting best model for ' + organ)
+            Perf_organ = Performances[Performances['organ'] == organ]
+            self.organs.append(organ)
+            self.best_models.append(Perf_organ['version'].values[0])
             if organ in self.organs_with_suborgans.keys():
                 for view in self.organs_with_suborgans[organ]:
-                    Perf_organview = Performances[Performances['organ'] == organ & Performances['view'] == view]
+                    print('Selecting best model for ' + organ + view)
+                    Perf_organview = Performances[(Performances['organ'] == organ) & (Performances['view'] == view)]
                     self.organs.append(organ + view)
                     self.best_models.append(Perf_organview['version'].values[0])
-            else:
-                Perf_organ = Performances[Performances['organ'] == organ]
-                self.organs.append(organ)
-                self.best_models.append(Perf_organ['version'].values[0])
     
     def _take_subsets(self):
         base_cols = self.id_vars + self.demographic_vars
@@ -2838,6 +2853,10 @@ class SelectBest(Metrics):
             self.RESIDUALS[fold].columns = base_cols + self.organs + outer_fold_colnames
             self.PERFORMANCES[fold] = self.PERFORMANCES[fold].loc[self.best_models, :]
             self.PERFORMANCES[fold].index = self.organs
+            self.CORRELATIONS_SAMPLESIZES[fold] = \
+                self.CORRELATIONS_SAMPLESIZES[fold].loc[best_models_corr, best_models_corr]
+            self.CORRELATIONS_SAMPLESIZES[fold].index = self.organs
+            self.CORRELATIONS_SAMPLESIZES[fold].columns = self.organs
             for mode in self.modes:
                 self.CORRELATIONS[fold][mode] = self.CORRELATIONS[fold][mode].loc[best_models_corr, best_models_corr]
                 self.CORRELATIONS[fold][mode].index = self.organs
@@ -2921,7 +2940,8 @@ class GWASPreprocessing(Hyperparameters):
         self.covars = None
         self.data = None
         self.list_organs = None
-        self.IIDs_organs = None
+        self.IIDs_organs = {}
+        self.IIDs_organ_pairs = {}
     
     def _generate_fam_file(self):
         fam = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_genetics/ukb52887_cal_chr1_v2_s488264.fam',
@@ -2967,7 +2987,6 @@ class GWASPreprocessing(Hyperparameters):
         reordered_cols = ['FID', 'IID', 'Assessment_center', 'Genotyping_batch', 'Age', 'Sex', 'Ethnicity'] + \
                          ['PC' + str(i) for i in range(1, 41)] + self.list_organs
         self.data = self.data[reordered_cols]
-        self.IIDs_organs = {}
         for organ in self.list_organs:
             data_organ = self.data.copy()
             cols_to_drop = [organ2 for organ2 in self.list_organs if organ2 != organ]
@@ -2980,6 +2999,23 @@ class GWASPreprocessing(Hyperparameters):
             data_organ.iloc[:1000, :].to_csv(self.path_store + 'GWAS_data_' + self.target + '_' + organ + '_debug.tab',
                                              index=False, sep='\t')
     
+    def _preprocessing_genetic_correlations(self):
+        organs_pairs = pd.DataFrame(columns=['organ1', 'organ2'])
+        for counter, organ1 in enumerate(self.list_organs):
+            for organ2 in self.list_organs[(counter + 1):]:
+                # Generate GWAS dataframe
+                organs_pairs = organs_pairs.append({'organ1': organ1, 'organ2': organ2}, ignore_index=True)
+                data_organ_pair = self.data.copy()
+                cols_to_drop = [organ3 for organ3 in self.list_organs if organ3 not in [organ1, organ2]]
+                data_organ_pair.drop(columns=cols_to_drop, inplace=True)
+                data_organ_pair.dropna(inplace=True)
+                data_organ_pair.to_csv(self.path_store + 'GWAS_data_' + self.target + '_' + organ1 + '_' + organ2 +
+                                       '.tab', index=False, sep='\t')
+                self.IIDs_organ_pairs[organ1 + '_' + organ2] = data_organ_pair['IID'].values
+                
+        organs_pairs.to_csv(self.path_store + 'GWAS_genetic_correlations_pairs_' + self.target + '.csv', header=False,
+                            index=False)
+    
     def _list_removed(self):
         # samples to remove for each organ
         for organ in self.list_organs:
@@ -2987,28 +3023,23 @@ class GWASPreprocessing(Hyperparameters):
             remove_organ = remove_organ[-remove_organ['IID'].isin(self.IIDs_organs[organ])]
             remove_organ.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ + '.tab', index=False,
                                 header=False, sep=' ')
-    
-    def _preprocessing_genetic_correlations(self):
-        if self.pred_type == 'eids':
-            Residuals = pd.read_csv(self.path_store + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
-            organs_pairs = pd.DataFrame(columns=['organ1', 'organ2'])
-            for counter, organ1 in enumerate(self.organs):
-                for organ2 in self.organs[(counter + 1):]:
-                    organs_pairs = organs_pairs.append({'organ1': organ1, 'organ2': organ2}, ignore_index=True)
-                    cols = self.id_vars + self.demographic_vars + [organ1, organ2]
-                    df_gwas_cor = Residuals[cols]
-                    df_gwas_cor.dropna(inplace=True)
-                    df_gwas_cor.to_csv('GWAS_residuals_pairs_' + self.target + '_' + organ1 + '_' + organ2 +
-                                            '.csv', index=False)
-            organs_pairs.to_csv('GWAS_genetic_correlations_pairs_' + self.target + '.csv', header=False, index=False)
+        
+        # samples to remove for each organ pair
+        for counter, organ1 in enumerate(self.list_organs):
+            for organ2 in self.list_organs[(counter + 1):]:
+                remove_organ_pair = self.fam[['FID', 'IID']].copy()
+                remove_organ_pair = \
+                    remove_organ_pair[-remove_organ_pair['IID'].isin(self.IIDs_organ_pairs[organ1 + '_' + organ2])]
+                remove_organ_pair.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ1 + '_' + organ2 +
+                                         '.tab', index=False, header=False, sep=' ')
     
     def compute_gwas_inputs(self):
         self._generate_fam_file()
         self._preprocess_residuals()
         self._preprocess_covars()
         self._merge_main_data()
-        self._list_removed()
         self._preprocessing_genetic_correlations()
+        self._list_removed()
 
 
 class GWASPostprocessing(Hyperparameters):
