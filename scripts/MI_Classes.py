@@ -3044,11 +3044,14 @@ class GWASPreprocessing(Hyperparameters):
 
 class GWASPostprocessing(Hyperparameters):
     
-    def __init__(self):
+    def __init__(self, target=None):
         Hyperparameters.__init__(self)
-        self.targets = ['Age']
-        self.organs = ['Liver']
-        self.target = None
+        self.target = target
+        self.organs = ['*', 'Brain', 'BrainCognitive', 'BrainMRI', 'Eyes', 'EyesFundus', 'EyesOCT', 'Hearing', 'Lungs',
+                       'Arterial', 'ArterialPulseWaveAnalysis', 'ArterialCarotids', 'Heart', 'HeartECG', 'HeartMRI',
+                       'Abdomen', 'AbdomenLiver', 'AbdomenPancreas', 'Musculoskeletal', 'MusculoskeletalSpine',
+                       'MusculoskeletalHips', 'MusculoskeletalKnees', 'MusculoskeletalScalars', 'PhysicalActivity',
+                       'Biochemistry', 'BiochemistryUrine', 'BiochemistryBlood', 'ImmuneSystem']
         self.organ = None
         self.GWAS = None
         self.FDR_correction = 5e-8
@@ -3094,41 +3097,77 @@ class GWASPostprocessing(Hyperparameters):
         os.rename('manhatten.png', '../figures/GWAS/GWAS_ManhattanPlot_' + self.target + '_' + self.organ +
                   '_Genes.png')
     
-    def processing_all_targets_and_organs(self):
+    def processing_all_organs(self):
         if not os.path.exists('../figures/GWAS/'):
             os.makedirs('../figures/GWAS/')
-        for target in self.targets:
-            for organ in self.organs:
-                print('Processing data for target ' + target + ' and organ ' + organ)
-                self.target = target
+        for organ in self.organs:
+            if os.path.exists(self.path_store + 'GWAS_' + self.target + '_' + organ + '_X.stats') & \
+                    os.path.exists(self.path_store + 'GWAS_' + self.target + '_' + organ + '_autosome.stats'):
+                print('Processing data for organ ' + organ)
                 self.organ = organ
                 self._processing()
                 self._save_data()
                 self._manhattan_plot()
     
-    def _list_reml_targets_and_organs(self):
-        remls = []
-        files = glob.glob('../eo/MI08C*_reml.out')
-        for file in files:
-            remls.append(reml.split('_')[1:3])
-    
-        remls = pd.DataFrame(remls, columns=['target', 'organ'])
-        self.ORGANS_REML = {}
-        for target in remls['target'].unique():
-            remls_target = remls[remls['target'] == target]
-            self.ORGANS_REML[target] = remls_target['organ'].unique()
+    @staticmethod
+    def _grep(pattern, path):
+        for line in open(path, 'r'):
+            if line.find(pattern) > -1:
+                return True
+        return False
     
     def parse_heritability_scores(self):
-        for target in self.ORGANS_REML.keys():
-            Heritabilities = pd.DataFrame(columns=['Organ', 'h2', 'h2_sd'])
-            for organ in self.ORGANS_REML[target]:
-                for line in open('../eo/MI08C_' + target + '_' + organ + '_X_reml.out', 'r'):
-                    if line.find("h2g") > -1:
+        # Generate empty dataframe
+        Heritabilities = np.empty((len(self.organs), 3,))
+        Heritabilities.fill(np.nan)
+        Heritabilities = pd.DataFrame(Heritabilities)
+        Heritabilities.index = self.organs
+        Heritabilities.columns = ['Organ', 'h2', 'h2_sd']
+        # Fill the dataframe
+        for organ in self.organs:
+            path = '../eo/MI08C_reml_' + self.target + '_' + organ + '_X.out'
+            if os.path.exists(path) and self._grep("h2g", path):
+                for line in open('../eo/MI08C_reml_' + self.target + '_' + organ + '_X.out', 'r'):
+                    if line.find('h2g (1,1): ') > -1:
+                        print(line)
                         h2 = float(line.split()[2])
                         h2_sd = float(line.split()[-1][1:-2])
-                        Heritabilities = Heritabilities.append({'Organ': organ, 'h2': h2, 'h2_sd': h2_sd},
-                                                               ignore_index=True)
-            Heritabilities.to_csv(self.path_store + 'GWAS_heritabilities_' + target + '.csv', index=False)
+                        Heritabilities.loc[organ, :] = [organ, h2, h2_sd]
+        # Print and save results
+        print('Heritabilities:')
+        print(Heritabilities)
+        Heritabilities.to_csv(self.path_store + 'GWAS_heritabilities_' + self.target + '.csv')
+    
+    def parse_genetic_correlations(self):
+        # Generate empty dataframe
+        Genetic_correlations = np.empty((len(self.organs), len(self.organs),))
+        Genetic_correlations.fill(np.nan)
+        Genetic_correlations = pd.DataFrame(Genetic_correlations)
+        Genetic_correlations.index = self.organs
+        Genetic_correlations.columns = self.organs
+        Genetic_correlations_sd = Genetic_correlations.copy()
+        Genetic_correlations_str = Genetic_correlations.copy()
+        # Fill the dataframe
+        for counter, organ1 in enumerate(self.organs):
+            for organ2 in self.organs[(counter + 1):]:
+                if os.path.exists('../eo/MI08D_' + self.target + '_' + organ1 + '_' + organ2 + '.out'):
+                    for line in open('../eo/MI08D_' + self.target + '_' + organ1 + '_' + organ2 + '.out', 'r'):
+                        if line.find('gen corr (1,2):') > -1:
+                            corr = float(line.split()[3])
+                            corr_sd = float(line.split()[-1][1:-2])
+                            corr_str = "{:.3f}".format(corr) + '+-' + "{:.3f}".format(corr_sd)
+                    Genetic_correlations.loc[organ1, organ2] = corr
+                    Genetic_correlations.loc[organ2, organ1] = corr
+                    Genetic_correlations_sd.loc[organ1, organ2] = corr_sd
+                    Genetic_correlations_sd.loc[organ2, organ1] = corr_sd
+                    Genetic_correlations_str.loc[organ1, organ2] = corr_str
+                    Genetic_correlations_str.loc[organ2, organ1] = corr_str
+        # Print and save the results
+        print('Genetic correlations:')
+        print(Genetic_correlations)
+        Genetic_correlations.to_csv(self.path_store + 'GWAS_correlations_' + self.target + '.csv')
+        Genetic_correlations_sd.to_csv(self.path_store + 'GWAS_correlations_sd_' + self.target + '.csv')
+        Genetic_correlations_str.to_csv(self.path_store + 'GWAS_correlations_str_' + self.target + '.csv')
 
 
 class PlotsCorrelations(Hyperparameters):

@@ -3,7 +3,7 @@ regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
-organs=( "Arterial" )
+organs=( "Brain" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
 architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
 architectures=( "InceptionV3" )
@@ -34,6 +34,7 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		elif [ $organ == "Abdomen" ]; then
 			views=( "Liver" "Pancreas" )
+			views=( "Liver" )
 		elif [ $organ == "Musculoskeletal" ]; then
 			views=( "Spine" "Hips" "Knees" "FullBody" )
 		fi
@@ -46,6 +47,7 @@ for target in "${targets[@]}"; do
 				transformations=( "Mixed" "LongAxis" "CIMT120" "CIMT150" "ShortAxis" )
 			elif [ $organ == "Heart" ]; then
 				transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
+				transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" )
 			elif [ $organ == "Abdomen" ]; then
 				transformations=( "Raw" "Contrast" )
 			elif [ $organ == "Musculoskeletal" ]; then
@@ -74,14 +76,11 @@ for target in "${targets[@]}"; do
 													err_file="../eo/$name.err"
 													# time as a function of the dataset
 													if [ $organ == "Arterial" ]; then
-														time=40 # 9k samples
-														time=10
+														time=10 # 9k samples
 													elif [ $organ == "Brain" ] || [ $organ == "Heart" ] || [ $organ == "Abdomen" ] || [ $organ == "Musculoskeletal" ]; then
-														time=300 #45k samples
-														time=90
+														time=25 #45k samples
 													elif [ $organ == "Eyes" ]; then
-														time=600 #90k samples
-														time=170
+														time=50 #90k samples
 													fi
 													# double the time for datasets for which each image is available for both the left and the right side
 													if [ $organ == "Eyes" ] || [ $organ == "Arterial" ] || [ $transformation == "Hips" ] || [ $transformation == "Knees" ]; then

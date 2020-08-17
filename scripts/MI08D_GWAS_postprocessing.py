@@ -1,22 +1,18 @@
 import sys
 from MI_Classes import GWASPostprocessing
 
+# Default parameters
+if len(sys.argv) != 2:
+    print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
+    sys.argv = ['']
+    sys.argv.append('Age')  # target
+
 # Compute results
-GWAS_Postprocessing = GWASPostprocessing()
-GWAS_Postprocessing.processing_all_targets_and_organs()
+GWAS_Postprocessing = GWASPostprocessing(target=sys.argv[1])
+GWAS_Postprocessing.processing_all_organs()
 GWAS_Postprocessing.parse_heritability_scores()
+GWAS_Postprocessing.parse_genetic_correlations()
 
 # Exit
 print('Done.')
 sys.exit(0)
-
-remls = []
-files = glob.glob('../eo/MI08C*_reml.out')
-for file in files:
-    remls.append(reml.split('_')[1:3])
-
-remls = pd.DataFrame(remls, columns=['target', 'organ'])
-ORGANS_REML = {}
-for target in remls['target'].unique():
-    remls_target = remls[remls['target'] == target]
-    ORGANS_REML[target] = remls_target['organ'].unique()
