@@ -1,17 +1,16 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-folds=( "train" "val" "test" )
-#folds=( "val" )
+folds=( "val" "test" )
 n_cpu_cores=1
 declare -a IDs=()
 for fold in "${folds[@]}"; do
 	if [ $fold == "train" ]; then
-		time=180
-		memory=64G
+		time=800
+		memory=128G
 	else
-		time=30
-		memory=8G
+		time=60
+		memory=16G
 	fi
 	for target in "${targets[@]}"; do
 		version=MI03C_${target}_${fold}

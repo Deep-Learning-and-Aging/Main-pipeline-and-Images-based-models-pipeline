@@ -2,8 +2,7 @@
 #define parameters
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-folds=( "train" "val" "test" )
-#folds=( "val" "test" )
+folds=( "val" "test" )
 pred_types=( "instances" "eids" )
 #pred_types=( "eids" )
 #Ensure that the ensemble_model parameter was specified

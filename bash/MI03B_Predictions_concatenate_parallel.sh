@@ -2,10 +2,10 @@
 regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Carotids" "Heart" "Abdomen" "Musculoskeletal" )
-architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "InceptionV3" "InceptionResNetV2" )
+organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
+#architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
+#architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
+architectures=( "InceptionV3" )
 n_fc_layersS=( "1" )
 n_fc_nodesS=( "1024" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
@@ -13,13 +13,13 @@ optimizers=( "Adam" )
 learning_rates=( "0.0001" )
 weight_decays=( "0.1" )
 dropout_rates=( "0.5" )
-data_augmentation_factor=( "1.0" )
+data_augmentation_factors=( "1.0" )
 folds=( "train" "val" "test" )
 #folds=( "val" "test" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
+time=5
 memory=8G
 n_cpu_cores=1
-n_gpus=1
 declare -a IDs=()
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
@@ -27,7 +27,7 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		elif [ $organ == "Eyes" ]; then
 			views=( "Fundus" "OCT" )
-		elif [ $organ == "Vascular" ]; then
+		elif [ $organ == "Arterial" ]; then
 			views=( "Carotids" )
 		elif [ $organ == "Heart" ]; then
 			views=( "MRI" )
@@ -35,13 +35,15 @@ for target in "${targets[@]}"; do
 			views=( "Liver" "Pancreas" )
 		elif [ $organ == "Musculoskeletal" ]; then
 			views=( "Spine" "Hips" "Knees" "FullBody" )
+		elif [ $organ == "PhysicalActivity" ]; then
+			views=( "FullWeek" "Walking" )
 		fi
 		for view in "${views[@]}"; do
 			if [ $organ == "Brain" ]; then
 				transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
 			elif [ $organ == "Eyes" ]; then
 				transformations=( "Raw" )
-			elif [ $organ == "Vascular" ]; then
+			elif [ $organ == "Arterial" ]; then
 				transformations=( "Mixed" "LongAxis" "CIMT120" "CIMT150" "ShortAxis" )
 			elif [ $organ == "Heart" ]; then
 				transformations=( "2chambersRaw" "2chambersContrast" "3chambersRaw" "3chambersContrast" "4chambersRaw" "4chambersContrast" )
@@ -54,6 +56,12 @@ for target in "${targets[@]}"; do
 					transformations=( "MRI" )
 				elif [ $view == "FullBody" ]; then
 					transformations=( "Mixed" "Figure" "Skeleton" "Flesh" )
+				fi
+			elif [ $organ == "PhysicalActivity" ]; then
+				if [ $view == "FullWeek" ]; then
+					transformations=( "GramianAngularField1minDifference" "GramianAngularField30minDifference" "MarkovTransitionField1min" "RecurrencePlots1min" "RecurrencePlots30min" "GramianAngularField1minSummation" "GramianAngularField30minSummation" "MarkovTransitionField30min" "RecurrencePlots1minBinary" "RecurrencePlots30minBinary" )
+				elif [ $view == "Walking" ]; then
+					transformations=( "GramianAngularFieldDifference" "GramianAngularFieldSummation" "MarkovTransitionField" "RecurrencePlots" "RecurrencePlotsBinary" )
 				fi
 			fi
 			for transformation in "${transformations[@]}"; do
@@ -70,25 +78,6 @@ for target in "${targets[@]}"; do
 												job_name="$name.job"
 												out_file="../eo/$name.out"
 												err_file="../eo/$name.err"
-												# time as a function of the dataset
-												if [ $organ == "Carotids" ]; then
-													time=40 # 9k samples
-													time=10
-												elif [ $organ == "Brain" ] || [ $organ == "Heart" ] || [ $organ == "Abdomen" ] || [ $organ == "Musculoskeletal" ]; then
-													time=300 #45k samples
-													time=90
-												elif [ $organ == "Eyes" ]; then
-													time=600 #90k samples
-													time=170
-												fi
-												# double the time for datasets for which each image is available for both the left and the right side
-												if [ $organ == "Eyes" ] ||  [ $organ == "Carotids" ] || [ $transformation == "Hips" ] || [ $transformation == "Knees" ]; then
-													time=$(( 2*$time ))
-												fi
-												# time multiplicator as a function of architecture
-												if [ $architecture == "InceptionResNetV2" ]; then
-													time=$(( 2*$time ))
-												fi
 												#check if all weights have already been generated. If not, do not run the model.
 												missing_weights=false
 												for outer_fold in "${outer_folds[@]}"; do
@@ -119,7 +108,7 @@ for target in "${targets[@]}"; do
 												fi
 												if $to_run; then
 													echo Submitting job for $version
-													ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03B_Predictions_concatenate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor)
+													ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI03B_Predictions_concatenate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor)
 													IDs+=($ID)
 												#else
 												#	echo Predictions for $version have already been generated.

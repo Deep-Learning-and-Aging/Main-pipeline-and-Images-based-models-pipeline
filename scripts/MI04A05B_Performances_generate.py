@@ -10,9 +10,9 @@ if len(sys.argv) != 15:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Carotids')  # organ
-    sys.argv.append('BiomarkersUltrasound')  # view
-    sys.argv.append('Raw')  # transformation
+    sys.argv.append('Arterial')  # organ
+    sys.argv.append('Carotids')  # view
+    sys.argv.append('Scalars')  # transformation
     sys.argv.append('ElasticNet')  # architecture
     sys.argv.append('0')  # n_fc_layers
     sys.argv.append('0')  # n_fc_nodes

@@ -1,12 +1,13 @@
 #!/bin/bash
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
-#organs=( "Abdomen" )
+organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
+#organs=( "Arterial" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 #architectures=( "InceptionResNetV2" "InceptionV3" )
 architectures=( "InceptionV3" )
 #architectures=( "InceptionResNetV2" )
+#architectures=( "DenseNet201" )
 #n_fc_layersS=( "0" "1" "2" "3" "4" "5" )
 n_fc_layersS=( "1" )
 #n_fc_nodesS=( "16" "64" "128" "256" "512" "1024" )
@@ -27,7 +28,7 @@ memory=8G
 n_cpu_cores=1
 n_gpus=1
 time=600
-#time=3
+time=300
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then
@@ -42,6 +43,8 @@ for target in "${targets[@]}"; do
 			views=( "Liver" "Pancreas" )
 		elif [ $organ == "Musculoskeletal" ]; then
 			views=( "Spine" "Hips" "Knees" "FullBody" )
+		elif [ $organ == "PhysicalActivity" ]; then
+			views=( "FullWeek" "Walking" )
 		else
 			views=( "MRI" )
 		fi
@@ -63,6 +66,12 @@ for target in "${targets[@]}"; do
 					transformations=( "MRI" )
 				elif [ $view == "FullBody" ]; then
 					transformations=( "Mixed" "Figure" "Skeleton" "Flesh" )
+				fi
+			elif [ $organ == "PhysicalActivity" ]; then
+				if [ $view == "FullWeek" ]; then
+					transformations=( "GramianAngularField1minDifference" "GramianAngularField30minDifference" "MarkovTransitionField1min" "RecurrencePlots1min" "RecurrencePlots30min"	"GramianAngularField1minSummation" "GramianAngularField30minSummation" "MarkovTransitionField30min" "RecurrencePlots1minBinary" "RecurrencePlots30minBinary" )
+				elif [ $view == "Walking" ]; then
+					transformations=( "GramianAngularFieldDifference" "GramianAngularFieldSummation" "MarkovTransitionField" "RecurrencePlots" "RecurrencePlotsBinary" )
 				fi
 			fi	
 			for transformation in "${transformations[@]}"; do

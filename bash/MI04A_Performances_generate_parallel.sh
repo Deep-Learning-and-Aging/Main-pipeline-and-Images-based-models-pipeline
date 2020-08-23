@@ -2,8 +2,7 @@
 regenerate_performances=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-folds=( "train" "val" "test" )
-#folds=( "val" )
+folds=( "val" "test" )
 pred_types=( "instances" "eids" )
 #pred_types=( "instances" )
 memory=2G
@@ -12,7 +11,7 @@ n_gpus=1
 declare -a IDs=()
 # For reference, order of the organs (by similarity): Brain, Eyes, Hearing, Lungs, BloodPressure, Artery,  Carotids, Heart,  Abdomen, Spine, Hips, Knees, FullBody, Anthropometry, Heel, Hand, PhysicalActivity, BloodCount, BloodBiochemistry, Urine
 organs_groups=( "Scalars" "TimeSeries" "Images" "Videos" )
-organs_groups=( "Scalars" "TimeSeries" )
+organs_groups=( "Scalars" "TimeSeries" "Images" )
 for organs_group in "${organs_groups[@]}"; do
 	if [ $organs_group == "Scalars" ]; then
 		organs=( "Brain" "Eyes" "Hearing" "Lungs" "Arterial" "Heart" "Musculoskeletal" "PhysicalActivity" "Biochemistry" "ImmuneSystem" )
@@ -37,13 +36,13 @@ for organs_group in "${organs_groups[@]}"; do
 		dropout_rate="0"
 		data_augmentation_factor="0"
 	elif [ $organs_group == "Images" ]; then
-		organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Spine" "Hips" "Knees" "FullBody" ) # "PhysicalActivity" )
+		organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
 		#architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
 		architectures=( "InceptionV3" )
 		n_fc_layers="1"
 		n_fc_nodes="1024"
 		optimizer="Adam"
-		learning_rate="0.001"
+		learning_rate="0.0001"
 		weight_decay="0.1"
 		dropout_rate="0.5"
 		data_augmentation_factor="1.0"
@@ -92,7 +91,7 @@ for organs_group in "${organs_groups[@]}"; do
 				elif [ $organ == "Heart" ]; then
 					views=( "ECG" )
 				elif [ $organ == "PhysicalActivity" ]; then
-					views=( "FullWeek" "Walking" "Biking" "Sleeping" )
+					views=( "FullWeek" "Walking" )
 				else
 					echo "Organ $organ does not match any TimeSeries organs."
 				fi
@@ -110,7 +109,7 @@ for organs_group in "${organs_groups[@]}"; do
 				elif [ $organ == "Musculoskeletal" ]; then
 					views=( "Spine" "Hips" "Knees" "FullBody" )
 				elif [ $organ == "PhysicalActivity" ]; then
-					views=( "FullWeek" )
+					views=( "FullWeek" "Walking" )
 				else
 					echo "Organ $organ does not match any Images organs."
 				fi
@@ -150,7 +149,7 @@ for organs_group in "${organs_groups[@]}"; do
 					if [ $organ == "Arterial" ] || [ $organ == "ECG" ]; then
 						transformations=( "TimeSeries" )
 					elif [ $organ == "PhysicalActivity" ]; then
-						transformations=( "FullWeek" "Walking" "Biking" "Sleeping" )
+						transformations=( "FullWeek" "Walking" )
 					fi
 				elif [ $organs_group == "Images" ]; then
 					if [ $organ == "Brain" ]; then
@@ -170,7 +169,11 @@ for organs_group in "${organs_groups[@]}"; do
 							transformations=( "Mixed" "Figure" "Skeleton" "Flesh" )
 						fi
 					elif [ $organ == "PhysicalActivity" ]; then
-						transformations=( "ReccurencePlots" )
+						if [ $view == "FullWeek" ]; then
+							transformations=( "GramianAngularField1minDifference" "GramianAngularField30minDifference" "MarkovTransitionField1min" "RecurrencePlots1min" "RecurrencePlots30min" "GramianAngularField1minSummation" "GramianAngularField30minSummation" "MarkovTransitionField30min" "RecurrencePlots1minBinary" "RecurrencePlots30minBinary" )
+						elif [ $view == "Walking" ]; then
+							transformations=( "GramianAngularFieldDifference" "GramianAngularFieldSummation" "MarkovTransitionField" "RecurrencePlots" "RecurrencePlotsBinary" )
+						fi
 					elif [ $organ == "Eyes" ] || [ $organ == "Spine" ] || [ $organ == "Hips" ] || [ $organ == "Knees" ] || [ $organ == "FullBody" ]; then
 						transformations=( "Raw" )
 					else

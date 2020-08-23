@@ -17,9 +17,9 @@ if len(sys.argv) != 14:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Brain')  # organ
-    sys.argv.append('MRI')  # view
-    sys.argv.append('SagittalRaw')  # transformation
+    sys.argv.append('PhysicalActivity')  # organ
+    sys.argv.append('FullWeek')  # view
+    sys.argv.append('RecurrencePlots30min')  # transformation
     sys.argv.append('InceptionV3')  # architecture
     sys.argv.append('1')  # n_fc_layers
     sys.argv.append('1024')  # n_fc_nodes
