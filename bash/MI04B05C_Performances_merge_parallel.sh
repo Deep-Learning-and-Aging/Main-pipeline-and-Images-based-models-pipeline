@@ -20,11 +20,11 @@ declare -a IDs=()
 for target in "${targets[@]}"; do
 	for fold in "${folds[@]}"; do
 		for pred_type in "${pred_types[@]}"; do
-			version=MI04B05C_${target}_${fold}_${pred_type}
+			version=MI04B05C_${target}_${fold}_${pred_type}_$1
 			job_name="$version.job"
 			out_file="../eo/$version.out"
 			err_file="../eo/$version.err"
-			ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04B05C_Performances_merge.sh $target $fold $pred_type $ensemble_models)
+			ID=$(sbatch --dependency=$2 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI04B05C_Performances_merge.sh $target $fold $pred_type $ensemble_models)
 			IDs+=($ID)
 		done
 	done

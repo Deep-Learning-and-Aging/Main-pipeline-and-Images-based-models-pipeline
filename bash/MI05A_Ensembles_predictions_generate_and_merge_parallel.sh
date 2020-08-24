@@ -13,7 +13,7 @@ for target in "${targets[@]}"; do
 		job_name="$version.job"
 		out_file="../eo/$version.out"
 		err_file="../eo/$version.err"
-		ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI05A_Ensembles_predictions_generate_and_merge.sh $target $pred_type)
+		ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI05A_Ensembles_predictions_generate_and_merge.sh $target $pred_type)
 		IDs+=($ID)
 	done
 done

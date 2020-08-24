@@ -1752,7 +1752,7 @@ class PredictionsMerge(Hyperparameters):
         subset_cols = [col for col in self.Predictions_df.columns if 'pred_' in col]
         self.Predictions_df.dropna(subset=subset_cols, how='all', inplace=True)
         
-        # Displaying the squared correlations
+        # Displaying the R2s
         versions = [col.replace('pred_', '') for col in self.Predictions_df.columns if 'pred_' in col]
         r2s = []
         for version in versions:
@@ -1760,7 +1760,7 @@ class PredictionsMerge(Hyperparameters):
             r2s.append(r2_score(df[self.target], df['pred_' + version]))
         R2S = pd.DataFrame({'version': versions, 'R2': r2s})
         R2S.sort_values(by='R2', ascending=False, inplace=True)
-        print('Squared correlation between target and prediction for each model: ')
+        print('R2 for each model: ')
         print(R2S)
     
     def save_merged_predictions(self):
@@ -1855,14 +1855,12 @@ class PredictionsEids(Hyperparameters):
                     print(pred_version.replace('pred_', '') + ' had already been computed.')
                 else:
                     print("Computing results for version " + pred_version.replace('pred_', ''))
-                    of_version = pred_version.replace('pred_', 'outer_fold_')
-                    Predictions_version = self.Predictions[['eid', pred_version, of_version]]
-                    Predictions_version.rename(columns={of_version: 'outer_fold'}, inplace=True)
+                    Predictions_version = self.Predictions[['eid', pred_version, 'outer_fold']]
                     # Use placeholder for NaN in outer_folds
                     Predictions_version['outer_fold'][Predictions_version['outer_fold'].isna()] = -1
                     Predictions_version_eids = Predictions_version.groupby(['eid', 'outer_fold'], as_index=False).mean()
-                    self.Predictions_eids = self.Predictions_eids.merge(Predictions_version_eids, on=['eid', 'outer_fold'],
-                                                                        how='outer')
+                    self.Predictions_eids = self.Predictions_eids.merge(Predictions_version_eids,
+                                                                        on=['eid', 'outer_fold'], how='outer')
                     self.Predictions_eids[of_version] = self.Predictions_eids['outer_fold']
                     self.Predictions_eids[of_version][self.Predictions_eids[of_version] == -1] = np.nan
                     del Predictions_version
@@ -1879,7 +1877,7 @@ class PredictionsEids(Hyperparameters):
         self.Predictions_eids = self.Predictions_eids[self.id_vars + self.demographic_vars + self.pred_versions]
     
     def postprocessing(self):
-        # For ensemble models, append the new models to the non ensemble models
+        # For ensemble models, append the new models to the non-ensemble models
         if self.ensemble_models:
             # Only keep columns that are not already in the previous dataframe
             cols_to_keep = [col for col in self.Predictions.columns.values
@@ -1892,14 +1890,24 @@ class PredictionsEids(Hyperparameters):
             Predictions_withoutEnsembles.set_index('id', drop=False, inplace=True)
             # Reorder the rows
             self.Predictions_eids = self.Predictions_eids.loc[Predictions_withoutEnsembles.index.values, :]
+            # Merge the non ensemble and the ensemble models
             self.Predictions_eids = pd.concat([Predictions_withoutEnsembles, self.Predictions_eids], axis=1)
 
-        # Computing the correlation matrix is prohibitively long on the training set
-        if self.fold != 'train':
-            ps = [p for p in self.Predictions_eids.columns.values if 'pred' in p or p == self.target]
-            perfs = (self.Predictions_eids[ps].corr()[self.target] ** 2).sort_values(ascending=False)
-            print('Squared correlations between the target and the predictions:')
-            print(perfs)
+            # Re-order the columns
+            all_pred_versions = [col for col in self.Predictions_eids.columns.values if 'pred_' in col]
+            all_pred_versions.sort()
+            self.Predictions_eids = self.Predictions_eids[self.id_vars + self.demographic_vars + all_pred_versions]
+        
+        # Displaying the R2s
+        versions = [col.replace('pred_', '') for col in self.Predictions_eids.columns if 'pred_' in col]
+        r2s = []
+        for version in versions:
+            df = self.Predictions_eids[[self.target, 'pred_' + version]].dropna()
+            r2s.append(r2_score(df[self.target], df['pred_' + version]))
+        R2S = pd.DataFrame({'version': versions, 'R2': r2s})
+        R2S.sort_values(by='R2', ascending=False, inplace=True)
+        print('R2 for each model: ')
+        print(R2S)
     
     def _generate_single_model_predictions(self):
         for pred_version in self.pred_versions:
@@ -2472,6 +2480,7 @@ class EnsemblesPredictions(Metrics):
         Metrics.__init__(self)
         self.target = target
         self.pred_type = pred_type
+        self.folds = ['val', 'test']
         self.regenerate_models = regenerate_models
         self.ensembles_performance_cutoff_percent = 0.5
         self.parameters = {'target': target, 'organ': '*', 'view': '*', 'transformation': '*', 'architecture': '*',
@@ -2498,7 +2507,7 @@ class EnsemblesPredictions(Metrics):
                    'Heel', 'Hand', 'Biochemistry'],
             '*': ['Anthropometry', 'Heel', 'Hand']
         }
-        
+    
     # Get rid of columns and rows for the versions for which all samples as NANs
     @staticmethod
     def _drop_na_pred_versions(PREDS, Performances):
@@ -2512,10 +2521,9 @@ class EnsemblesPredictions(Metrics):
                     break
         
         # Drop the corresponding columns from preds, and rows from performances
-        of_to_drop = [p.replace('pred_', 'outer_fold_') for p in to_drop]
         index_to_drop = [p.replace('pred_', '') for p in to_drop if '*' not in p]
         for fold in PREDS.keys():
-            PREDS[fold].drop(to_drop + of_to_drop, axis=1, inplace=True)
+            PREDS[fold].drop(to_drop, axis=1, inplace=True)
         return Performances.drop(index_to_drop)
     
     def load_data(self):
@@ -2525,40 +2533,43 @@ class EnsemblesPredictions(Metrics):
     
     def _build_single_ensemble(self, PREDICTIONS, version):
         # Drop columns that are exclusively NaNs
-        all_nan = PREDICTIONS['train'].isna().all() | PREDICTIONS['val'].isna().all() | PREDICTIONS['test'].isna().all()
+        all_nan = PREDICTIONS['val'].isna().all() | PREDICTIONS['test'].isna().all()
         non_nan_cols = all_nan[~all_nan.values].index
         for fold in self.folds:
             PREDICTIONS[fold] = PREDICTIONS[fold][non_nan_cols]
         Predictions = PREDICTIONS['val']
-        # Select the outerfolds columns for the model
-        ensemble_outerfolds_cols = [col for col in Predictions.columns.values if
-                                    bool(re.compile('outer_fold_' + version).match(col))]
-        ensemble_preds_cols = [col.replace('outer_fold_', 'pred_') for col in ensemble_outerfolds_cols]
-        # Initiate the dictionaries
-        PREDICTIONS_OUTERFOLDS = {}
-        ENSEMBLE_INPUTS = {}
-        for outer_fold in self.outer_folds:
-            # take the subset of the rows that correspond to the outer_fold
-            PREDICTIONS_OUTERFOLDS[outer_fold] = {}
-            XS_outer_fold = {}
-            YS_outer_fold = {}
+        # Select the columns for the model
+        ensemble_preds_cols = [col for col in Predictions.columns.values if
+                                    bool(re.compile('pred_' + version).match(col))]
+        
+        # If only one model in the ensemble, just copy the column. Otherwise build the ensemble model
+        if len(ensemble_preds_cols) == 1:
             for fold in self.folds:
-                Ensemble_outerfolds_fold = PREDICTIONS[fold][ensemble_outerfolds_cols]
-                PREDICTIONS[fold]['outer_fold_' + version] = Ensemble_outerfolds_fold.mean(axis=1, skipna=False)
-                PREDICTIONS_OUTERFOLDS[outer_fold][fold] = \
-                    PREDICTIONS[fold][PREDICTIONS[fold]['outer_fold_' + version] == float(outer_fold)]
-                X = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'eid', 'instance'] + ensemble_preds_cols]
-                X.set_index('id', inplace=True)
-                XS_outer_fold[fold] = X
-                y = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'eid', self.target]]
-                y.set_index('id', inplace=True)
-                YS_outer_fold[fold] = y
-            ENSEMBLE_INPUTS[outer_fold] = [XS_outer_fold['val'], YS_outer_fold['val']]
-
-        # For large sample sizes, build ensemble model using ElasticNet and others. Otherwise use simple weighted sum.
-        PREDICTIONS_ENSEMBLE = {}
-        if len(PREDICTIONS['val'][ensemble_outerfolds_cols].dropna().index) > 100:
+                PREDICTIONS[fold]['pred_' + version] = PREDICTIONS[fold][ensemble_preds_cols[0]]
+        else:
+            # Initiate the dictionaries
+            PREDICTIONS_OUTERFOLDS = {}
+            ENSEMBLE_INPUTS = {}
+            for outer_fold in self.outer_folds:
+                # take the subset of the rows that correspond to the outer_fold
+                PREDICTIONS_OUTERFOLDS[outer_fold] = {}
+                XS_outer_fold = {}
+                YS_outer_fold = {}
+                for fold in self.folds:
+                    PREDICTIONS_OUTERFOLDS[outer_fold][fold] = \
+                        PREDICTIONS[fold][PREDICTIONS[fold]['outer_fold'] == float(outer_fold)]
+                    PREDICTIONS_OUTERFOLDS[outer_fold][fold] = PREDICTIONS_OUTERFOLDS[outer_fold][fold][
+                        ['id', 'eid', 'instance', self.target] + ensemble_preds_cols].dropna()
+                    X = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'eid', 'instance'] + ensemble_preds_cols]
+                    X.set_index('id', inplace=True)
+                    XS_outer_fold[fold] = X
+                    y = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'eid', self.target]]
+                    y.set_index('id', inplace=True)
+                    YS_outer_fold[fold] = y
+                ENSEMBLE_INPUTS[outer_fold] = [XS_outer_fold['val'], YS_outer_fold['val']]
+            
             # Build ensemble model using ElasticNet and/or LightGBM, Neural Network.
+            PREDICTIONS_ENSEMBLE = {}
             pool = Pool(self.N_ensemble_CV_split)
             MODELS = pool.map(compute_ensemble_folds, list(ENSEMBLE_INPUTS.values()))
             pool.close()
@@ -2569,31 +2580,8 @@ class EnsemblesPredictions(Metrics):
                 for fold in self.folds:
                     X = PREDICTIONS_OUTERFOLDS[outer_fold][fold][ensemble_preds_cols]
                     PREDICTIONS_OUTERFOLDS[outer_fold][fold]['pred_' + version] = MODELS[int(outer_fold)].predict(X)
-                    PREDICTIONS_OUTERFOLDS[outer_fold][fold]['outer_fold_' + version] = float(outer_fold)
-                    df_outer_fold = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'outer_fold_' + version,
-                                                                              'pred_' + version]]
-                    # Initiate, or append if some previous outerfolds have already been concatenated
-                    if fold not in PREDICTIONS_ENSEMBLE.keys():
-                        PREDICTIONS_ENSEMBLE[fold] = df_outer_fold
-                    else:
-                        PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_ENSEMBLE[fold].append(df_outer_fold)
-        else:
-            # Build ensemble model using simple sum, weighted by performances
-            ensemble_versions = [col.replace('pred_', '') for col in ensemble_preds_cols]
-            for outer_fold in self.outer_folds:
-                # Compute weights. Discard if below threshold, and normalize.
-                weights = self.Performances.loc[ensemble_versions, self.main_metric_name + '_' + outer_fold]
-                performance_cutoff = np.max(weights) * self.ensembles_performance_cutoff_percent
-                weights[weights < performance_cutoff] = 0
-                weights /= weights.sum()
-                
-                for fold in self.folds:
-                    Ensemble_predictions_weighted = PREDICTIONS_OUTERFOLDS[outer_fold][fold][ensemble_preds_cols] * \
-                                                    weights.values
-                    PREDICTIONS_OUTERFOLDS[outer_fold][fold]['pred_' + version] = \
-                        Ensemble_predictions_weighted.sum(axis=1, skipna=False)
-                    PREDICTIONS_OUTERFOLDS[outer_fold][fold]['outer_fold_' + version] = float(outer_fold)
-                    df_outer_fold = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'outer_fold_' + version,
+                    PREDICTIONS_OUTERFOLDS[outer_fold][fold]['outer_fold'] = float(outer_fold)
+                    df_outer_fold = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'outer_fold',
                                                                               'pred_' + version]]
                     # Initiate, or append if some previous outerfolds have already been concatenated
                     if fold not in PREDICTIONS_ENSEMBLE.keys():
@@ -2601,18 +2589,17 @@ class EnsemblesPredictions(Metrics):
                     else:
                         PREDICTIONS_ENSEMBLE[fold] = PREDICTIONS_ENSEMBLE[fold].append(df_outer_fold)
     
-        # Add the ensemble predictions to the dataframe
-        for fold in self.folds:
-            if fold == 'train':
-                PREDICTIONS[fold] = PREDICTIONS[fold].merge(PREDICTIONS_ENSEMBLE[fold], how='outer',
-                                                            on=['id', 'outer_fold_' + version])
-            else:
-                PREDICTIONS_ENSEMBLE[fold].drop('outer_fold_' + version, axis=1, inplace=True)
-                PREDICTIONS[fold] = PREDICTIONS[fold].merge(PREDICTIONS_ENSEMBLE[fold], how='outer', on=['id'])
+            # Add the ensemble predictions to the dataframe
+            for fold in self.folds:
+                if fold == 'train':
+                    PREDICTIONS[fold] = PREDICTIONS[fold].merge(PREDICTIONS_ENSEMBLE[fold], how='outer',
+                                                                on=['id', 'outer_fold'])
+                else:
+                    PREDICTIONS_ENSEMBLE[fold].drop('outer_fold', axis=1, inplace=True)
+                    PREDICTIONS[fold] = PREDICTIONS[fold].merge(PREDICTIONS_ENSEMBLE[fold], how='outer', on=['id'])
     
     def _build_single_ensemble_wrapper(self, version, ensemble_level):
         print('Building the ensemble model ' + version)
-        of_version = 'outer_fold_' + version
         pred_version = 'pred_' + version
         # Evaluate if the ensemble model should be built
         # 1 - separately on instance 0-1, 1.5 and 2-3 (for ensemble at the top level, since overlap between models is 0)
@@ -2620,7 +2607,6 @@ class EnsemblesPredictions(Metrics):
         # 1-Compute instances 0-1, 1.5 and 2-3 separately
         if ensemble_level == 'organ':
             for fold in self.folds:
-                self.PREDICTIONS[fold][of_version] = np.nan
                 self.PREDICTIONS[fold][pred_version] = np.nan
             for instances_names in self.instancesS[self.pred_type]:
                 print('Building final ensemble model for samples in the instances: ' + instances_names)
@@ -2632,8 +2618,7 @@ class EnsemblesPredictions(Metrics):
                 instances_versions = [version for version in versions
                                       if any(dataset in version for dataset in instances_datasets)]
                 cols_to_keep = self.id_vars + self.demographic_vars + \
-                               ['pred_' + version for version in instances_versions] + \
-                               ['outer_fold_' + version for version in instances_versions]
+                               ['pred_' + version for version in instances_versions]
                 PREDICTIONS = {}
                 for fold in self.folds:
                     PREDICTIONS[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(instances)]
@@ -2642,8 +2627,6 @@ class EnsemblesPredictions(Metrics):
                 
                 # Add the predictions to the dataframe, chunck by chunk, instances by instances
                 for fold in self.folds:
-                    self.PREDICTIONS[fold][of_version][self.PREDICTIONS[fold].instance.isin(instances)] = \
-                        PREDICTIONS[fold][of_version].values
                     self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(instances)] = \
                         PREDICTIONS[fold][pred_version].values
         
@@ -2653,8 +2636,8 @@ class EnsemblesPredictions(Metrics):
         
         # build and save a dataset for this specific ensemble model
         for fold in self.folds:
-            df_single_ensemble = self.PREDICTIONS[fold][['id', of_version, pred_version]]
-            df_single_ensemble.rename(columns={of_version: 'outer_fold', pred_version: 'pred'}, inplace=True)
+            df_single_ensemble = self.PREDICTIONS[fold][['id', 'outer_fold', pred_version]]
+            df_single_ensemble.rename(columns={pred_version: 'pred'}, inplace=True)
             df_single_ensemble.dropna(inplace=True, subset=['pred'])
             df_single_ensemble.to_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + version + '_' + fold +
                                       '.csv', index=False)
@@ -2689,34 +2672,42 @@ class EnsemblesPredictions(Metrics):
             for fold in self.folds:
                 df_single_ensemble = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' +
                                                  version_parent + '_' + fold + '.csv')
-                df_single_ensemble.rename(columns={'pred': 'pred_' + version_parent,
-                                                   'outer_fold': 'outer_fold_' + version_parent}, inplace=True)
+                df_single_ensemble.rename(columns={'pred': 'pred_' + version_parent}, inplace=True)
                 # Add the ensemble predictions to the dataframe
                 if fold == 'train':
-                    ensemble_outerfolds_cols = [col for col in self.PREDICTIONS[fold].columns.values if
-                                                bool(re.compile('outer_fold_' + version_parent).match(col))]
-                    self.PREDICTIONS[fold]['outer_fold_' + version_parent] = \
-                        self.PREDICTIONS[fold][ensemble_outerfolds_cols].mean(axis=1).values
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer',
-                                                                          on=['id', 'outer_fold_' + version_parent])
+                                                                          on=['id', 'outer_fold'])
                 else:
+                    df_single_ensemble.drop(columns=['outer_fold'], inplace=True)
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer', on=['id'])
         else:
             self._build_single_ensemble_wrapper(version_parent, ensemble_level)
         
         # Print a quick performance approximation along with the sample size for the ensemble model
         df_model = self.PREDICTIONS['test'][[self.target, 'pred_' + version_parent]].dropna()
-        print('Correlation: ' + str(r2_score(df_model[self.target], df_model['pred_' + version_parent])))
+        print(self.main_metric_name + ': ' + str(r2_score(df_model[self.target], df_model['pred_' + version_parent])))
         print('The sample size is ' + str(df_model['pred_' + version_parent].count()) + '.')
     
     def generate_ensemble_predictions(self):
         self._recursive_ensemble_builder(self.Performances, self.parameters, self.version, self.list_ensemble_levels)
-        # Print the squared correlations between the target and the predictions
+        
+        # Reorder the columns alphabetically
         for fold in self.folds:
-            cols = [col for col in self.PREDICTIONS[fold].columns.values if 'pred' in col or col == self.target]
-            corrs = (self.PREDICTIONS[fold][cols].corr()[self.target] ** 2).sort_values(ascending=False)
-            print('Squared correlations between the target and the predictions for ' + fold + ': ')
-            print(corrs)
+            pred_versions = [col for col in self.PREDICTIONS[fold].columns if 'pred_' in col]
+            pred_versions.sort()
+            self.PREDICTIONS[fold] = self.PREDICTIONS[fold][self.id_vars + self.demographic_vars + pred_versions]
+        
+        # Displaying the R2s
+        for fold in self.folds:
+            versions = [col.replace('pred_', '') for col in self.PREDICTIONS[fold].columns if 'pred_' in col]
+            r2s = []
+            for version in versions:
+                df = self.PREDICTIONS[fold][[self.target, 'pred_' + version]].dropna()
+                r2s.append(r2_score(df[self.target], df['pred_' + version]))
+            R2S = pd.DataFrame({'version': versions, 'R2': r2s})
+            R2S.sort_values(by='R2', ascending=False, inplace=True)
+            print(fold + ' R2s for each model: ')
+            print(R2S)
     
     def save_predictions(self):
         for fold in self.folds:
@@ -2846,6 +2837,7 @@ class SelectBest(Metrics):
         Metrics.__init__(self)
         self.target = target
         self.pred_type = pred_type
+        self.folds = ['test']
         self.organs_with_suborgans = {'Brain': ['Cognitive', 'MRI'], 'Eyes': ['All', 'Fundus', 'OCT'],
                                       'Arterial': ['PulseWaveAnalysis', 'Carotids'],
                                       'Heart': ['ECG', 'MRI'], 'Abdomen': ['Liver', 'Pancreas'],
@@ -2896,16 +2888,13 @@ class SelectBest(Metrics):
     def _take_subsets(self):
         base_cols = self.id_vars + self.demographic_vars
         best_models_pred = ['pred_' + model for model in self.best_models]
-        best_models_outer_fold = ['outer_fold_' + model for model in self.best_models]
         best_models_res = ['res_' + model for model in self.best_models]
         best_models_corr = ['_'.join(model.split('_')[1:]) for model in self.best_models]
-        outer_fold_colnames = ['outer_fold_' + col for col in self.organs]
         for fold in self.folds:
-            self.PREDICTIONS[fold] = self.PREDICTIONS[fold].loc[:, base_cols + best_models_pred +
-                                                                   best_models_outer_fold]
-            self.PREDICTIONS[fold].columns = base_cols + self.organs + outer_fold_colnames
-            self.RESIDUALS[fold] = self.RESIDUALS[fold].loc[:, base_cols + best_models_res + best_models_outer_fold]
-            self.RESIDUALS[fold].columns = base_cols + self.organs + outer_fold_colnames
+            self.PREDICTIONS[fold] = self.PREDICTIONS[fold].loc[:, base_cols + best_models_pred]
+            self.PREDICTIONS[fold].columns = base_cols + self.organs
+            self.RESIDUALS[fold] = self.RESIDUALS[fold].loc[:, base_cols + best_models_res]
+            self.RESIDUALS[fold].columns = base_cols + self.organs
             self.PERFORMANCES[fold] = self.PERFORMANCES[fold].loc[self.best_models, :]
             self.PERFORMANCES[fold].index = self.organs
             self.CORRELATIONS_SAMPLESIZES[fold] = \
@@ -3013,8 +3002,8 @@ class GWASPreprocessing(Hyperparameters):
         Residuals['id'] = Residuals['eid']
         Residuals.rename(columns={'id': 'FID', 'eid': 'IID'}, inplace=True)
         Residuals = Residuals[Residuals['Ethnicity.White'] == 1]
-        cols_to_drop = ['instance', 'Sex'] + \
-                       [col for col in Residuals.columns.values if ('Ethnicity.' in col) | ('outer_fold_' in col)]
+        cols_to_drop = ['instance', 'outer_fold', 'Sex'] + \
+                       [col for col in Residuals.columns.values if 'Ethnicity.' in col]
         Residuals.drop(columns=cols_to_drop, inplace=True)
         self.Residuals = Residuals
         self.list_organs = [col for col in self.Residuals.columns.values if col not in ['FID', 'IID', 'Age']]
@@ -3223,174 +3212,6 @@ class GWASPostprocessing(Hyperparameters):
         Genetic_correlations.to_csv(self.path_store + 'GWAS_correlations_' + self.target + '.csv')
         Genetic_correlations_sd.to_csv(self.path_store + 'GWAS_correlations_sd_' + self.target + '.csv')
         Genetic_correlations_str.to_csv(self.path_store + 'GWAS_correlations_str_' + self.target + '.csv')
-
-
-class PlotsCorrelations(Hyperparameters):
-    
-    def __init__(self, target=None, fold=None, pred_type=None, save_figures=True):
-        Hyperparameters.__init__(self)
-        self.target = target
-        self.fold = fold
-        self.pred_type = pred_type
-        self.save_figures = save_figures
-        self.fig_xsize = 23.4
-        self.fig_ysize = 16.54
-        self.Correlations = None
-        self.Correlations_bestmodels = None
-    
-    def preprocessing(self):
-        Correlations = pd.read_csv(self.path_store + 'ResidualsCorrelations_' + self.pred_type + '_' + self.target +
-                                   '_' + self.fold + '.csv', index_col='Unnamed: 0')
-        # Crop the names to make the reading of the labels easier
-        idx_to_print = [self.names_model_parameters[1:].index(i) for i in ['organ', 'view', 'architecture']]
-        Correlations.index = ['_'.join(np.array(idx.split('_'))[idx_to_print]) for idx in Correlations.index.values]
-        Correlations.columns = ['_'.join(np.array(idx.split('_'))[idx_to_print]) for idx in Correlations.columns.values]
-        self.Correlations = Correlations
-        self.Correlations_bestmodels = pd.read_csv(self.path_store + 'ResidualsCorrelations_bestmodels_' +
-                                                   self.pred_type + '_' + self.target + '_' + self.fold + '.csv',
-                                                   index_col='Unnamed: 0')
-    
-    def _plot_correlations(self, data, title_save):
-        
-        # insert nan on diagonal
-        data.values[tuple([np.arange(data.shape[0])]) * 2] = np.nan
-        
-        # set parameters
-        plt.clf()
-        sns.set(font_scale=1, rc={'figure.figsize': (self.fig_xsize, self.fig_ysize)})
-        
-        # plot
-        annot = (data * 100).round().astype(str).applymap(lambda x: ''.join(x.split('.')[:1]))
-        cor_plot = sns.heatmap(data=data, xticklabels=1, yticklabels=1, annot=annot, fmt='s',
-                               annot_kws={"size": 10}, vmin=0, vmax=1, center=0, square=True)
-        # optional: inclined x labels
-        # cor_plot.set_xticklabels(ax.get_xticklabels(), rotation=45, horizontalalignment='right');
-        
-        # Save figure
-        if self.save_figures:
-            fig = cor_plot.get_figure()
-            fig.set_size_inches(self.fig_xsize, self.fig_ysize)
-            fig.savefig('../figures/Correlations/' + title_save + '.png', dpi='figure')
-    
-    def generate_plots(self):
-        title = 'Correlations_AllModels_' + self.pred_type + '_' + self.target + '_' + self.fold
-        print(title)
-        self._plot_correlations(data=self.Correlations, title_save=title)
-        title_bestmodels = title.replace('AllModels', 'BestModels')
-        self._plot_correlations(data=self.Correlations_bestmodels, title_save=title_bestmodels)
-        
-        # Plot the "ensemble models only" correlation plots
-        index_ensembles_only = [idx for idx in self.Correlations.columns.values if '*' in idx]
-        Correlations_Ensembles_only = self.Correlations.loc[index_ensembles_only, index_ensembles_only]
-        title_e = title.replace('AllModels', 'EnsemblesOnly')
-        self._plot_correlations(data=Correlations_Ensembles_only, title_save=title_e)
-
-
-class PlotsLoggers(Hyperparameters):
-    
-    def __init__(self, target=None, display_learning_rate=None):
-        Hyperparameters.__init__(self)
-        self.target = target
-        self.display_learning_rate = display_learning_rate
-        Predictions = pd.read_csv(self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + target + '_val.csv')
-        self.list_versions = [col_name.replace('pred_', '') for col_name in Predictions.columns.values
-                              if 'pred_' in col_name]
-    
-    def _plot_logger(self, version):
-        try:
-            logger = pd.read_csv(self.path_store + 'logger_' + version + '.csv')
-        except FileNotFoundError:
-            print('ERROR: THE FILE logger_' + version + '.csv'
-                  + ' WAS NOT FOUND OR WAS EMPTY/CORRUPTED. SKIPPING PLOTTING OF THE TRAINING FOR THIS MODEL.')
-            return
-        # Amend column names for consistency
-        logger.columns = [name[:-2] if name.endswith('_K') else name for name in logger.columns]
-        metrics_names = [metric[4:] for metric in logger.columns.values if metric.startswith('val_')]
-        logger.columns = ['train_' + name if name in metrics_names else name for name in logger.columns]
-        # rewrite epochs numbers based on nrows. several loggers might have been appended if model has been retrained.
-        logger['epoch'] = [i + 1 for i in range(len(logger.index))]
-        # multiplot layout
-        n_rows = 3
-        n_metrics = len(metrics_names)
-        fig, axs = plt.subplots(math.ceil(n_metrics / n_rows), min(n_metrics, n_rows), sharey=False, sharex=True,
-                                squeeze=False)
-        fig.set_figwidth(5 * n_metrics)
-        fig.set_figheight(5)
-        
-        # plot evolution of each metric during training, train and val values
-        for m, metric in enumerate(metrics_names):
-            i = int(m / n_rows)
-            j = m % n_rows
-            for fold in ['train', 'val']:
-                axs[i, j].plot(logger['epoch'], logger[fold + '_' + metric])
-            axs[i, j].legend(['Training', 'Validation'], loc='upper left')
-            axs[i, j].set_title(metric + ' = f(Epoch)')
-            axs[i, j].set_xlabel('Epoch')
-            axs[i, j].set_ylabel(metric)
-            if metric not in ['true_positives', 'false_positives', 'false_negatives', 'true_negatives']:
-                axs[i, j].set_ylim((-0.2, 1.1))
-            # use second axis for learning rate
-            if self.display_learning_rate & ('lr' in logger.columns):
-                ax2 = axs[i, j].twinx()
-                ax2.plot(logger['epoch'], logger['lr'], color='green')
-                ax2.tick_params(axis='y', labelcolor='green')
-                ax2.legend(['Learning Rate'], loc='upper right')
-        fig.tight_layout()
-        # save figure as pdf before closing
-        fig.savefig("../figures/Loggers/Logger_" + version + '.pdf', bbox_inches='tight')
-        plt.close('all')
-    
-    def generate_plots(self):
-        for version in self.list_versions:
-            for outer_fold in self.outer_folds:
-                self._plot_logger(version=version + '_' + outer_fold)
-
-
-class PlotsScatterplots(Hyperparameters):
-    
-    def __init__(self, target=None, pred_type=None):
-        Hyperparameters.__init__(self)
-        self.target = target
-        self.pred_type = pred_type
-        # Load the predictions
-        self.PREDICTIONS = {}
-        for fold in self.folds:
-            self.PREDICTIONS[fold] = pd.read_csv(self.path_store + 'PREDICTIONS_withEnsembles_' + pred_type + '_' +
-                                                 target + '_' + fold + '.csv')
-        # print scatter plot for each model
-        self.list_versions = [col_name.replace('pred_', '') for col_name in self.PREDICTIONS['test'].columns.values
-                              if 'pred_' in col_name]
-        # define dictionaries to format the text
-        self.dict_folds_names = {'train': 'Training', 'val': 'Validation', 'test': 'Testing'}
-    
-    def generate_plots(self):
-        for version in self.list_versions[:1]:
-            # concatenate the predictions, format the data before plotting
-            df_allsets = None
-            for fold in self.folds:
-                df_version = self.PREDICTIONS[fold][[self.target, 'pred_' + version, 'outer_fold_' + version]]
-                df_version.dropna(inplace=True)
-                df_version.rename(columns={'pred_' + version: 'Prediction', 'outer_fold_' + version: 'outer_fold'},
-                                  inplace=True)
-                df_version['outer_fold'] = df_version['outer_fold'].astype(int).astype(str)
-                df_version['set'] = self.dict_folds_names[fold]
-                
-                # Generate single plot and save it
-                single_plot = sns.lmplot(x=self.target, y='Prediction', data=df_version, fit_reg=False,
-                                         hue='outer_fold', scatter_kws={'alpha': 0.3})
-                single_plot.savefig('../figures/ScatterPlot_' + version + '_' + fold + '.png')
-                
-                # concatenate data for the multiplot
-                if fold == 'train':
-                    df_allsets = df_version
-                else:
-                    df_allsets = df_allsets.append(df_version)
-            
-            # generate the multi plot and save it
-            multi_plot = sns.FacetGrid(df_allsets, col='set', hue='outer_fold')
-            multi_plot.map(plt.scatter, 'Age', 'Prediction', alpha=.1)
-            multi_plot.add_legend()
-            multi_plot.savefig('../figures/Scatter_Plots/ScatterPlots_' + self.pred_type + '_' + version + '.png')
 
 
 class PlotsAttentionMaps(DeepLearning):

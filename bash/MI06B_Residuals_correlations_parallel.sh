@@ -2,11 +2,8 @@
 #define parameters
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-folds=( "train" "val" "test" )
-folds=( "train" )
-#folds=( "val" "test" )
+folds=( "test" )
 pred_types=( "instances" "eids" )
-pred_types=( "instances" )
 n_cpu_cores=1
 
 #loop through the jobs to submit
@@ -17,15 +14,15 @@ for target in "${targets[@]}"; do
 			memory=64G
 			time=120
 		else
-			memory=8G
-			time=15
+			memory=32G
+			time=120
 		fi
 		for pred_type in "${pred_types[@]}"; do
 			version=MI06B_${target}_${fold}_${pred_type}
 			job_name="$version.job"
 			out_file="../eo/$version.out"
 			err_file="../eo/$version.err"
-			ID=$(sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI06B_Residuals_correlations.sh $target $fold $pred_type)
+			ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI06B_Residuals_correlations.sh $target $fold $pred_type)
 			IDs+=($ID)
 		done
 	done
