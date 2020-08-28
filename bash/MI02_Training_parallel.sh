@@ -2,11 +2,10 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
-#organs=( "Arterial" )
 #architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
 #architectures=( "InceptionResNetV2" "InceptionV3" )
-architectures=( "InceptionV3" )
-#architectures=( "InceptionResNetV2" )
+#architectures=( "InceptionV3" )
+architectures=( "InceptionResNetV2" )
 #architectures=( "DenseNet201" )
 #n_fc_layersS=( "0" "1" "2" "3" "4" "5" )
 n_fc_layersS=( "1" )
@@ -25,10 +24,7 @@ data_augmentation_factors=( "1.0" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
 #outer_folds=( "0" )
 memory=8G
-n_cpu_cores=1
-n_gpus=1
 time=600
-time=300
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
 		if [ $organ == "Brain" ]; then
@@ -97,7 +93,7 @@ for target in "${targets[@]}"; do
 														similar_models=MI02_${target}_${organ}_${view}_${transformation}_${architecture}_${n_fc_layers}_${n_fc_nodes}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${data_augmentation_factor}_${outer_fold}	
 														if [ $(sacct -u al311 --format=JobID,JobName%100,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ]; then
 															echo SUBMITTING: $version
-															sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI02_Training.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold $time
+															sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI02_Training.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold $time
 														#else
 														#	echo "Pending/Running: $version (or similar model)"
 														fi

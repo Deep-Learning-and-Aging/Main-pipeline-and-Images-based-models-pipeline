@@ -1,6 +1,7 @@
 #!/bin/bash
 #SBATCH --parsable
 #SBATCH -p gpu
+#SBATCH --gres=gpu:1
 #SBATCH --open-mode=truncate
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=alanlegoallec@g.harvard.edu

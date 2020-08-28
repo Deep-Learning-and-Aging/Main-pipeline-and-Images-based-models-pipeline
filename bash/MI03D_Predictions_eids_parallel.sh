@@ -9,7 +9,6 @@ if [[ ! ($1 == "True" || $1 == "False") ]]; then
 	exit
 fi
 ensemble_models=$1
-n_cpu_cores=1
 declare -a IDs=()
 for fold in "${folds[@]}"; do
 	if [ $fold == "train" ]; then
@@ -24,7 +23,7 @@ for fold in "${folds[@]}"; do
 		job_name="$version.job"
 		out_file="../eo/$version.out"
 		err_file="../eo/$version.err"
-		ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI03D_Predictions_eids.sh $target $fold $ensemble_models)
+		ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI03D_Predictions_eids.sh $target $fold $ensemble_models)
 		IDs+=($ID)
 	done
 done

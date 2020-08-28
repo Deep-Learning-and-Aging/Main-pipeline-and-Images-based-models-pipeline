@@ -1,7 +1,6 @@
 #!/bin/bash
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
-n_cpu_cores=1
 time=60
 memory=8G
 for target in "${targets[@]}"; do
@@ -13,7 +12,7 @@ for target in "${targets[@]}"; do
 		if ls ../data/data-features_${organ}_*_${target}_*.csv 1> /dev/null 2>&1; then
 			echo "The files for ../data/data-features_${organ}_*_${target}_*.csv already exist."
 		else
-			sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI01C_Preprocessing_folds.sh $target $organ	
+			sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI01C_Preprocessing_folds.sh $target $organ	
 		fi
 	done
 done

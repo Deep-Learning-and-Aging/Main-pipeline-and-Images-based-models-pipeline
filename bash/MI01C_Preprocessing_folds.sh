@@ -2,6 +2,8 @@
 #SBATCH -p priority
 #SBATCH --open-mode=truncate
 #SBATCH --parsable
+#SBATCH -n 1
+#SBATCH -c 1
 #SBATCH --mail-type=FAIL
 #SBATCH --mail-user=alanlegoallec@g.harvard.edu
 

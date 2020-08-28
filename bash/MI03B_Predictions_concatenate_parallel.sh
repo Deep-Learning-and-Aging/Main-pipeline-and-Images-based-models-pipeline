@@ -15,11 +15,9 @@ weight_decays=( "0.1" )
 dropout_rates=( "0.5" )
 data_augmentation_factors=( "1.0" )
 folds=( "train" "val" "test" )
-#folds=( "val" "test" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
 time=5
 memory=8G
-n_cpu_cores=1
 declare -a IDs=()
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
@@ -108,7 +106,7 @@ for target in "${targets[@]}"; do
 												fi
 												if $to_run; then
 													echo Submitting job for $version
-													ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores -t $time MI03B_Predictions_concatenate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor)
+													ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI03B_Predictions_concatenate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor)
 													IDs+=($ID)
 												#else
 												#	echo Predictions for $version have already been generated.

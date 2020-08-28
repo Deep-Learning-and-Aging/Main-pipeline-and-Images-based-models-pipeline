@@ -2,7 +2,7 @@
 # set up backend for ssh -x11 figures
 import matplotlib
 
-matplotlib.use('Agg')
+matplotlib.use('Agg') #TODO
 
 # read and write
 import os
@@ -11,6 +11,7 @@ import glob
 import re
 import fnmatch
 import csv
+import shutil
 from datetime import datetime
 
 # maths
@@ -65,13 +66,14 @@ from tensorflow_addons.metrics import RSquare, F1Score
 
 # Plots
 import matplotlib.pyplot as plt
+from PIL import Image
 import seaborn as sns
 from bioinfokit import visuz
 
 # Model's attention
-import innvestigate
+from keract import get_activations, get_gradients_of_activations
+from scipy.ndimage.interpolation import zoom
 from vis.utils import utils
-from vis.visualization import visualize_cam
 
 # Necessary to define MyCSVLogger
 import collections
@@ -995,12 +997,6 @@ class DeepLearning(Metrics):
         # dict to decide which field is used to generate the ids when several targets share the same ids
         self.dict_target_to_ids = dict.fromkeys(['Age', 'Sex'], 'Age')
         
-        # Metrics
-        self.prediction_type = self.dict_prediction_types[target]
-        
-        # Model
-        self.model = None
-        
         # Note: R-Squared and F1-Score are not available, because their batch based values are misleading.
         # For some reason, Sensitivity and Specificity are not available either. Might implement later.
         self.dict_losses_K = {'MSE': MeanSquaredError(name='MSE'),
@@ -1017,6 +1013,23 @@ class DeepLearning(Metrics):
                                'False-Positives': FalsePositives(name='False-Positives'),
                                'False-Negatives': FalseNegatives(name='False-Negatives'),
                                'True-Negatives': TrueNegatives(name='True-Negatives')}
+        
+        # Metrics
+        self.prediction_type = self.dict_prediction_types[target]
+        self.loss_name = self.dict_losses_names[self.prediction_type]
+        self.loss_function = self.dict_losses_K[self.loss_name]
+        self.main_metric_name = self.dict_main_metrics_names_K[target]
+        self.main_metric_mode = self.main_metrics_modes[self.main_metric_name]
+        self.main_metric = self.dict_metrics_K[self.main_metric_name]
+        self.metrics_names = [self.main_metric_name]
+        self.metrics = [self.dict_metrics_K[metric_name] for metric_name in self.metrics_names]
+        
+        # Optimizers
+        self.optimizers = {'Adam': Adam, 'RMSprop': RMSprop, 'Adadelta': Adadelta}
+        
+        # Model
+        self.model = None
+
     
     @staticmethod
     def _append_ext(fn):
@@ -1245,18 +1258,9 @@ class Training(DeepLearning):
         self.GENERATORS = None
         
         # Metrics
-        self.loss_name = self.dict_losses_names[self.prediction_type]
-        self.loss_function = self.dict_losses_K[self.loss_name]
-        self.main_metric_name = self.dict_main_metrics_names_K[target]
-        self.main_metric_mode = self.main_metrics_modes[self.main_metric_name]
-        self.main_metric = self.dict_metrics_K[self.main_metric_name]
-        self.display_full_metrics = display_full_metrics
-        if self.display_full_metrics:
-            self.metrics_names = self.dict_metrics_names_K[self.prediction_type]
-        else:
-            self.metrics_names = [self.main_metric_name]
-        self.metrics = [self.dict_metrics_K[metric_name] for metric_name in self.metrics_names]
         self.baseline_performance = None
+        if display_full_metrics:
+            self.metrics_names = self.dict_metrics_names_K[self.prediction_type]
         
         # Model
         self.path_load_weights = self.path_store + 'model-weights_' + self.version + '.h5'
@@ -1266,7 +1270,6 @@ class Training(DeepLearning):
             self.path_save_weights = self.path_store + 'model-weights_' + self.version + '.h5'
         self.n_epochs_max = 100000
         self.callbacks = None
-        self.optimizers = {'Adam': Adam, 'RMSprop': RMSprop, 'Adadelta': Adadelta}
     
     # Load and preprocess the data, build the generators
     def data_preprocessing(self):
@@ -2872,8 +2875,14 @@ class SelectBest(Metrics):
                 self.CORRELATIONS[fold][mode] = pd.read_csv(path_corr.replace('_str', mode), index_col=0)
     
     def _select_versions(self):
-        Performances = self.PERFORMANCES['val']
-        for organ in Performances['organ'].unique():
+        # Load val performances
+        path_perf = self.path_store + 'PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+                    '_test.csv'
+        Performances = pd.read_csv(path_perf)
+        Performances.set_index('version', drop=False, inplace=True)
+        list_organs = Performances['organ'].unique()
+        list_organs.sort()
+        for organ in list_organs:
             print('Selecting best model for ' + organ)
             Perf_organ = Performances[Performances['organ'] == organ]
             self.organs.append(organ)
@@ -3031,7 +3040,9 @@ class GWASPreprocessing(Hyperparameters):
         reordered_cols = ['FID', 'IID', 'Assessment_center', 'Genotyping_batch', 'Age', 'Sex', 'Ethnicity'] + \
                          ['PC' + str(i) for i in range(1, 41)] + self.list_organs
         self.data = self.data[reordered_cols]
+        print('Preparing data for heritabilities')
         for organ in self.list_organs:
+            print('Preparing data for ' + organ)
             data_organ = self.data.copy()
             cols_to_drop = [organ2 for organ2 in self.list_organs if organ2 != organ]
             data_organ.drop(columns=cols_to_drop, inplace=True)
@@ -3039,14 +3050,13 @@ class GWASPreprocessing(Hyperparameters):
             data_organ.to_csv(self.path_store + 'GWAS_data_' + self.target + '_' + organ + '.tab', index=False,
                               sep='\t')
             self.IIDs_organs[organ] = data_organ['IID'].values
-            # Save a smaller version for debugging purposes
-            data_organ.iloc[:1000, :].to_csv(self.path_store + 'GWAS_data_' + self.target + '_' + organ + '_debug.tab',
-                                             index=False, sep='\t')
     
     def _preprocessing_genetic_correlations(self):
+        print('Preparing data for genetic correlations')
         organs_pairs = pd.DataFrame(columns=['organ1', 'organ2'])
         for counter, organ1 in enumerate(self.list_organs):
             for organ2 in self.list_organs[(counter + 1):]:
+                print('Preparing data for the organ pair ' + organ1 + ' and ' + organ2)
                 # Generate GWAS dataframe
                 organs_pairs = organs_pairs.append({'organ1': organ1, 'organ2': organ2}, ignore_index=True)
                 data_organ_pair = self.data.copy()
@@ -3062,15 +3072,19 @@ class GWASPreprocessing(Hyperparameters):
     
     def _list_removed(self):
         # samples to remove for each organ
+        print('Listing samples to remove for each organ')
         for organ in self.list_organs:
+            print('Preparing samples to remove for organ ' + organ)
             remove_organ = self.fam[['FID', 'IID']].copy()
             remove_organ = remove_organ[-remove_organ['IID'].isin(self.IIDs_organs[organ])]
             remove_organ.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ + '.tab', index=False,
                                 header=False, sep=' ')
         
         # samples to remove for each organ pair
+        print('Listing samples to remove for each organ pair')
         for counter, organ1 in enumerate(self.list_organs):
             for organ2 in self.list_organs[(counter + 1):]:
+                print('Preparing samples to remove for organ pair ' + organ1 + ' and ' + organ2)
                 remove_organ_pair = self.fam[['FID', 'IID']].copy()
                 remove_organ_pair = \
                     remove_organ_pair[-remove_organ_pair['IID'].isin(self.IIDs_organ_pairs[organ1 + '_' + organ2])]
@@ -3214,14 +3228,13 @@ class GWASPostprocessing(Hyperparameters):
         Genetic_correlations_str.to_csv(self.path_store + 'GWAS_correlations_str_' + self.target + '.csv')
 
 
-class PlotsAttentionMaps(DeepLearning):
+class AttentionMaps(DeepLearning):
     
-    def __init__(self, target=None, organ=None, view=None, transformation=None, fold=None, debug_mode=False):
+    def __init__(self, target=None, organ=None, view=None, transformation=None, debug_mode=False):
         # Partial initialization with placeholders to get access to parameters and functions
-        DeepLearning.__init__(self, target, organ, view, transformation, 'InceptionResNetV2', 'Adam', 0, 0, 0, False)
-        
+        DeepLearning.__init__(self, target, organ, view, transformation, 'InceptionResNetV2', '1', '1024',
+                              'Adam', '0.0001', '0.1', '0.5', '1.0', False)
         # Parameters
-        self.fold = fold
         self.parameters = None
         self.image_width = None
         self.image_height = None
@@ -3229,21 +3242,6 @@ class PlotsAttentionMaps(DeepLearning):
         self.N_samples_attentionmaps = 10  # needs to be > 1 for the script to work
         if debug_mode:
             self.N_samples_attentionmaps = 2
-        
-        # Pick the best model based on the performances
-        path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_instances_' + target + '_' + fold + '.csv'
-        Performances = pd.read_csv(path_perf).set_index('version', drop=False)
-        Performances = Performances[(Performances['organ'] == organ)
-                                    & (Performances['view'] == view)
-                                    & (Performances['transformation'] == transformation)]
-        version = Performances['version'].values[0]
-        del Performances
-        
-        # other parameters
-        self.parameters = self._version_to_parameters(version)
-        DeepLearning.__init__(self, target, organ, view, transformation, self.parameters['architecture'],
-                              self.parameters['optimizer'], self.parameters['learning_rate'],
-                              self.parameters['weight_decay'], self.parameters['dropout_rate'], False)
         self.dir_images = '../images/' + organ + '/' + view + '/' + transformation + '/'
         self.prediction_type = self.dict_prediction_types[target]
         self.Residuals = None
@@ -3258,8 +3256,6 @@ class PlotsAttentionMaps(DeepLearning):
         self.saliency_analyzer = None
         self.guided_backprop_analyzer = None
         self.generator = None
-        self.dict_map_types_to_names = {'saliency': 'Saliency', 'grad_cam': 'Gradcam',
-                                        'guided_backprop': 'GuidedBackprop'}
         self.dict_architecture_to_last_conv_layer_name = {'VGG16': 'block5_conv3', 'VGG19': 'block5_conv4',
                                                           'MobileNet': 'conv_pw_13_relu', 'MobileNetV2': 'out_relu',
                                                           'DenseNet121': 'relu', 'DenseNet169': 'relu',
@@ -3268,16 +3264,32 @@ class PlotsAttentionMaps(DeepLearning):
                                                           'Xception': 'block14_sepconv2_act', 'InceptionV3': 'mixed10',
                                                           'InceptionResNetV2': 'conv_7b_ac',
                                                           'EfficientNetB7': 'top_activation'}
+
+    def _select_best_model(self):
+        # Pick the best model based on the performances
+        path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_instances_' + self.target + '_test.csv'
+        Performances = pd.read_csv(path_perf).set_index('version', drop=False)
+        Performances = Performances[(Performances['organ'] == self.organ)
+                                    & (Performances['view'] == self.view)
+                                    & (Performances['transformation'] == self.transformation)]
+        version = Performances['version'].values[0]
+        del Performances
+        # other parameters
+        self.parameters = self._version_to_parameters(version)
+        DeepLearning.__init__(self, self.parameters['target'], self.parameters['organ'], self.parameters['view'],
+                              self.parameters['transformation'], self.parameters['architecture'],
+                              self.parameters['n_fc_layers'], self.parameters['n_fc_nodes'],
+                              self.parameters['optimizer'], self.parameters['learning_rate'],
+                              self.parameters['weight_decay'], self.parameters['dropout_rate'],
+                              self.parameters['data_augmentation_factor'], False)
     
     def _format_residuals(self):
         # Format the residuals
-        Residuals_full = pd.read_csv(self.path_store + 'RESIDUALS_instances_' + self.target + '_' + self.fold + '.csv')
-        Residuals = Residuals_full[['id'] + self.demographic_vars +
-                                   ['res_' + self.version, 'outer_fold_' + self.version]]
+        Residuals_full = pd.read_csv(self.path_store + 'RESIDUALS_instances_' + self.target + '_test.csv')
+        Residuals = Residuals_full[['id', 'outer_fold'] + self.demographic_vars + ['res_' + self.version]]
         del Residuals_full
         Residuals.dropna(inplace=True)
-        Residuals.rename(columns={'res_' + self.version: 'res', 'outer_fold_' + self.version: 'outer_fold'},
-                         inplace=True)
+        Residuals.rename(columns={'res_' + self.version: 'res'}, inplace=True)
         Residuals.set_index('id', drop=False, inplace=True)
         # Residuals['id'] = Residuals['id'].astype(str).apply(self._append_ext) TODO
         Residuals['outer_fold'] = Residuals['outer_fold'].astype(int).astype(str)
@@ -3291,26 +3303,29 @@ class PlotsAttentionMaps(DeepLearning):
     def _select_representative_samples(self):
         # Select with samples to plot
         print('Selecting representative samples...')
-        Sexes = ['Male', 'Female']
-        dict_sexes_to_values = {'Male': 1, 'Female': 0}
         df_to_plot = None
-        for sex in Sexes:
+        
+        # Sex
+        dict_sexes_to_values = {'Male': 1, 'Female': 0}
+        for sex in ['Male']: #, 'Female']:
             print('Sex: ' + sex)
             Residuals_sex = self.Residuals[self.Residuals['Sex'] == dict_sexes_to_values[sex]]
             Residuals_sex['sex'] = sex
-            for age_category in ['young', 'middle', 'old']:
+            
+            # Age category
+            for age_category in ['young']: #, 'middle', 'old']:
                 print('Age category: ' + age_category)
                 if age_category == 'young':
-                    Residuals_age = Residuals_sex[Residuals_sex['Age'] <= Residuals_sex['Age'].min() + 1]
+                    Residuals_age = Residuals_sex[Residuals_sex['Age'] <= Residuals_sex['Age'].min() + 3]
                 elif age_category == 'middle':
-                    Residuals_age = Residuals_sex[Residuals_sex['Age'] == int(Residuals_sex['Age'].median())]
+                    Residuals_age = Residuals_sex[
+                        Residuals_sex['Age'].astype(int) == int(Residuals_sex['Age'].median())]
                 else:
-                    Residuals_age = Residuals_sex[Residuals_sex['Age'] >= Residuals_sex['Age'].max() - 1]
+                    Residuals_age = Residuals_sex[Residuals_sex['Age'] >= Residuals_sex['Age'].max() - 3]
                 Residuals_age['age_category'] = age_category
-                if len(Residuals_age.index) < 3 * self.N_samples_attentionmaps:
-                    print("DEBUG print below") #TODO
-                    #print(f"Warning! Less than {3 * self.N_samples_attentionmaps} samples ({len(Residuals_age.index)})"f" for sex = {sex} and age category = {age_category}")
-                for aging_rate in ['accelerated', 'normal', 'decelerated']:
+                
+                # Aging rate
+                for aging_rate in ['accelerated']: #, 'normal', 'decelerated']:
                     print('Aging rate: ' + aging_rate)
                     Residuals_ar = Residuals_age
                     if aging_rate == 'accelerated':
@@ -3326,22 +3341,27 @@ class PlotsAttentionMaps(DeepLearning):
                         df_to_plot = Residuals_ar
                     else:
                         df_to_plot = df_to_plot.append(Residuals_ar)
-        pred_age = (df_to_plot['Age'] - df_to_plot['res']).round().astype(str)
-        df_to_plot['plot_title'] = 'Age = ' + df_to_plot['Age'].astype(str) + ', Predicted Age = ' + pred_age + \
-                                   ', Sex = ' + df_to_plot['sex'] + ', sample ' + df_to_plot['sample'].astype(str)
-        df_to_plot['save_title'] = self.path_store + '../figures/Attention_Maps/' + self.target + '/' + self.organ + \
-                                   '/' + self.view + '/' + self.transformation + '/' + df_to_plot['sex'] + '/' + \
-                                   df_to_plot['age_category'] + '/' + df_to_plot['aging_rate'] + '/' + self.target + \
-                                   '_' + self.organ + '_' + self.view + '_' + self.transformation + '_' + \
-                                   df_to_plot['sex'] + '_' + df_to_plot['age_category'] + '_' + \
-                                   df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str) + '.png'
+        
+        # Postprocessing
+        pred_age = (df_to_plot['Age'] - df_to_plot['res']).round(1).astype(str)
+        df_to_plot['plot_title'] = 'Age = ' + df_to_plot['Age'].round(1).astype(str) + ', Predicted Age = ' + pred_age \
+                                   + ', Sex = ' + df_to_plot['sex'] + ', sample ' + df_to_plot['sample'].astype(str)
+        df_to_plot['save_title'] = \
+            '../figures/Attention_Maps/' + self.target + '/' + self.organ + '/' + self.view + '/' \
+            + self.transformation + '/' + df_to_plot['sex'] + '/' + df_to_plot['age_category'] + '/' + \
+            df_to_plot['aging_rate'] + '/imagetypeplaceholder_' + self.target + '_' + self.organ + '_' + self.view + '_' + \
+            self.transformation + '_' + df_to_plot['sex'] + '_' + df_to_plot['age_category'] + '_' + \
+            df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
         path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ + '_' + self.view + \
-                    '_' + self.transformation + '.csv'
+                    '_' + self.transformation
         df_to_plot.to_csv(path_save, index=False)
         self.df_to_plot = df_to_plot
     
     def preprocessing(self):
+        self._select_best_model()
         self._generate_architecture()
+        self.model.compile(optimizer=self.optimizers[self.optimizer](lr=self.learning_rate, clipnorm=1.0),
+                           loss=self.loss_function, metrics=self.metrics)
         self.penultimate_layer_idx = utils.find_layer_idx(
             self.model, self.dict_architecture_to_last_conv_layer_name[self.parameters['architecture']])
         self._format_residuals()
@@ -3349,6 +3369,7 @@ class PlotsAttentionMaps(DeepLearning):
     
     def _preprocess_for_outer_fold(self, outer_fold):
         self.df_outer_fold = self.df_to_plot[self.df_to_plot['outer_fold'] == outer_fold]
+        self.n_images = len(self.df_outer_fold.index)
         
         # generate the data generators
         self.generator = \
@@ -3360,18 +3381,9 @@ class PlotsAttentionMaps(DeepLearning):
         
         # load the weights for the fold
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
-        
-        # Generate analyzers
-        self.saliency_analyzer = innvestigate.create_analyzer("gradient", self.model, allow_lambda_layers=True)
-        self.guided_backprop_analyzer = innvestigate.create_analyzer("guided_backprop", self.model,
-                                                                     allow_lambda_layers=True)
-        
-        # Generate the saliency maps
-        self.n_images = len(self.df_outer_fold.index)
     
-    # generate the saliency map transparent filter
-    def _generate_saliency_map(self, saliency):
-        saliency = saliency.sum(axis=2)
+    @staticmethod
+    def _process_saliency(self, saliency):
         saliency *= 255 / np.max(np.abs(saliency))
         saliency = saliency.astype(int)
         r_ch = saliency.copy()
@@ -3379,98 +3391,46 @@ class PlotsAttentionMaps(DeepLearning):
         b_ch = -saliency.copy()
         b_ch[b_ch < 0] = 0
         g_ch = saliency.copy() * 0
-        a_ch = np.maximum(b_ch, r_ch) * 5
-        self.saliency_filter = np.dstack((r_ch, g_ch, b_ch, a_ch))
-    
-    # generate the gradcam map transparent filter
-    def _generate_gradcam_map(self):
-        grad_cam = visualize_cam(model=self.model, layer_idx=-1, filter_indices=0, seed_input=self.image,
-                                 penultimate_layer_idx=self.penultimate_layer_idx)
-        r_ch = grad_cam[:, :, 0]
-        g_ch = grad_cam[:, :, 1]
-        b_ch = grad_cam[:, :, 2]
-        a_ch = ((255 - b_ch) * .5).astype(int)
-        b_ch = b_ch
-        self.grad_cam_filter = np.dstack((r_ch, g_ch, b_ch, a_ch))
-    
-    # generate the guidedbackprop map transparent filter
-    def _generate_guidedbackprop_map(self, guided_backprop):
-        guided_backprop = np.linalg.norm(guided_backprop, axis=2)
-        guided_backprop = (guided_backprop * 255 / guided_backprop.max()).astype(int)
-        r_ch = guided_backprop.copy()
-        g_ch = guided_backprop.copy() * 0
-        b_ch = guided_backprop.copy() * 0
-        a_ch = guided_backprop * 15
-        self.guided_backprop_filter = np.dstack((r_ch, g_ch, b_ch, a_ch))
-    
-    def _plot_attention_map(self, filter_map, save_title):
-        plt.clf()
-        plt.imshow(self.image)
-        plt.imshow(filter_map)
-        plt.axis('off')
-        plt.title(self.plot_title)
-        fig = plt.gcf()
-        path = '/'.join(save_title.split('/')[:-1])
-        if not os.path.exists(path):
-            os.makedirs(path)
-        fig.savefig(save_title)
-        plt.show()
-    
-    def _plot_attention_maps(self, save_title):
-        # format the grid of plots
-        plt.clf()
-        fig, axes = plt.subplots(1, 2, figsize=(7, 10))
-        subtitles = {0: {0: 'Saliency', 1: 'Grad-CAM'}}
-        for j in [0, 1]:
-            axes[0, j].imshow(self.image)
-            axes[0, j].axis('off')
-            axes[0, j].set_title(subtitles[i][j], {'fontsize': 15})
-        
-        # fill the plot array
-        axes[0, 0].imshow(self.saliency_filter)
-        axes[0, 1].imshow(self.grad_cam_filter)
-        
-        plt.suptitle(self.plot_title, fontsize=20)
-        fig = plt.gcf()
-        path = '/'.join(save_title.split('/')[:-1])
-        if not os.path.exists(path):
-            os.makedirs(path)
-        fig.savefig(save_title.replace('Attention_Maps/', 'Attention_Maps/Summary_'))
-        plt.show()
+        a_ch = np.maximum(b_ch, r_ch)
+        saliency = np.dstack((r_ch, g_ch, b_ch, a_ch))
+        return saliency
     
     def _generate_maps_for_one_batch(self, i):
         print('Generating maps for batch ' + str(i))
         n_images_batch = np.min([self.batch_size, self.n_images - i * self.batch_size])
-        images = self.generator.__getitem__(i)[0][0][:n_images_batch, :, :, :]
-        '''
-        #saliencies = self.saliency_analyzer.analyze(images)
-        #guided_backprops = self.guided_backprop_analyzer.analyze(images)
-        for j in range(saliencies.shape[0]):
-        '''
+        Xs, y = self.generator.__getitem__(i)
+        # Generate saliency
+        saliencies = get_gradients_of_activations(self.model, Xs, y, layer_name='input_1')['input_1'].sum(axis=3)
+        # Generate gradam
+        weights = get_gradients_of_activations(self.model, Xs, y, layer_name='mixed10', )['mixed10']
+        weights = weights.mean(axis=(1, 2))
+        weights /= weights.max() + 1e-7  # for numerical stability
+        activations = get_activations(self.model, Xs, layer_name='mixed10')['mixed10']
+        gradcams = np.einsum('il,ijkl->ijk', weights, activations)
+        # Expand the gradcam map to match the dimension of the input
+        zoom_factor = [1] + list(np.array(Xs[0].shape[1:3]) / np.array(gradcams.shape[1:]))
+        gradcams = zoom(gradcams, zoom_factor)
+        
+        # Save single images and filters
         for j in range(n_images_batch):
             # select sample
-            self.image = images[j]
-            self.plot_title = self.df_outer_fold['plot_title'].values[i * self.batch_size + j]
-            save_title = self.df_outer_fold['save_title'].values[i * self.batch_size + j]
-            
-            # generate the transparent filters for saliency, grad-cam and guided-backprop maps
-            # self._generate_saliency_map(saliencies[j])
-            self._generate_gradcam_map()
-            # self._generate_guidedbackprop_map(guided_backprops[j])
-            
-            save_title = save_title.replace('Attention_Maps/',
-                                            'Attention_Maps/' + self.dict_map_types_to_names[map_type])
-            self._plot_attention_map(filter_map=getattr(self, map_type + '_filter'), save_title=save_title)
-            
-            '''
-            # plot the three maps individually
-            for map_type in self.dict_map_types_to_names.keys():
-                self._plot_attention_map(filter_map=getattr(self, map_type + '_filter'),
-                                         save_title=self.dict_map_types_to_names[map_type] + '_' + save_title)
-            
-            # Generate summary plot
-            self._plot_attention_maps(save_title=save_title)
-            '''
+            path = self.df_outer_fold['save_title'].values[i * self.batch_size + j]
+            ID = self.df_outer_fold['id'].values[i * self.batch_size + j]
+            # create directory tree if necessary
+            path_dir = '/'.join(path.split('/')[:-1])
+            if not os.path.exists(path_dir):
+                os.makedirs(path_dir)
+            # Save raw image
+            path_image = '../images/' + self.organ + '/' + self.view + '/' + self.transformation + '/' + ID + '.jpg'
+            new_path_image = path.replace('imagetypeplaceholder', 'RawImage') + '.jpg'
+            shutil.copy(path_image, new_path_image)
+            # Save saliency
+            saliency = saliencies[j, :, :]
+            saliency = self._process_saliency(saliency)
+            np.save(path.replace('imagetypeplaceholder', 'Saliency') + '.npy', saliency)
+            # Save gradcam
+            gradcam = gradcams[j, :, :]
+            np.save(path.replace('imagetypeplaceholder', 'Gradcam') + '.npy', gradcam)
     
     def generate_plots(self):
         for outer_fold in self.outer_folds:

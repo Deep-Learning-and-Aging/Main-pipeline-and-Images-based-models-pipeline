@@ -18,8 +18,6 @@ folds=( "train" "val" "test" )
 #folds=( "val" "test" )
 outer_folds=( "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" )
 memory=8G
-n_cpu_cores=1
-n_gpus=1
 declare -a IDs=()
 for target in "${targets[@]}"; do
 	for organ in "${organs[@]}"; do
@@ -116,7 +114,7 @@ for target in "${targets[@]}"; do
 													fi
 													if $to_run; then
 														echo Submitting job for $version
-														ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -c $n_cpu_cores --gres=gpu:$n_gpus -t $time MI03A_Predictions_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold)
+														ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI03A_Predictions_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold)
 														IDs+=($ID)
 													#else
 													#	echo Predictions for $version have already been generated.
