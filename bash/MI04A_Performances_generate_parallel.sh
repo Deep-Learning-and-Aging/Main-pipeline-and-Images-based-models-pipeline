@@ -9,13 +9,10 @@ memory=2G
 declare -a IDs=()
 # For reference, order of the organs (by similarity): Brain, Eyes, Hearing, Lungs, BloodPressure, Artery,  Carotids, Heart,  Abdomen, Spine, Hips, Knees, FullBody, Anthropometry, Heel, Hand, PhysicalActivity, BloodCount, BloodBiochemistry, Urine
 organs_groups=( "Scalars" "TimeSeries" "Images" "Videos" )
-organs_groups=( "Scalars" "TimeSeries" "Images" )
 for organs_group in "${organs_groups[@]}"; do
 	if [ $organs_group == "Scalars" ]; then
 		organs=( "Brain" "Eyes" "Hearing" "Lungs" "Arterial" "Heart" "Musculoskeletal" "PhysicalActivity" "Biochemistry" "ImmuneSystem" )
-		#organs=( "Eyes" )
 		architectures=( "ElasticNet" "LightGBM" "NeuralNetwork" )
-		#architectures=( "ElasticNet" )
 		n_fc_layers="0"
 		n_fc_nodes="0"
 		optimizer="0"
@@ -24,19 +21,19 @@ for organs_group in "${organs_groups[@]}"; do
 		dropout_rate="0"
 		data_augmentation_factor="0"
 	elif [ $organs_group == "TimeSeries" ]; then
-		organs=( "Arterial" "Heart" )
-		architectures=( "0" )
-		n_fc_layers="0"
+		organs=( "Arterial" "Heart" "PhysicalActivity" )
+		architectures=( "1DCNN" )
+		#n_fc_layers is defined depending on the organ further below
 		n_fc_nodes="0"
-		optimizer="0"
-		learning_rate="0"
+		optimizer="Adam"
+		learning_rate="0.001"
 		weight_decay="0"
 		dropout_rate="0"
 		data_augmentation_factor="0"
 	elif [ $organs_group == "Images" ]; then
 		organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
 		#architectures=( "VGG16" "VGG19" "MobileNet" "MobileNetV2" "DenseNet121" "DenseNet169" "DenseNet201" "NASNetMobile" "Xception" "InceptionV3" "InceptionResNetV2" )
-		architectures=( "InceptionV3" )
+		architectures=( "InceptionV3" "InceptionResNetV2" )
 		n_fc_layers="1"
 		n_fc_nodes="1024"
 		optimizer="Adam"
@@ -47,13 +44,13 @@ for organs_group in "${organs_groups[@]}"; do
 	elif [ $organs_group == "Videos" ]; then
 		organs=( "Heart" )
 		architectures=( "3DCNN" )
-		n_fc_layers=TODO
-		n_fc_nodes=TODO
-		optimizer=TODO
-		learning_rate=TODO
-		weight_decay=TODO
-		dropout_rate=TODO
-		data_augmentation_factor=TODO
+		n_fc_layers="2"
+		n_fc_nodes="1024"
+		optimizer="Adam"
+		learning_rate="0.0001"
+		weight_decay="0.0"
+		dropout_rate="0.2"
+		data_augmentation_factor="1.0"
 	else
 		echo "organs_group must be either Scalars, TimeSeries, Images, Videos"
 	fi
@@ -86,10 +83,13 @@ for organs_group in "${organs_groups[@]}"; do
 			elif [ $organs_group == "TimeSeries" ]; then
 				if [ $organ == "Arterial" ]; then
 					views=( "PulseWaveAnalysis" )
+					n_fc_layers="3"
 				elif [ $organ == "Heart" ]; then
 					views=( "ECG" )
+					n_fc_layers="6"
 				elif [ $organ == "PhysicalActivity" ]; then
 					views=( "FullWeek" "Walking" )
+					n_fc_layers="4"
 				else
 					echo "Organ $organ does not match any TimeSeries organs."
 				fi
@@ -107,7 +107,7 @@ for organs_group in "${organs_groups[@]}"; do
 				elif [ $organ == "Musculoskeletal" ]; then
 					views=( "Spine" "Hips" "Knees" "FullBody" )
 				elif [ $organ == "PhysicalActivity" ]; then
-					views=( "FullWeek" "Walking" )
+					views=( "FullWeek" )
 				else
 					echo "Organ $organ does not match any Images organs."
 				fi
@@ -147,7 +147,11 @@ for organs_group in "${organs_groups[@]}"; do
 					if [ $organ == "Arterial" ] || [ $organ == "ECG" ]; then
 						transformations=( "TimeSeries" )
 					elif [ $organ == "PhysicalActivity" ]; then
-						transformations=( "FullWeek" "Walking" )
+						if [ $view == "FullWeek" ]; then
+							transformations=( "Acceleration" "TimeSeriesFeatures" "TimeSeriesFeaturesAndScalars" )
+						elif [ $view == "Walking" ]; then
+							transformations=( "3D" )
+						fi
 					fi
 				elif [ $organs_group == "Images" ]; then
 					if [ $organ == "Brain" ]; then
@@ -167,11 +171,7 @@ for organs_group in "${organs_groups[@]}"; do
 							transformations=( "Mixed" "Figure" "Skeleton" "Flesh" )
 						fi
 					elif [ $organ == "PhysicalActivity" ]; then
-						if [ $view == "FullWeek" ]; then
-							transformations=( "GramianAngularField1minDifference" "GramianAngularField30minDifference" "MarkovTransitionField1min" "RecurrencePlots1min" "RecurrencePlots30min" "GramianAngularField1minSummation" "GramianAngularField30minSummation" "MarkovTransitionField30min" "RecurrencePlots1minBinary" "RecurrencePlots30minBinary" )
-						elif [ $view == "Walking" ]; then
-							transformations=( "GramianAngularFieldDifference" "GramianAngularFieldSummation" "MarkovTransitionField" "RecurrencePlots" "RecurrencePlotsBinary" )
-						fi
+							transformations=( "GramianAngularField1minDifference" "GramianAngularField1minSummation" "MarkovTransitionField1min" "RecurrencePlots1min" )
 					elif [ $organ == "Eyes" ] || [ $organ == "Spine" ] || [ $organ == "Hips" ] || [ $organ == "Knees" ] || [ $organ == "FullBody" ]; then
 						transformations=( "Raw" )
 					else
@@ -179,7 +179,7 @@ for organs_group in "${organs_groups[@]}"; do
 					fi
 				elif [ $organs_group == "Videos" ]; then
 					if [ $organ == "Heart" ]; then
-						views=( "3chambersRawVideo" "4chambersRawVideo" "34chambersRawVideo" )
+						transformations=( "3chambersRawVideo" "4chambersRawVideo" "34chambersRawVideo" )
 					fi
 				else
 					echo "organs_group ${organs_group} is not among Scalars, TimeSeries, Images, or Videos"
@@ -207,7 +207,7 @@ for organs_group in "${organs_groups[@]}"; do
 								#if regenerate_performances option is on or if the performances have not yet been generated, run the job
 								if ! test -f "../data/Performances_${version}.csv" || $regenerate_performances; then
 									echo "Submitting job for ${version}"
-									ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI04A05B_Performances_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $fold $pred_type)
+									ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI04A05C_Performances_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $fold $pred_type)
 									IDs+=($ID)
 									#else
 									#	echo Performance for $version have already been generated.

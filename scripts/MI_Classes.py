@@ -2,7 +2,7 @@
 # set up backend for ssh -x11 figures
 import matplotlib
 
-matplotlib.use('Agg') #TODO
+matplotlib.use('Agg')
 
 # read and write
 import os
@@ -138,7 +138,7 @@ class Hyperparameters:
                                      'Heart': ['MRI'],
                                      'Abdomen': ['Liver', 'Pancreas'],
                                      'Musculoskeletal': ['Spine', 'Hips', 'Knees', 'FullBody'],
-                                     'PhysicalActivity': ['FullWeek', 'Walking']}
+                                     'PhysicalActivity': ['FullWeek']}
         self.dict_organsviews_to_transformations = \
             {'Brain_MRI': ['SagittalRaw', 'SagittalReference', 'CoronalRaw', 'CoronalReference', 'TransverseRaw',
                                'TransverseReference'],
@@ -147,13 +147,8 @@ class Hyperparameters:
                            '4chambersContrast'],
              'Musculoskeletal_Spine': ['Sagittal', 'Coronal'],
              'Musculoskeletal_FullBody': ['Mixed', 'Figure', 'Skeleton', 'Flesh'],
-             'PhysicalActivity_FullWeek': ['GramianAngularField1minDifference', 'GramianAngularField30minDifference',
-                                           'MarkovTransitionField1min', 'RecurrencePlots1min', 'RecurrencePlots30min',
-                                           'GramianAngularField1minSummation', 'GramianAngularField30minSummation',
-                                           'MarkovTransitionField30min', 'RecurrencePlots1minBinary',
-                                           'RecurrencePlots30minBinary'],
-             'PhysicalActivity_Walking': ['GramianAngularFieldDifference', 'GramianAngularFieldSummation',
-                                          'MarkovTransitionField', 'RecurrencePlots', 'RecurrencePlotsBinary']}
+             'PhysicalActivity_FullWeek': ['GramianAngularField1minDifference', 'GramianAngularField1minSummation',
+                                           'MarkovTransitionField1min', 'RecurrencePlots1min']}
         self.dict_organsviews_to_transformations.update(dict.fromkeys(['Eyes_Fundus', 'Eyes_OCT'], ['Raw']))
         self.dict_organsviews_to_transformations.update(
             dict.fromkeys(['Abdomen_Liver', 'Abdomen_Pancreas'], ['Raw', 'Contrast']))
@@ -686,7 +681,6 @@ class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
         self.augmentation_parameters.loc[['Musculoskeletal_Hips', 'Musculoskeletal_Knees'], :] = [10, 0.1, 0.1, 0.1]
         self.augmentation_parameters.loc[['Musculoskeletal_FullBody'], :] = [10, 0.05, 0.02, 0.0]
         self.augmentation_parameters.loc[['PhysicalActivity_FullWeek'], :] = [0, 0, 0, 0.0]
-        self.augmentation_parameters.loc[['PhysicalActivity_Walking'], :] = [0, 0, 0, 0.0]
         organ_view = organ + '_' + view
         ImageDataGenerator.__init__(self, rescale=1. / 255.,
                                     rotation_range=self.augmentation_parameters.loc[organ_view, 'rotation'],
@@ -936,25 +930,10 @@ class DeepLearning(Metrics):
                            'Musculoskeletal_FullBody_Flesh', 'Musculoskeletal_FullBody_Mixed'],
                           (541, 181)))  # initial size (811, 272)
         self.dict_organ_view_transformation_to_image_size.update(
-            dict.fromkeys(['PhysicalActivity_FullWeek_GramianAngularField30minDifference',
-                           'PhysicalActivity_FullWeek_RecurrencePlots30min',
-                           'PhysicalActivity_FullWeek_GramianAngularField30minSummation',
-                           'PhysicalActivity_FullWeek_MarkovTransitionField30min',
-                           'PhysicalActivity_FullWeek_RecurrencePlots30minBinary'],
-                          (315, 315)))  # initial size (315, 315)
-        self.dict_organ_view_transformation_to_image_size.update(
-            dict.fromkeys(['PhysicalActivity_FullWeek_RecurrencePlots1min',
-                           'PhysicalActivity_FullWeek_RecurrencePlots1minBinary',
+            dict.fromkeys(['PhysicalActivity_FullWeek_GramianAngularField1minDifference',
+                           'PhysicalActivity_FullWeek_GramianAngularField1minSummation',
                            'PhysicalActivity_FullWeek_MarkovTransitionField1min',
-                           'PhysicalActivity_FullWeek_GramianAngularField1minDifference',
-                           'PhysicalActivity_FullWeek_GramianAngularField1minSummation'],
-                          (316, 316)))  # initial size (316, 316)
-        self.dict_organ_view_transformation_to_image_size.update(
-            dict.fromkeys(['PhysicalActivity_Walking_GramianAngularFieldDifference',
-                           'PhysicalActivity_Walking_GramianAngularFieldSummation',
-                           'PhysicalActivity_Walking_MarkovTransitionField',
-                           'PhysicalActivity_Walking_RecurrencePlots',
-                           'PhysicalActivity_Walking_RecurrencePlotsBinary'],
+                           'PhysicalActivity_FullWeek_RecurrencePlots1min'],
                           (316, 316)))  # initial size (316, 316)
         self.dict_architecture_to_image_size = {'MobileNet': (224, 224), 'MobileNetV2': (224, 224),
                                                 'NASNetMobile': (224, 224), 'NASNetLarge': (331, 331)}
@@ -1608,8 +1587,6 @@ class PredictionsMerge(Hyperparameters):
         self.list_models = None
         self.Predictions_df_previous = None
         self.Predictions_df = None
-        self.start = timeit.default_timer()
-        self.stop = None
     
     def _load_data_features(self):
         self.data_features = pd.read_csv(self.path_store + 'data-features_instances.csv',
@@ -1652,9 +1629,6 @@ class PredictionsMerge(Hyperparameters):
         self._preprocess_data_features()
         self._load_previous_merged_predictions()
         self._list_models()
-        self.stop = timeit.default_timer()
-        print('Preprocessing complete. Time elapsed, in hours: ' + str((self.stop - self.start)/3600))
-        self.start = self.stop
     
     def merge_predictions(self):
         # merge the predictions
@@ -1681,6 +1655,11 @@ class PredictionsMerge(Hyperparameters):
                     for var in ['id', 'outer_fold']:
                         prediction[var] = prediction[var].apply(str)
                     prediction.rename(columns={'pred': 'pred_' + version}, inplace=True)
+                    #TODO debug
+                    if len(prediction.index) > len(prediction['id'].unique()):
+                        print('WOWOWOWOWOW\n\n\n\n\n\n TEMPORARY fix')
+                        prediction = prediction[prediction['id'] != 'nan']
+                    #end TODO
                     # merge data frames
                     if Predictions_subgroup is None:
                         Predictions_subgroup = prediction
@@ -1691,8 +1670,14 @@ class PredictionsMerge(Hyperparameters):
                         prediction.drop(['outer_fold'], axis=1, inplace=True)
                         # not supported for panda version > 0.23.4 for now
                         Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['id'])
+                    
+                    #TODO debug below
+                    if len(Predictions_subgroup.index) > len(Predictions_subgroup['id'].unique()):
+                        print('PB with subgroup! \n\n\n\n\n\n')
             
             # merge group predictions data frames
+            if self.fold != 'train':
+                Predictions_subgroup.drop(['outer_fold'], axis=1, inplace=True)
             if Predictions_subgroup is not None:
                 if self.Predictions_df is None:
                     self.Predictions_df = Predictions_subgroup
@@ -1700,16 +1685,15 @@ class PredictionsMerge(Hyperparameters):
                     self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer',
                                                                     on=['id', 'outer_fold'])
                 else:
-                    Predictions_subgroup.drop(['outer_fold'], axis=1, inplace=True)
                     # not supported for panda version > 0.23.4 for now
                     self.Predictions_df = self.Predictions_df.merge(Predictions_subgroup, how='outer', on=['id'])
                 print('Predictions_df\'s shape: ' + str(self.Predictions_df.shape))
                 # garbage collector
                 gc.collect()
-                
-        self.stop = timeit.default_timer()
-        print('Merging new models complete. Time elapsed, in hours: ' + str((self.stop - self.start)/3600))
-        self.start = self.stop
+            
+            #TODO debug below
+            if len(self.Predictions_df.index) > len(self.Predictions_df['id'].unique()):
+                print('PB with PRED! \n\n\n\n\n\n')
         
         # Merge with the previously merged predictions
         if (self.Predictions_df_previous is not None) & (self.Predictions_df is not None):
@@ -1729,11 +1713,8 @@ class PredictionsMerge(Hyperparameters):
         # Reorder the columns alphabetically
         pred_versions = [col for col in self.Predictions_df.columns if 'pred_' in col]
         pred_versions.sort()
-        self.Predictions_df = self.Predictions_df[['id', 'outer_fold'] + pred_versions]
-        
-        self.stop = timeit.default_timer()
-        print('Merging with old models complete. Time elapsed, in hours: ' + str((self.stop - self.start)/3600))
-        self.start = self.stop
+        id_cols = ['id', 'outer_fold'] if self.fold == 'train' else ['id']
+        self.Predictions_df = self.Predictions_df[id_cols + pred_versions]
     
     def postprocessing(self):
         # get rid of useless rows in data_features before merging to keep the memory requirements as low as possible
@@ -1743,13 +1724,9 @@ class PredictionsMerge(Hyperparameters):
             print('Starting to merge a massive dataframe')
             self.Predictions_df = self.data_features.merge(self.Predictions_df, how='outer', on=['id', 'outer_fold'])
         else:
-            self.Predictions_df.drop(['outer_fold'], axis=1, inplace=True)
             # not supported for panda version > 0.23.4 for now
             self.Predictions_df = self.data_features.merge(self.Predictions_df, how='outer', on=['id'])
         print('Merging done')
-        self.stop = timeit.default_timer()
-        print('Merging with datafeatures complete. Time elapsed, in hours: ' + str((self.stop - self.start) / 3600))
-        self.start = self.stop
         
         # remove rows for which no prediction is available (should be none)
         subset_cols = [col for col in self.Predictions_df.columns if 'pred_' in col]
@@ -1770,9 +1747,6 @@ class PredictionsMerge(Hyperparameters):
         print('Writing the merged predictions...')
         self.Predictions_df.to_csv(self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' +
                                    self.fold + '.csv', index=False)
-        self.stop = timeit.default_timer()
-        print('Saving data done. Time elapsed, in hours: ' + str((self.stop - self.start) / 3600))
-        self.start = self.stop
 
 
 class PredictionsEids(Hyperparameters):
@@ -1799,15 +1773,13 @@ class PredictionsEids(Hyperparameters):
         if self.ensemble_models:
             self.Predictions = pd.read_csv(
                 self.path_store + 'PREDICTIONS_withEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
-            cols_to_drop = [col for col in self.Predictions.columns.values
-                            if any(s in col for s in ['pred_', 'outer_fold_']) & ('*' not in col)]
+            cols_to_drop = [col for col in self.Predictions.columns.values if ('pred_' in col) & ('*' not in col)]
             self.Predictions.drop(cols_to_drop, axis=1, inplace=True)
-            # Load previous eid predictions if available
-            
         else:
             self.Predictions = pd.read_csv(
                 self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
         self.Predictions.drop(columns=['id'], inplace=True)
+        self.Predictions['eid'] = self.Predictions['eid'].astype(str)
         self.Predictions.index.name = 'column_names'
         self.pred_versions = [col for col in self.Predictions.columns.values if 'pred_' in col]
         
@@ -1816,11 +1788,13 @@ class PredictionsEids(Hyperparameters):
         path_eids_previous = self.path_store + 'PREDICTIONS_' + mode + '_eids_' + self.target + '_' + self.fold + '.csv'
         if os.path.exists(path_eids_previous):
             self.Predictions_eids_previous = pd.read_csv(path_eids_previous)
+            self.Predictions_eids_previous['eid'] = self.Predictions_eids_previous['eid'].astype(str)
             self.pred_versions_previous = \
                 [col for col in self.Predictions_eids_previous.columns if 'pred_' in col]
         
         # Prepare target values on instance 0 as a reference
         target_0s = pd.read_csv(self.path_store + 'data-features_eids.csv', usecols=['eid', self.target])
+        target_0s['eid'] = target_0s['eid'].astype(str)
         target_0s.set_index('eid', inplace=True)
         target_0s = target_0s[self.target]
         target_0s.name = 'target_0'
@@ -1843,7 +1817,7 @@ class PredictionsEids(Hyperparameters):
             Predictions.index.name = 'column_names'
             Predictions['eid'] = Predictions.index.values
             Predictions['instance'] = '*'
-            Predictions['id'] = Predictions['eid'].astype(str) + '_*'
+            Predictions['id'] = Predictions['eid'] + '_*'
             self.Predictions_eids = Predictions.copy()
             self.Predictions_eids['outer_fold'] = -1
             for i in range(self.n_CV_outer_folds):
@@ -1892,6 +1866,7 @@ class PredictionsEids(Hyperparameters):
                 Predictions_withoutEnsembles[var] = Predictions_withoutEnsembles[var].astype(str)
             Predictions_withoutEnsembles.set_index('id', drop=False, inplace=True)
             # Reorder the rows
+            self.Predictions_eids.index = self.Predictions_eids.index + '_*'
             self.Predictions_eids = self.Predictions_eids.loc[Predictions_withoutEnsembles.index.values, :]
             # Merge the non ensemble and the ensemble models
             self.Predictions_eids = pd.concat([Predictions_withoutEnsembles, self.Predictions_eids], axis=1)
@@ -3235,6 +3210,8 @@ class AttentionMaps(DeepLearning):
         DeepLearning.__init__(self, target, organ, view, transformation, 'InceptionResNetV2', '1', '1024',
                               'Adam', '0.0001', '0.1', '0.5', '1.0', False)
         # Parameters
+        if self.organ + '_' + self.view in self.left_right_organs_views:
+            self.leftright = True
         self.parameters = None
         self.image_width = None
         self.image_height = None
@@ -3291,14 +3268,9 @@ class AttentionMaps(DeepLearning):
         Residuals.dropna(inplace=True)
         Residuals.rename(columns={'res_' + self.version: 'res'}, inplace=True)
         Residuals.set_index('id', drop=False, inplace=True)
-        # Residuals['id'] = Residuals['id'].astype(str).apply(self._append_ext) TODO
         Residuals['outer_fold'] = Residuals['outer_fold'].astype(int).astype(str)
         Residuals['res_abs'] = Residuals['res'].abs()
-        self.Residuals = Residuals  # [['id', 'outer_fold', 'Sex', 'Age', 'res', 'res_abs']] TODO
-        print('debugging. this is the shape before taking useless subset of cols')
-        print(Residuals.shape)
-        print('this is the shape before taking useless subset of cols')
-        print(Residuals[['id', 'outer_fold', 'Sex', 'Age', 'res', 'res_abs']].shape)
+        self.Residuals = Residuals
     
     def _select_representative_samples(self):
         # Select with samples to plot
@@ -3346,12 +3318,16 @@ class AttentionMaps(DeepLearning):
         pred_age = (df_to_plot['Age'] - df_to_plot['res']).round(1).astype(str)
         df_to_plot['plot_title'] = 'Age = ' + df_to_plot['Age'].round(1).astype(str) + ', Predicted Age = ' + pred_age \
                                    + ', Sex = ' + df_to_plot['sex'] + ', sample ' + df_to_plot['sample'].astype(str)
-        df_to_plot['save_title'] = \
-            '../figures/Attention_Maps/' + self.target + '/' + self.organ + '/' + self.view + '/' \
-            + self.transformation + '/' + df_to_plot['sex'] + '/' + df_to_plot['age_category'] + '/' + \
-            df_to_plot['aging_rate'] + '/imagetypeplaceholder_' + self.target + '_' + self.organ + '_' + self.view + '_' + \
+        activations_path = '../figures/Attention_Maps/' + self.target + '/' + self.organ + '/' + self.view + '/' + \
+                           self.transformation + '/' + df_to_plot['sex'] + '/' + df_to_plot['age_category'] + '/' + \
+                           df_to_plot['aging_rate']
+        file_names = '/imagetypeplaceholder_' + self.target + '_' + self.organ + '_' + self.view + '_' + \
             self.transformation + '_' + df_to_plot['sex'] + '_' + df_to_plot['age_category'] + '_' + \
             df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
+        if self.leftright:
+            activations_path += '/sideplaceholder'
+            file_names += '_sideplaceholder'
+        df_to_plot['save_title'] = activations_path + file_names
         path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ + '_' + self.view + \
                     '_' + self.transformation
         df_to_plot.to_csv(path_save, index=False)
@@ -3370,6 +3346,8 @@ class AttentionMaps(DeepLearning):
     def _preprocess_for_outer_fold(self, outer_fold):
         self.df_outer_fold = self.df_to_plot[self.df_to_plot['outer_fold'] == outer_fold]
         self.n_images = len(self.df_outer_fold.index)
+        if self.leftright:
+            self.n_images *= 2
         
         # generate the data generators
         self.generator = \
@@ -3383,7 +3361,7 @@ class AttentionMaps(DeepLearning):
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
     
     @staticmethod
-    def _process_saliency(self, saliency):
+    def _process_saliency(saliency):
         saliency *= 255 / np.max(np.abs(saliency))
         saliency = saliency.astype(int)
         r_ch = saliency.copy()
@@ -3414,14 +3392,27 @@ class AttentionMaps(DeepLearning):
         # Save single images and filters
         for j in range(n_images_batch):
             # select sample
-            path = self.df_outer_fold['save_title'].values[i * self.batch_size + j]
-            ID = self.df_outer_fold['id'].values[i * self.batch_size + j]
+            if self.leftright:
+                idx = i * self.batch_size + j//2
+                side = 'right' if j % 2 == 0 else 'left'
+            else:
+                idx = i * self.batch_size + j
+            path = self.df_outer_fold['save_title'].values[idx]
+            ID = self.df_outer_fold['id'].values[idx]
             # create directory tree if necessary
+            if self.leftright:
+                path = path.replace('sideplaceholder', side)
             path_dir = '/'.join(path.split('/')[:-1])
             if not os.path.exists(path_dir):
                 os.makedirs(path_dir)
             # Save raw image
-            path_image = '../images/' + self.organ + '/' + self.view + '/' + self.transformation + '/' + ID + '.jpg'
+            path_image = '../images/' + self.organ + '/' + self.view + '/' + self.transformation + '/'
+            if self.leftright:
+                path_image += side + '/'
+            path_image += ID + '.jpg'
+            if not os.path.exists(path_image):
+                print('No image found at ' + path_image + ', skipping.')
+                continue
             new_path_image = path.replace('imagetypeplaceholder', 'RawImage') + '.jpg'
             shutil.copy(path_image, new_path_image)
             # Save saliency

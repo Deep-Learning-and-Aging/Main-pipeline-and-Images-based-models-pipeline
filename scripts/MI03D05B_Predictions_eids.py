@@ -11,7 +11,7 @@ if len(sys.argv) != 4:
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('test')  # fold
-    sys.argv.append('False')  # ensemble_models. Set False for MI03C and True for MI05B
+    sys.argv.append('True')  # ensemble_models. Set False for MI03C and True for MI05B
 
 # Compute results
 Predictions_Eids = PredictionsEids(target=sys.argv[1], fold=sys.argv[2], ensemble_models=sys.argv[3],

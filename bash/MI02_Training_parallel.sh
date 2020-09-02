@@ -2,11 +2,10 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
-#architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
+#architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "ResNeXt101" "EfficientNetB7" )
 #architectures=( "InceptionResNetV2" "InceptionV3" )
-#architectures=( "InceptionV3" )
-architectures=( "InceptionResNetV2" )
-#architectures=( "DenseNet201" )
+architectures=( "DensetNet201" )
+#architectures=( "ResNeXt101" )
 #n_fc_layersS=( "0" "1" "2" "3" "4" "5" )
 n_fc_layersS=( "1" )
 #n_fc_nodesS=( "16" "64" "128" "256" "512" "1024" )
@@ -40,7 +39,7 @@ for target in "${targets[@]}"; do
 		elif [ $organ == "Musculoskeletal" ]; then
 			views=( "Spine" "Hips" "Knees" "FullBody" )
 		elif [ $organ == "PhysicalActivity" ]; then
-			views=( "FullWeek" "Walking" )
+			views=( "FullWeek" )
 		else
 			views=( "MRI" )
 		fi
@@ -65,9 +64,7 @@ for target in "${targets[@]}"; do
 				fi
 			elif [ $organ == "PhysicalActivity" ]; then
 				if [ $view == "FullWeek" ]; then
-					transformations=( "GramianAngularField1minDifference" "GramianAngularField30minDifference" "MarkovTransitionField1min" "RecurrencePlots1min" "RecurrencePlots30min"	"GramianAngularField1minSummation" "GramianAngularField30minSummation" "MarkovTransitionField30min" "RecurrencePlots1minBinary" "RecurrencePlots30minBinary" )
-				elif [ $view == "Walking" ]; then
-					transformations=( "GramianAngularFieldDifference" "GramianAngularFieldSummation" "MarkovTransitionField" "RecurrencePlots" "RecurrencePlotsBinary" )
+					transformations=( "GramianAngularField1minDifference" "GramianAngularField1minSummation" "MarkovTransitionField1min" "RecurrencePlots1min" )
 				fi
 			fi	
 			for transformation in "${transformations[@]}"; do
@@ -91,7 +88,7 @@ for target in "${targets[@]}"; do
 													err_file="../eo/$version.err"
 													if ! test -f "$out_file" || ( ! grep -q "Done." "$out_file" && grep -q " improved from " "$out_file" ); then
 														similar_models=MI02_${target}_${organ}_${view}_${transformation}_${architecture}_${n_fc_layers}_${n_fc_nodes}_${optimizer}_${learning_rate}_${weight_decay}_${dropout_rate}_${data_augmentation_factor}_${outer_fold}	
-														if [ $(sacct -u al311 --format=JobID,JobName%100,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ]; then
+														if [ $(sacct -u al311 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ] && [ $(sacct -u cp179 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ] && [ $(sacct -u jp379 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ] && [ $(sacct -u sc646 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ] && [ $(sacct -u sd375 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ] && [ $(sacct -u mj209 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $similar_models | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ]; then
 															echo SUBMITTING: $version
 															sbatch --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI02_Training.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $outer_fold $time
 														#else

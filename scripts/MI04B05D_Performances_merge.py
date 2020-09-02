@@ -7,7 +7,7 @@ if len(sys.argv) != 5:
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('val')  # inner_fold
-    sys.argv.append('instances')  # pred_type
+    sys.argv.append('eids')  # pred_type
     sys.argv.append('False')  # ensemble_models. Set False for MI04B and True for MI05B
 
 # Compute results

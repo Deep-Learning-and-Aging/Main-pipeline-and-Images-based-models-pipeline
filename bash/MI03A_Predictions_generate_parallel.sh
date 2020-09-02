@@ -2,10 +2,10 @@
 regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
-architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
+organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
+architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "ResNeXt101" "EfficientNetB7" )
 architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "InceptionV3" )
+architectures=( "InceptionV3" "InceptionResNetV2" )
 n_fc_layersS=( "1" )
 n_fc_nodesS=( "1024" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
@@ -34,7 +34,7 @@ for target in "${targets[@]}"; do
 		elif [ $organ == "Musculoskeletal" ]; then
 			views=( "Spine" "Hips" "Knees" "FullBody" )
 		elif [ $organ == "PhysicalActivity" ]; then
-			views=( "FullWeek" "Walking" )
+			views=( "FullWeek" )
 		fi
 		for view in "${views[@]}"; do
 			if [ $organ == "Brain" ]; then
@@ -56,11 +56,7 @@ for target in "${targets[@]}"; do
 					transformations=( "Mixed" "Figure" "Skeleton" "Flesh" )
 				fi
 			elif [ $organ == "PhysicalActivity" ]; then
-				if [ $view == "FullWeek" ]; then
-					transformations=( "GramianAngularField1minDifference" "GramianAngularField30minDifference" "MarkovTransitionField1min" "RecurrencePlots1min" "RecurrencePlots30min" "GramianAngularField1minSummation" "GramianAngularField30minSummation" "MarkovTransitionField30min" "RecurrencePlots1minBinary" "RecurrencePlots30minBinary" )
-				elif [ $view == "Walking" ]; then
-					transformations=( "GramianAngularFieldDifference" "GramianAngularFieldSummation" "MarkovTransitionField" "RecurrencePlots" "RecurrencePlotsBinary" )
-				fi
+				transformations=( "GramianAngularField1minDifference" "GramianAngularField1minSummation" "MarkovTransitionField1min" "RecurrencePlots1min" )
 			fi
 			for transformation in "${transformations[@]}"; do
 				for architecture in "${architectures[@]}"; do
@@ -80,12 +76,12 @@ for target in "${targets[@]}"; do
 													# time as a function of the dataset
 													if [ $organ == "Arterial" ]; then
 														time=10 # 9k samples
-													elif [ $organ == "Brain" ] || [ $organ == "Heart" ] || [ $organ == "Abdomen" ] || [ $organ == "Musculoskeletal" ]; then
+													elif [ $organ == "Brain" ] || [ $organ == "Heart" ] || [ $organ == "Abdomen" ]; then
 														time=25 #45k samples
-													elif [ $organ == "musculoskeletal" ]; then
-														time=30 #45k samples
-													elif [ $organ == "Eyes" ]; then
-														time=150 #90k samples
+													elif [ $organ == "Musculoskeletal" ]; then
+														time=40 #45k samples
+													elif [ $organ == "Eyes" ] || [ $organ == "PhysicalActivity" ]; then
+														time=150 #90-100k samples
 													fi
 													# double the time for datasets for which each image is available for both the left and the right side
 													if [ $organ == "Eyes" ] || [ $organ == "Arterial" ] || [ $view == "Hips" ] || [ $view == "Knees" ]; then

@@ -2,10 +2,10 @@
 regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" )
-#architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "EfficientNetB7" )
+organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
+#architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "ResNeXt101" "EfficientNetB7" )
 #architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "InceptionV3" )
+architectures=( "InceptionV3" "InceptionResNetV2" )
 n_fc_layersS=( "1" )
 n_fc_nodesS=( "1024" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
@@ -34,7 +34,7 @@ for target in "${targets[@]}"; do
 		elif [ $organ == "Musculoskeletal" ]; then
 			views=( "Spine" "Hips" "Knees" "FullBody" )
 		elif [ $organ == "PhysicalActivity" ]; then
-			views=( "FullWeek" "Walking" )
+			views=( "FullWeek" )
 		fi
 		for view in "${views[@]}"; do
 			if [ $organ == "Brain" ]; then
@@ -56,11 +56,7 @@ for target in "${targets[@]}"; do
 					transformations=( "Mixed" "Figure" "Skeleton" "Flesh" )
 				fi
 			elif [ $organ == "PhysicalActivity" ]; then
-				if [ $view == "FullWeek" ]; then
-					transformations=( "GramianAngularField1minDifference" "GramianAngularField30minDifference" "MarkovTransitionField1min" "RecurrencePlots1min" "RecurrencePlots30min" "GramianAngularField1minSummation" "GramianAngularField30minSummation" "MarkovTransitionField30min" "RecurrencePlots1minBinary" "RecurrencePlots30minBinary" )
-				elif [ $view == "Walking" ]; then
-					transformations=( "GramianAngularFieldDifference" "GramianAngularFieldSummation" "MarkovTransitionField" "RecurrencePlots" "RecurrencePlotsBinary" )
-				fi
+				transformations=( "GramianAngularField1minDifference" "GramianAngularField1minSummation" "MarkovTransitionField1min" "RecurrencePlots1min" )
 			fi
 			for transformation in "${transformations[@]}"; do
 				for architecture in "${architectures[@]}"; do
