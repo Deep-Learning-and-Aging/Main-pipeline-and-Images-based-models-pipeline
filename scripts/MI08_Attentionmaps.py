@@ -6,15 +6,15 @@ from MI_Classes import AttentionMaps
 # Options
 # Use a small subset of the data VS. run the actual full data pipeline to get accurate results
 # /!\ if True, path to save weights will be automatically modified to avoid rewriting them
-debug_mode = True
+debug_mode = False
 
 # Default parameters
 if len(sys.argv) != 5:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Eyes')  # organ
-    sys.argv.append('Fundus')  # view
+    sys.argv.append('Abdomen')  # organ
+    sys.argv.append('Liver')  # view
     sys.argv.append('Raw')  # transformation
 
 # Generate results

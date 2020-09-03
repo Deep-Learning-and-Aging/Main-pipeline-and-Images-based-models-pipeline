@@ -52,7 +52,7 @@ from GPUtil import GPUtil
 import tensorflow as tf
 # keras
 from keras_preprocessing.image import ImageDataGenerator, Iterator
-from keras_preprocessing.image.utils import load_img, img_to_array
+from keras_preprocessing.image.utils import load_img, img_to_array, array_to_img
 from tensorflow.keras.utils import Sequence
 from tensorflow.keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
 from tensorflow.keras.models import Model, Sequential
@@ -66,6 +66,7 @@ from tensorflow_addons.metrics import RSquare, F1Score
 
 # Plots
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 from PIL import Image
 import seaborn as sns
 from bioinfokit import visuz
@@ -73,7 +74,6 @@ from bioinfokit import visuz
 # Model's attention
 from keract import get_activations, get_gradients_of_activations
 from scipy.ndimage.interpolation import zoom
-from vis.utils import utils
 
 # Necessary to define MyCSVLogger
 import collections
@@ -1008,7 +1008,6 @@ class DeepLearning(Metrics):
         
         # Model
         self.model = None
-
     
     @staticmethod
     def _append_ext(fn):
@@ -1655,11 +1654,6 @@ class PredictionsMerge(Hyperparameters):
                     for var in ['id', 'outer_fold']:
                         prediction[var] = prediction[var].apply(str)
                     prediction.rename(columns={'pred': 'pred_' + version}, inplace=True)
-                    #TODO debug
-                    if len(prediction.index) > len(prediction['id'].unique()):
-                        print('WOWOWOWOWOW\n\n\n\n\n\n TEMPORARY fix')
-                        prediction = prediction[prediction['id'] != 'nan']
-                    #end TODO
                     # merge data frames
                     if Predictions_subgroup is None:
                         Predictions_subgroup = prediction
@@ -1670,10 +1664,6 @@ class PredictionsMerge(Hyperparameters):
                         prediction.drop(['outer_fold'], axis=1, inplace=True)
                         # not supported for panda version > 0.23.4 for now
                         Predictions_subgroup = Predictions_subgroup.merge(prediction, how='outer', on=['id'])
-                    
-                    #TODO debug below
-                    if len(Predictions_subgroup.index) > len(Predictions_subgroup['id'].unique()):
-                        print('PB with subgroup! \n\n\n\n\n\n')
             
             # merge group predictions data frames
             if self.fold != 'train':
@@ -1690,10 +1680,6 @@ class PredictionsMerge(Hyperparameters):
                 print('Predictions_df\'s shape: ' + str(self.Predictions_df.shape))
                 # garbage collector
                 gc.collect()
-            
-            #TODO debug below
-            if len(self.Predictions_df.index) > len(self.Predictions_df['id'].unique()):
-                print('PB with PRED! \n\n\n\n\n\n')
         
         # Merge with the previously merged predictions
         if (self.Predictions_df_previous is not None) & (self.Predictions_df is not None):
@@ -3210,8 +3196,7 @@ class AttentionMaps(DeepLearning):
         DeepLearning.__init__(self, target, organ, view, transformation, 'InceptionResNetV2', '1', '1024',
                               'Adam', '0.0001', '0.1', '0.5', '1.0', False)
         # Parameters
-        if self.organ + '_' + self.view in self.left_right_organs_views:
-            self.leftright = True
+        self.leftright = True if self.organ + '_' + self.view in self.left_right_organs_views else False
         self.parameters = None
         self.image_width = None
         self.image_height = None
@@ -3224,7 +3209,6 @@ class AttentionMaps(DeepLearning):
         self.Residuals = None
         self.df_to_plot = None
         self.df_outer_fold = None
-        self.penultimate_layer_idx = None
         self.images = None
         self.VISUALIZATION_FILTERS = {}
         self.plot_title = None
@@ -3241,6 +3225,7 @@ class AttentionMaps(DeepLearning):
                                                           'Xception': 'block14_sepconv2_act', 'InceptionV3': 'mixed10',
                                                           'InceptionResNetV2': 'conv_7b_ac',
                                                           'EfficientNetB7': 'top_activation'}
+        self.last_conv_layer = None
 
     def _select_best_model(self):
         # Pick the best model based on the performances
@@ -3279,25 +3264,24 @@ class AttentionMaps(DeepLearning):
         
         # Sex
         dict_sexes_to_values = {'Male': 1, 'Female': 0}
-        for sex in ['Male']: #, 'Female']:
+        for sex in ['Male', 'Female']:
             print('Sex: ' + sex)
             Residuals_sex = self.Residuals[self.Residuals['Sex'] == dict_sexes_to_values[sex]]
             Residuals_sex['sex'] = sex
             
             # Age category
-            for age_category in ['young']: #, 'middle', 'old']:
+            for age_category in ['young', 'middle', 'old']:
                 print('Age category: ' + age_category)
                 if age_category == 'young':
-                    Residuals_age = Residuals_sex[Residuals_sex['Age'] <= Residuals_sex['Age'].min() + 3]
+                    Residuals_age = Residuals_sex[Residuals_sex['Age'] <= Residuals_sex['Age'].min() + 10]
                 elif age_category == 'middle':
-                    Residuals_age = Residuals_sex[
-                        Residuals_sex['Age'].astype(int) == int(Residuals_sex['Age'].median())]
+                    Residuals_age = Residuals_sex[(Residuals_sex['Age'] - Residuals_sex['Age'].median()).abs() < 5]
                 else:
-                    Residuals_age = Residuals_sex[Residuals_sex['Age'] >= Residuals_sex['Age'].max() - 3]
+                    Residuals_age = Residuals_sex[Residuals_sex['Age'] >= Residuals_sex['Age'].max() - 10]
                 Residuals_age['age_category'] = age_category
                 
                 # Aging rate
-                for aging_rate in ['accelerated']: #, 'normal', 'decelerated']:
+                for aging_rate in ['accelerated', 'normal', 'decelerated']:
                     print('Aging rate: ' + aging_rate)
                     Residuals_ar = Residuals_age
                     if aging_rate == 'accelerated':
@@ -3338,8 +3322,8 @@ class AttentionMaps(DeepLearning):
         self._generate_architecture()
         self.model.compile(optimizer=self.optimizers[self.optimizer](lr=self.learning_rate, clipnorm=1.0),
                            loss=self.loss_function, metrics=self.metrics)
-        self.penultimate_layer_idx = utils.find_layer_idx(
-            self.model, self.dict_architecture_to_last_conv_layer_name[self.parameters['architecture']])
+        
+        self.last_conv_layer = self.dict_architecture_to_last_conv_layer_name[self.parameters['architecture']]
         self._format_residuals()
         self._select_representative_samples()
     
@@ -3349,13 +3333,32 @@ class AttentionMaps(DeepLearning):
         if self.leftright:
             self.n_images *= 2
         
-        # generate the data generators
-        self.generator = \
-            MyImageDataGenerator(target=self.target, organ=self.organ, view=self.view, data_features=self.df_outer_fold,
-                                 n_samples_per_subepoch=self.n_samples_per_subepoch, batch_size=self.batch_size,
-                                 training_mode=False, side_predictors=self.side_predictors, dir_images=self.dir_images,
-                                 images_width=self.image_width, images_height=self.image_height,
-                                 data_augmentation=False, data_augmentation_factor=None, seed=self.seed)
+        # Generate the data generator(s)
+        self.n_images_batch = self.n_images // self.batch_size * self.batch_size
+        self.n_samples_batch = self.n_images_batch // 2 if self.leftright else self.n_images_batch
+        self.df_batch = self.df_outer_fold.iloc[:self.n_samples_batch, :]
+        if self.n_images_batch > 0:
+            self.generator_batch = \
+                MyImageDataGenerator(target=self.target, organ=self.organ, view=self.view,
+                                     data_features=self.df_batch, n_samples_per_subepoch=None,
+                                     batch_size=self.batch_size, training_mode=False,
+                                     side_predictors=self.side_predictors, dir_images=self.dir_images,
+                                     images_width=self.image_width, images_height=self.image_height,
+                                     data_augmentation=False, data_augmentation_factor=None, seed=self.seed)
+        else:
+            self.generator_batch = None
+        self.n_samples_leftovers = self.n_images % self.batch_size
+        self.df_leftovers = self.df_outer_fold.iloc[self.n_samples_batch:, :]
+        if self.n_samples_leftovers > 0:
+            self.generator_leftovers = \
+                MyImageDataGenerator(target=self.target, organ=self.organ, view=self.view,
+                                     data_features=self.df_leftovers, n_samples_per_subepoch=None,
+                                     batch_size=self.n_samples_leftovers, training_mode=False,
+                                     side_predictors=self.side_predictors, dir_images=self.dir_images,
+                                     images_width=self.image_width, images_height=self.image_height,
+                                     data_augmentation=False, data_augmentation_factor=None, seed=self.seed)
+        else:
+            self.generator_leftovers = None
         
         # load the weights for the fold
         self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
@@ -3373,32 +3376,45 @@ class AttentionMaps(DeepLearning):
         saliency = np.dstack((r_ch, g_ch, b_ch, a_ch))
         return saliency
     
-    def _generate_maps_for_one_batch(self, i):
-        print('Generating maps for batch ' + str(i))
-        n_images_batch = np.min([self.batch_size, self.n_images - i * self.batch_size])
-        Xs, y = self.generator.__getitem__(i)
+    @staticmethod
+    def _process_gradcam(gradcam):
+        # rescale to 0-255
+        gradcam = np.maximum(gradcam, 0) / np.max(gradcam)
+        gradcam = np.uint8(255 * gradcam)
+        # Convert to rgb
+        jet = cm.get_cmap("jet")
+        jet_colors = jet(np.arange(256))[:, :3]
+        jet_gradcam = jet_colors[gradcam]
+        jet_gradcam = array_to_img(jet_gradcam)
+        jet_gradcam = jet_gradcam.resize((gradcam.shape[1], gradcam.shape[0]))
+        jet_gradcam = img_to_array(jet_gradcam)
+        return jet_gradcam
+    
+    def _generate_maps_for_one_batch(self, df, Xs, y):
         # Generate saliency
         saliencies = get_gradients_of_activations(self.model, Xs, y, layer_name='input_1')['input_1'].sum(axis=3)
         # Generate gradam
-        weights = get_gradients_of_activations(self.model, Xs, y, layer_name='mixed10', )['mixed10']
+        weights = get_gradients_of_activations(self.model, Xs, y, layer_name=self.last_conv_layer,
+                                               )[self.last_conv_layer]
         weights = weights.mean(axis=(1, 2))
         weights /= weights.max() + 1e-7  # for numerical stability
-        activations = get_activations(self.model, Xs, layer_name='mixed10')['mixed10']
+        activations = get_activations(self.model, Xs, layer_name=self.last_conv_layer)[self.last_conv_layer]
         gradcams = np.einsum('il,ijkl->ijk', weights, activations)
         # Expand the gradcam map to match the dimension of the input
         zoom_factor = [1] + list(np.array(Xs[0].shape[1:3]) / np.array(gradcams.shape[1:]))
         gradcams = zoom(gradcams, zoom_factor)
         
         # Save single images and filters
-        for j in range(n_images_batch):
+        for j in range(len(y)):
             # select sample
             if self.leftright:
-                idx = i * self.batch_size + j//2
+                idx = j//2
                 side = 'right' if j % 2 == 0 else 'left'
             else:
-                idx = i * self.batch_size + j
-            path = self.df_outer_fold['save_title'].values[idx]
-            ID = self.df_outer_fold['id'].values[idx]
+                idx = j
+                side = None
+            path = df['save_title'].values[idx]
+            ID = df['id'].values[idx]
             # create directory tree if necessary
             if self.leftright:
                 path = path.replace('sideplaceholder', side)
@@ -3421,6 +3437,7 @@ class AttentionMaps(DeepLearning):
             np.save(path.replace('imagetypeplaceholder', 'Saliency') + '.npy', saliency)
             # Save gradcam
             gradcam = gradcams[j, :, :]
+            gradcam = self._process_gradcam(gradcam)
             np.save(path.replace('imagetypeplaceholder', 'Gradcam') + '.npy', gradcam)
     
     def generate_plots(self):
@@ -3428,5 +3445,14 @@ class AttentionMaps(DeepLearning):
             print('Generate attention maps for outer_fold ' + outer_fold)
             gc.collect()
             self._preprocess_for_outer_fold(outer_fold)
-            for i in range(math.ceil(self.n_images / self.batch_size)):
-                self._generate_maps_for_one_batch(i)
+            n_samples_per_batch = self.batch_size // 2 if self.leftright else self.batch_size
+            for i in range(self.n_images // self.batch_size):
+                print('Generating maps for batch ' + str(i))
+                Xs, y = self.generator_batch.__getitem__(i)
+                df = self.df_batch.iloc[n_samples_per_batch * i: n_samples_per_batch * (i + 1), :]
+                self._generate_maps_for_one_batch(df, Xs, y)
+            if self.n_samples_leftovers > 0:
+                print('Generating maps for leftovers')
+                Xs, y = self.generator_leftovers.__getitem__(0)
+                self._generate_maps_for_one_batch(self.df_leftovers, Xs, y)
+
