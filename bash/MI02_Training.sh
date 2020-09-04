@@ -3,6 +3,7 @@
 #SBATCH -p gpu
 #SBATCH --gres=gpu:1
 #SBATCH --open-mode=truncate
+#SBATCH -x compute-g-16-175,compute-g-16-176,compute-g-16-197
 
 module load gcc/6.2.0
 module load python/3.6.0
