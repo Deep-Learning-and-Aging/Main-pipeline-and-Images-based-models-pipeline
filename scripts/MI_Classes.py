@@ -1737,13 +1737,12 @@ class PredictionsMerge(Hyperparameters):
 
 class PredictionsEids(Hyperparameters):
     
-    def __init__(self, target=None, fold=None, ensemble_models=None, debug_mode=None):
+    def __init__(self, target=None, fold=None, debug_mode=None):
         Hyperparameters.__init__(self)
         
         # Define dictionaries attributes for data, generators and predictions
         self.target = target
         self.fold = fold
-        self.ensemble_models = self.convert_string_to_boolean(ensemble_models)
         self.debug_mode = debug_mode
         self.Predictions = None
         self.Predictions_chunk = None
@@ -1756,27 +1755,12 @@ class PredictionsEids(Hyperparameters):
     
     def preprocessing(self):
         # Load predictions
-        if self.ensemble_models:
-            self.Predictions = pd.read_csv(
-                self.path_store + 'PREDICTIONS_withEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
-            cols_to_drop = [col for col in self.Predictions.columns.values if ('pred_' in col) & ('*' not in col)]
-            self.Predictions.drop(cols_to_drop, axis=1, inplace=True)
-        else:
-            self.Predictions = pd.read_csv(
-                self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
+        self.Predictions = pd.read_csv(
+            self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
         self.Predictions.drop(columns=['id'], inplace=True)
         self.Predictions['eid'] = self.Predictions['eid'].astype(str)
         self.Predictions.index.name = 'column_names'
         self.pred_versions = [col for col in self.Predictions.columns.values if 'pred_' in col]
-        
-        # Load previous eid predictions if available
-        mode = 'withEnsembles' if self.ensemble_models else 'withoutEnsembles'
-        path_eids_previous = self.path_store + 'PREDICTIONS_' + mode + '_eids_' + self.target + '_' + self.fold + '.csv'
-        if os.path.exists(path_eids_previous):
-            self.Predictions_eids_previous = pd.read_csv(path_eids_previous)
-            self.Predictions_eids_previous['eid'] = self.Predictions_eids_previous['eid'].astype(str)
-            self.pred_versions_previous = \
-                [col for col in self.Predictions_eids_previous.columns if 'pred_' in col]
         
         # Prepare target values on instance 0 as a reference
         target_0s = pd.read_csv(self.path_store + 'data-features_eids.csv', usecols=['eid', self.target])
@@ -1794,7 +1778,7 @@ class PredictionsEids(Hyperparameters):
         self.Predictions[self.target] = self.Predictions['target_0']
         self.Predictions.drop(columns=['target_0'], inplace=True)
         self.Predictions.index.name = 'column_names'
-        
+    
     def processing(self):
         if self.fold == 'train':
             # Prepare template to which each model will be appended
@@ -1840,28 +1824,6 @@ class PredictionsEids(Hyperparameters):
         self.Predictions_eids = self.Predictions_eids[self.id_vars + self.demographic_vars + self.pred_versions]
     
     def postprocessing(self):
-        # For ensemble models, append the new models to the non-ensemble models
-        if self.ensemble_models:
-            # Only keep columns that are not already in the previous dataframe
-            cols_to_keep = [col for col in self.Predictions.columns.values
-                            if any(s in col for s in ['pred_', 'outer_fold_'])]
-            self.Predictions_eids = self.Predictions_eids[cols_to_keep]
-            Predictions_withoutEnsembles = pd.read_csv(
-                self.path_store + 'PREDICTIONS_withoutEnsembles_eids_' + self.target + '_' + self.fold + '.csv')
-            for var in self.id_vars:
-                Predictions_withoutEnsembles[var] = Predictions_withoutEnsembles[var].astype(str)
-            Predictions_withoutEnsembles.set_index('id', drop=False, inplace=True)
-            # Reorder the rows
-            self.Predictions_eids.index = self.Predictions_eids.index + '_*'
-            self.Predictions_eids = self.Predictions_eids.loc[Predictions_withoutEnsembles.index.values, :]
-            # Merge the non ensemble and the ensemble models
-            self.Predictions_eids = pd.concat([Predictions_withoutEnsembles, self.Predictions_eids], axis=1)
-
-            # Re-order the columns
-            all_pred_versions = [col for col in self.Predictions_eids.columns.values if 'pred_' in col]
-            all_pred_versions.sort()
-            self.Predictions_eids = self.Predictions_eids[self.id_vars + self.demographic_vars + all_pred_versions]
-        
         # Displaying the R2s
         versions = [col.replace('pred_', '') for col in self.Predictions_eids.columns if 'pred_' in col]
         r2s = []
@@ -1885,9 +1847,8 @@ class PredictionsEids(Hyperparameters):
                 Predictions_version.to_csv(path_save, index=False)
     
     def save_predictions(self):
-        mode = 'withEnsembles' if self.ensemble_models else 'withoutEnsembles'
-        self.Predictions_eids.to_csv(self.path_store + 'PREDICTIONS_' + mode + '_eids_' + self.target + '_'
-                                     + self.fold + '.csv', index=False)
+        self.Predictions_eids.to_csv(self.path_store + 'PREDICTIONS_withoutEnsembles_eids_' + self.target + '_' +
+                                     self.fold + '.csv', index=False)
         # Generate and save files for every single model
         self._generate_single_model_predictions()
 
@@ -2072,6 +2033,7 @@ class PerformancesMerge(Metrics):
         self.pred_type = pred_type
         self.ensemble_models = self.convert_string_to_boolean(ensemble_models)
         self.names_metrics = self.dict_metrics_names[self.dict_prediction_types[target]]
+        self.main_metric_name = self.dict_main_metrics_names[target]
         # list the models that need to be merged
         self.list_models = glob.glob(self.path_store + 'Performances_' + pred_type + '_' + target + '_*_' + fold +
                                      '_str.csv')
@@ -2195,13 +2157,14 @@ class PerformancesMerge(Metrics):
         
         # Ranking, printing and saving
         self.Performances_alphabetical = self.Performances.sort_values(by='version')
+        cols_to_print = ['version', self.main_metric_name + '_str_all']
         print('Performances of the models ranked by models\'names:')
-        print(self.Performances_alphabetical)
+        print(self.Performances_alphabetical[cols_to_print])
         sort_by = self.dict_main_metrics_names[self.target] + '_all'
         sort_ascending = self.main_metrics_modes[self.dict_main_metrics_names[self.target]] == 'min'
         self.Performances_ranked = self.Performances.sort_values(by=sort_by, ascending=sort_ascending)
         print('Performances of the models ranked by the performance on the main metric on all the samples:')
-        print(self.Performances_ranked)
+        print(self.Performances_ranked[cols_to_print])
     
     def save_performances(self):
         name_extension = 'withEnsembles' if self.ensemble_models else 'withoutEnsembles'
@@ -2465,7 +2428,7 @@ class EnsemblesPredictions(Metrics):
         self.instances_names_to_numbers = {'01': ['0', '1'], '1.5x': ['1.5', '1.51', '1.52', '1.53', '1.54'],
                                            '23': ['2', '3'], '*': ['*']}
         self.INSTANCES_DATASETS = {
-            '01': ['Anthropometry', 'Heel', 'Hand', 'Biochemistry', 'ImmuneSystem'],
+            '01': ['Eyes', 'Hearing', 'Lungs', 'Arterial', 'Musculoskeletal', 'Biochemistry', 'ImmuneSystem'],
             '1.5x': ['PhysicalActivity'],
             '23': ['Brain', 'Arterial', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody', 'Anthropometry',
                    'Heel', 'Hand', 'Biochemistry'],
@@ -2893,6 +2856,8 @@ class SelectBest(Metrics):
                         + fold + '.csv'
             self.PREDICTIONS[fold].to_csv(path_pred, index=False)
             self.RESIDUALS[fold].to_csv(path_res, index=False)
+            self.PERFORMANCES[fold].sort_values(by=self.dict_main_metrics_names[self.target] + '_all', ascending=False,
+                                                inplace=True)
             self.PERFORMANCES[fold].to_csv(path_perf, index=False)
             Performances_alphabetical = self.PERFORMANCES[fold].sort_values(by='version')
             Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
@@ -3144,11 +3109,10 @@ class GWASPostprocessing(Hyperparameters):
         Heritabilities.columns = ['Organ', 'h2', 'h2_sd']
         # Fill the dataframe
         for organ in self.organs:
-            path = '../eo/MI08C_reml_' + self.target + '_' + organ + '_X.out'
+            path = '../eo/MI09C_reml_' + self.target + '_' + organ + '_X.out'
             if os.path.exists(path) and self._grep("h2g", path):
-                for line in open('../eo/MI08C_reml_' + self.target + '_' + organ + '_X.out', 'r'):
+                for line in open('../eo/MI09C_reml_' + self.target + '_' + organ + '_X.out', 'r'):
                     if line.find('h2g (1,1): ') > -1:
-                        print(line)
                         h2 = float(line.split()[2])
                         h2_sd = float(line.split()[-1][1:-2])
                         Heritabilities.loc[organ, :] = [organ, h2, h2_sd]
@@ -3169,8 +3133,8 @@ class GWASPostprocessing(Hyperparameters):
         # Fill the dataframe
         for counter, organ1 in enumerate(self.organs):
             for organ2 in self.organs[(counter + 1):]:
-                if os.path.exists('../eo/MI08D_' + self.target + '_' + organ1 + '_' + organ2 + '.out'):
-                    for line in open('../eo/MI08D_' + self.target + '_' + organ1 + '_' + organ2 + '.out', 'r'):
+                if os.path.exists('../eo/MI09D_' + self.target + '_' + organ1 + '_' + organ2 + '.out'):
+                    for line in open('../eo/MI09D_' + self.target + '_' + organ1 + '_' + organ2 + '.out', 'r'):
                         if line.find('gen corr (1,2):') > -1:
                             corr = float(line.split()[3])
                             corr_sd = float(line.split()[-1][1:-2])
@@ -3299,9 +3263,10 @@ class AttentionMaps(DeepLearning):
                         df_to_plot = df_to_plot.append(Residuals_ar)
         
         # Postprocessing
-        pred_age = (df_to_plot['Age'] - df_to_plot['res']).round(1).astype(str)
-        df_to_plot['plot_title'] = 'Age = ' + df_to_plot['Age'].round(1).astype(str) + ', Predicted Age = ' + pred_age \
-                                   + ', Sex = ' + df_to_plot['sex'] + ', sample ' + df_to_plot['sample'].astype(str)
+        df_to_plot['Biological_Age'] = df_to_plot['Age'] - df_to_plot['res']
+        df_to_plot['plot_title'] = 'Age = ' + df_to_plot['Age'].round(1).astype(str) + ', Predicted Age = ' + \
+                                   df_to_plot['Biological_Age'].round(1).astype(str) + ', Sex = ' + df_to_plot['sex'] \
+                                   + ', sample ' + df_to_plot['sample'].astype(str)
         activations_path = '../figures/Attention_Maps/' + self.target + '/' + self.organ + '/' + self.view + '/' + \
                            self.transformation + '/' + df_to_plot['sex'] + '/' + df_to_plot['age_category'] + '/' + \
                            df_to_plot['aging_rate']
@@ -3313,7 +3278,7 @@ class AttentionMaps(DeepLearning):
             file_names += '_sideplaceholder'
         df_to_plot['save_title'] = activations_path + file_names
         path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ + '_' + self.view + \
-                    '_' + self.transformation
+                    '_' + self.transformation + '.csv'
         df_to_plot.to_csv(path_save, index=False)
         self.df_to_plot = df_to_plot
     
@@ -3455,4 +3420,3 @@ class AttentionMaps(DeepLearning):
                 print('Generating maps for leftovers')
                 Xs, y = self.generator_leftovers.__getitem__(0)
                 self._generate_maps_for_one_batch(self.df_leftovers, Xs, y)
-

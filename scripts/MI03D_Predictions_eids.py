@@ -6,16 +6,14 @@ from MI_Classes import PredictionsEids
 debug_mode = False
 
 # Default parameters
-if len(sys.argv) != 4:
+if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
     sys.argv.append('test')  # fold
-    sys.argv.append('True')  # ensemble_models. Set False for MI03C and True for MI05B
 
 # Compute results
-Predictions_Eids = PredictionsEids(target=sys.argv[1], fold=sys.argv[2], ensemble_models=sys.argv[3],
-                                   debug_mode=debug_mode)
+Predictions_Eids = PredictionsEids(target=sys.argv[1], fold=sys.argv[2], debug_mode=debug_mode)
 Predictions_Eids.preprocessing()
 Predictions_Eids.processing()
 Predictions_Eids.postprocessing()

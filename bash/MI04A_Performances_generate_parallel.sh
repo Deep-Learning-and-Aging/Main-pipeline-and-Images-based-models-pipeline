@@ -148,7 +148,7 @@ for organs_group in "${organs_groups[@]}"; do
 						transformations=( "TimeSeries" )
 					elif [ $organ == "PhysicalActivity" ]; then
 						if [ $view == "FullWeek" ]; then
-							transformations=( "Acceleration" "TimeSeriesFeatures" "TimeSeriesFeaturesAndScalars" )
+							transformations=( "Acceleration" "TimeSeriesFeatures" )
 						elif [ $view == "Walking" ]; then
 							transformations=( "3D" )
 						fi
@@ -207,7 +207,7 @@ for organs_group in "${organs_groups[@]}"; do
 								#if regenerate_performances option is on or if the performances have not yet been generated, run the job
 								if ! test -f "../data/Performances_${version}.csv" || $regenerate_performances; then
 									echo "Submitting job for ${version}"
-									ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI04A05C_Performances_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $fold $pred_type)
+									ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI04A05B_Performances_generate.sh $target $organ $view $transformation $architecture $n_fc_layers $n_fc_nodes $optimizer $learning_rate $weight_decay $dropout_rate $data_augmentation_factor $fold $pred_type)
 									IDs+=($ID)
 									#else
 									#	echo Performance for $version have already been generated.

@@ -2,7 +2,7 @@
 regenerate_data=false
 targets=( "Age" )
 time=400
-organs_to_run=( "Hearing" "Lungs" "ArterialPulseWaveAnalysis" "Biochemistry" "BiochemistryUrine" "BiochemistryBlood" "ImmuneSystem" )
+organs_to_run=( "*" "Hearing" "Lungs" "ArterialPulseWaveAnalysis" "Biochemistry" "BiochemistryUrine" "BiochemistryBlood" "ImmuneSystem" )
 
 #loop through the jobs to submit
 declare -a IDs=()

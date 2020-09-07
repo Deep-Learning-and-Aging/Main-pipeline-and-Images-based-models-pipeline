@@ -1,7 +1,7 @@
 #!/bin/bash
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
-memory=16G
+memory=32G
 
 #loop through the jobs to submit
 declare -a IDs=()
@@ -11,7 +11,6 @@ for target in "${targets[@]}"; do
 			views=( "MRI" )
 		elif [ $organ == "Eyes" ]; then
 			views=( "Fundus" "OCT" )
-			views=( "OCT" )
 		elif [ $organ == "Arterial" ]; then
 			views=( "Carotids" )
 		elif [ $organ == "Heart" ]; then
@@ -27,9 +26,9 @@ for target in "${targets[@]}"; do
 		fi
          for view in "${views[@]}"; do
 			 if [ $organ == "Eyes" ] || [ $organ == "Arterial" ] || [ $view == "Hips" ] || [ $view == "Knees" ]; then
-				 time=60
+				 time=180
 			 else
-				 time=30
+				 time=90
 			 fi
 			 if [ $organ == "Brain" ]; then
 				 transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )
@@ -59,7 +58,7 @@ for target in "${targets[@]}"; do
 				 job_name="$version.job"
 				 out_file="../eo/$version.out"
 				 err_file="../eo/$version.err"
-				 if ! test -f "$out_file" || ( ! grep -q "Done." "$out_file" ); then
+				 if ( ! test -f "$out_file" || ( ! grep -q "Done." "$out_file" ) ) && ( [ $(sacct -u $USER --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $job_name | egrep 'PENDING|RUNNING' | wc -l) -eq 0 ] ); then
 					 echo $version
 					 ID=$(sbatch --dependency=$1 --error=$err_file --output=$out_file --job-name=$job_name --mem-per-cpu=$memory -t $time MI08_Attentionmaps.sh $target $organ $view $transformation)
 					 IDs+=($ID)
