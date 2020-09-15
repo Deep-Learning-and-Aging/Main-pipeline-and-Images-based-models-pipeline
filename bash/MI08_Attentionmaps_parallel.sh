@@ -26,9 +26,9 @@ for target in "${targets[@]}"; do
 		fi
          for view in "${views[@]}"; do
 			 if [ $organ == "Eyes" ] || [ $organ == "Arterial" ] || [ $view == "Hips" ] || [ $view == "Knees" ]; then
-				 time=180
+				 time=300
 			 else
-				 time=90
+				 time=150
 			 fi
 			 if [ $organ == "Brain" ]; then
 				 transformations=( "SagittalRaw" "SagittalReference" "CoronalRaw" "CoronalReference" "TransverseRaw" "TransverseReference" )

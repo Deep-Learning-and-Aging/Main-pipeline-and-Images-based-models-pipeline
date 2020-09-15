@@ -2,7 +2,7 @@
 regenerate_data=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
-organs=( "*" "Brain" "BrainCognitive" "BrainMRI" "Eyes" "EyesFundus" "EyesOCT" "Hearing" "Lungs" "Arterial" "ArterialPulseWaveAnalysis" "ArterialCarotids" "Heart" "HeartECG" "HeartMRI" "Abdomen" "AbdomenLiver" "AbdomenPancreas" "Musculoskeletal" "MusculoskeletalSpine" "MusculoskeletalHips" "MusculoskeletalKnees" "MusculoskeletalFullBody" "MusculoskeletalScalars" "PhysicalActivity" "Biochemistry" "BiochemistryUrine" "BiochemistryBlood" "ImmuneSystem" )
+organs=( "*" "*instances01" "*instances1.5x" "*instances23" "Brain" "BrainCognitive" "BrainMRI" "Eyes" "EyesFundus" "EyesOCT" "Hearing" "Lungs" "Arterial" "ArterialPulseWaveAnalysis" "ArterialCarotids" "Heart" "HeartECG" "HeartMRI" "Abdomen" "AbdomenLiver" "AbdomenPancreas" "Musculoskeletal" "MusculoskeletalSpine" "MusculoskeletalHips" "MusculoskeletalKnees" "MusculoskeletalFullBody" "MusculoskeletalScalars" "PhysicalActivity" "Biochemistry" "BiochemistryUrine" "BiochemistryBlood" "ImmuneSystem" )
 chromosomesS=( "autosome" "X" )
 
 #loop through the jobs to submit
@@ -31,21 +31,21 @@ for target in "${targets[@]}"; do
 				else
 					partition=long
 				fi
-				version=MI09C_${analysis}_${target}_${organ}_${chromosomes}
-				job_name="$version.job"
-				out_file="../eo/$version.out"
-				err_file="../eo/$version.err"
+				version=MI09C_"${analysis}"_"${target}"_"${organ}"_"${chromosomes}"
+				job_name="${version}.job"
+				out_file="../eo/${version}.out"
+				err_file="../eo/${version}.err"
 				path_results="../data/GWAS_"${target}"_"${organ}"_"${chromosomes}".stats"
 				to_run=true
-				if ! $regenerate_data && ( ( [ $analysis == "lmm" ] && test -f "${path_results}" ) || ( [ $analysis == "reml" ] && test -f "${out_file}" && grep -q "h2g" "${out_file}" ) ) ; then
+				if ! $regenerate_data && ( ( [ $analysis == "lmm" ] && ( test -f "${path_results}" || grep -q "ERROR: Heritability estimate is close to" "${err_file}" ) ) || ( [ $analysis == "reml" ] && test -f "${out_file}" && grep -q "h2g" "${out_file}" ) ) ; then
 					to_run=false
 				fi
-				if [ $(sacct -u al311 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $job_name | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u cp179 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $job_name | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u jp379 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $job_name | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u sc646 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $job_name | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u sd375 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $job_name | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u mj209 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep $job_name | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ]; then
+				if [ $(sacct -u al311 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep `printf '%q' "${job_name}"` | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u cp179 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep `printf '%q' "${job_name}"` | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u jp379 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep `printf '%q' "${job_name}"` | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u sc646 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep `printf '%q' "${job_name}"` | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u sd375 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep `printf '%q' "${job_name}"` | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ] || [ $(sacct -u mj209 --format=JobID,JobName%150,MaxRSS,NNodes,Elapsed,State | grep `printf '%q' "${job_name}"` | egrep 'PENDING|RUNNING' | wc -l) -ne 0 ]; then
 					to_run=false
 				fi
 				if $to_run; then
 					echo $version
-					ID=$(sbatch --dependency=$1 --parsable -p $partition -t $time -c 10 --mem-per-cpu $mem_per_cpu --error=$err_file --output=$out_file --job-name=$job_name MI09CD_GWAS_bolt.sh $target $organ $chromosomes $analysis)
+					ID=$(sbatch --dependency=$1 --parsable -p $partition -t $time -c 10 --mem-per-cpu $mem_per_cpu --error=$err_file --output=$out_file --job-name=$job_name MI09CD_GWAS_bolt.sh "${target}" "${organ}" "${chromosomes}" "${analysis}")
 					IDs+=($ID)
 				fi
 			done

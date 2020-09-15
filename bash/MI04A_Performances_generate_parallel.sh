@@ -185,6 +185,17 @@ for organs_group in "${organs_groups[@]}"; do
 					echo "organs_group ${organs_group} is not among Scalars, TimeSeries, Images, or Videos"
 				fi
 				for transformation in "${transformations[@]}"; do
+					if [ ${organs_group} == "TimeSeries" ] && [ $organ == "PhysicalActivity" ]; then
+						if [ $view == "FullWeek" ]; then
+							if [ $transformation == "Acceleration" ]; then
+								n_fc_layers="4"
+							elif [ $transformation == "TimeSeriesFeatures" ]; then
+								n_fc_layers="9"
+							fi
+						elif [ $view == "Walking" ]; then
+							n_fc_layers="8"
+						fi
+					fi
 					for architecture in "${architectures[@]}"; do
 						for fold in "${folds[@]}"; do
 							for pred_type in "${pred_types[@]}"; do

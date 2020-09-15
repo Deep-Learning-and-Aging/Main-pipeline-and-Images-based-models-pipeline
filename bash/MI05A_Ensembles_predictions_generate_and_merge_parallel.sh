@@ -2,7 +2,6 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 pred_types=( "instances" "eids" )
-#pred_types=( "instances" )
 memory=20G
 n_cpu_cores=10
 time=600

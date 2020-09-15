@@ -99,7 +99,7 @@ class Hyperparameters:
         random.seed(self.seed)
         
         # other parameters
-        self.path_store = '../data/'
+        self.path_data = '../data/'
         self.folds = ['train', 'val', 'test']
         self.n_CV_outer_folds = 10
         self.outer_folds = [str(x) for x in list(range(self.n_CV_outer_folds))]
@@ -157,6 +157,13 @@ class Hyperparameters:
         self.organsviews_not_to_augment = []
         self.organs_instances23 = ['Brain', 'Eyes', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal',
                                    'PhysicalActivity']
+        self.organs_XWAS = \
+            ['*', '*instances01', '*instances1.5x', '*instances23', 'Brain', 'BrainCognitive', 'BrainMRI', 'Eyes',
+             'EyesFundus', 'EyesOCT', 'Hearing', 'Lungs', 'Arterial', 'ArterialPulseWaveAnalysis', 'ArterialCarotids',
+             'Heart', 'HeartECG', 'HeartMRI', 'Abdomen', 'AbdomenLiver', 'AbdomenPancreas', 'Musculoskeletal',
+             'MusculoskeletalSpine', 'MusculoskeletalHips', 'MusculoskeletalKnees', 'MusculoskeletalFullBody',
+             'MusculoskeletalScalars', 'PhysicalActivity', 'Biochemistry', 'BiochemistryUrine', 'BiochemistryBlood',
+             'ImmuneSystem']
         
         # Others
         if '/Users/Alan/' in os.getcwd():
@@ -271,7 +278,7 @@ class PreprocessingMain(Hyperparameters):
         self.data_features_eids = None
     
     def _add_outer_folds(self):
-        outer_folds_split = pd.read_csv(self.path_store + 'All_eids.csv')
+        outer_folds_split = pd.read_csv(self.path_data + 'All_eids.csv')
         outer_folds_split.rename(columns={'fold': 'outer_fold'}, inplace=True)
         outer_folds_split['eid'] = outer_folds_split['eid'].astype('str')
         outer_folds_split['outer_fold'] = outer_folds_split['outer_fold'].astype('str')
@@ -422,8 +429,8 @@ class PreprocessingMain(Hyperparameters):
         self.data_features_eids['id'] = [ID.replace('_0', '_*') for ID in self.data_features_eids['id'].values]
     
     def save_data(self):
-        self.data_features.to_csv(self.path_store + 'data-features_instances.csv', index=False)
-        self.data_features_eids.to_csv(self.path_store + 'data-features_eids.csv', index=False)
+        self.data_features.to_csv(self.path_data + 'data-features_instances.csv', index=False)
+        self.data_features_eids.to_csv(self.path_data + 'data-features_eids.csv', index=False)
 
 
 class PreprocessingImagesIDs(Hyperparameters):
@@ -437,7 +444,7 @@ class PreprocessingImagesIDs(Hyperparameters):
         self.FOLDS_23_EIDS = None
     
     def _load_23_eids(self):
-        data_features = pd.read_csv(self.path_store + 'data-features_instances.csv')
+        data_features = pd.read_csv(self.path_data + 'data-features_instances.csv')
         images_eids = data_features['eid'][data_features['instance'].isin([2, 3])]
         self.images_eids = list(set(images_eids))
     
@@ -473,7 +480,7 @@ class PreprocessingImagesIDs(Hyperparameters):
     
     def _save_23_eids_folds(self):
         for outer_fold in self.outer_folds:
-            with open(self.path_store + 'instances23_eids_' + outer_fold + '.csv', 'w', newline='') as myfile:
+            with open(self.path_data + 'instances23_eids_' + outer_fold + '.csv', 'w', newline='') as myfile:
                 wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
                 wr.writerow(self.FOLDS_23_EIDS[outer_fold])
     
@@ -495,7 +502,7 @@ class PreprocessingFolds(Metrics):
         
         # Check if these folds have already been generated
         if not regenerate_data:
-            if len(glob.glob(self.path_store + 'data-features_' + organ + '_*_' + target + '_*.csv')) > 0:
+            if len(glob.glob(self.path_data + 'data-features_' + organ + '_*_' + target + '_*.csv')) > 0:
                 print("Error: The files already exist! Either change regenerate_data to True or delete the previous"
                       " version.")
                 sys.exit(1)
@@ -546,7 +553,7 @@ class PreprocessingFolds(Metrics):
         cols_data = self.id_vars + self.demographic_vars
         if self.image_quality_col is not None:
             cols_data.append(self.dict_image_quality_col[self.organ])
-        data = pd.read_csv(self.path_store + 'data-features_instances.csv', usecols=cols_data)
+        data = pd.read_csv(self.path_data + 'data-features_instances.csv', usecols=cols_data)
         data.rename(columns={self.dict_image_quality_col[self.organ]: 'Data_quality'}, inplace=True)
         for col_name in self.id_vars:
             data[col_name] = data[col_name].astype(str)
@@ -607,7 +614,7 @@ class PreprocessingFolds(Metrics):
                                   str(len(DF[fold].index)) + ' did not match the dataframe!')
                         
                         # save the data
-                        DF[fold].to_csv(self.path_store + 'data-features_' + self.organ + '_' + view + '_' +
+                        DF[fold].to_csv(self.path_data + 'data-features_' + self.organ + '_' + view + '_' +
                                          transformation + '_' + self.target + '_' + fold + '_' + outer_fold + '.csv',
                                          index=False)
                         print('For outer_fold ' + outer_fold + ', the ' + fold + ' fold has a sample size of ' +
@@ -1016,7 +1023,7 @@ class DeepLearning(Metrics):
     def _load_data_features(self):
         for fold in self.folds:
             self.DATA_FEATURES[fold] = pd.read_csv(
-                self.path_store + 'data-features_' + self.organ + '_' + self.view + '_' + self.transformation + '_' +
+                self.path_data + 'data-features_' + self.organ + '_' + self.view + '_' + self.transformation + '_' +
                 self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
             for col_name in self.id_vars:
                 self.DATA_FEATURES[fold][col_name] = self.DATA_FEATURES[fold][col_name].astype(str)
@@ -1241,11 +1248,11 @@ class Training(DeepLearning):
             self.metrics_names = self.dict_metrics_names_K[self.prediction_type]
         
         # Model
-        self.path_load_weights = self.path_store + 'model-weights_' + self.version + '.h5'
+        self.path_load_weights = self.path_data + 'model-weights_' + self.version + '.h5'
         if debug_mode:
-            self.path_save_weights = self.path_store + 'model-weights-debug.h5'
+            self.path_save_weights = self.path_data + 'model-weights-debug.h5'
         else:
-            self.path_save_weights = self.path_store + 'model-weights_' + self.version + '.h5'
+            self.path_save_weights = self.path_data + 'model-weights_' + self.version + '.h5'
         self.n_epochs_max = 100000
         self.callbacks = None
     
@@ -1311,7 +1318,7 @@ class Training(DeepLearning):
                 if update:
                     best_perf = perf
                     self.path_load_weights = \
-                        file.replace('../eo/', self.path_store).replace('MI02', 'model-weights').replace('.out', '.h5')
+                        file.replace('../eo/', self.path_data).replace('MI02', 'model-weights').replace('.out', '.h5')
             if best_perf not in [-np.Inf, np.Inf]:
                 print('Transfering the weights from: ' + self.path_load_weights + ', with ' + self.main_metric_name +
                       ' = ' + str(best_perf))
@@ -1329,7 +1336,7 @@ class Training(DeepLearning):
                     parameters_to_match['target'] = target_to_load
                     # load the ranked performances table to select the best performing model among the similar
                     # models available
-                    path_performances_to_load = self.path_store + 'PERFORMANCES_ranked_' + \
+                    path_performances_to_load = self.path_data + 'PERFORMANCES_ranked_' + \
                                                 parameters_to_match['target'] + '_' + 'val' + '.csv'
                     try:
                         Performances = pd.read_csv(path_performances_to_load)
@@ -1342,7 +1349,7 @@ class Training(DeepLearning):
                         Performances = Performances[Performances[parameter] == parameters_to_match[parameter]]
                     # if at least one model is similar enough, load weights from the best of them
                     if len(Performances.index) != 0:
-                        self.path_load_weights = self.path_store + 'model-weights_' + Performances['version'][0] + '.h5'
+                        self.path_load_weights = self.path_data + 'model-weights_' + Performances['version'][0] + '.h5'
                         self.keras_weights = None
                         print('transfering the weights from: ' + self.path_load_weights)
                         return
@@ -1364,7 +1371,7 @@ class Training(DeepLearning):
         if self.path_load_weights is not None:
             path_logger = self.path_load_weights.replace('model-weights', 'logger').replace('.h5', '.csv')
         else:
-            path_logger = self.path_store + 'logger_' + self.version + '.csv'
+            path_logger = self.path_data + 'logger_' + self.version + '.csv'
         if os.path.exists(path_logger):
             try:
                 logger = pd.read_csv(path_logger)
@@ -1393,10 +1400,10 @@ class Training(DeepLearning):
     
     def _define_callbacks(self):
         if self.debug_mode:
-            path_logger = self.path_store + 'logger-debug.csv'
+            path_logger = self.path_data + 'logger-debug.csv'
             append = False
         else:
-            path_logger = self.path_store + 'logger_' + self.version + '.csv'
+            path_logger = self.path_data + 'logger_' + self.version + '.csv'
             append = self.continue_training
         csv_logger = MyCSVLogger(path_logger, separator=',', append=append)
         model_checkpoint_backup = MyModelCheckpoint(self.path_save_weights.replace('model-weights',
@@ -1512,7 +1519,7 @@ class PredictionsGenerate(DeepLearning):
             self.PREDICTIONS[fold]['id'] = [ID.replace('.jpg', '') for ID in self.PREDICTIONS[fold]['id']]
     
     def _generate_predictions(self):
-        self.path_load_weights = self.path_store + 'model-weights_' + self.version + '_' + self.outer_fold + '.h5'
+        self.path_load_weights = self.path_data + 'model-weights_' + self.version + '_' + self.outer_fold + '.h5'
         self._load_data_features()
         if self.debug_mode:
             self._take_subset_to_debug()
@@ -1540,7 +1547,7 @@ class PredictionsGenerate(DeepLearning):
     
     def save_predictions(self):
         for fold in self.folds:
-            self.PREDICTIONS[fold].to_csv(self.path_store + 'Predictions_instances_' + self.version + '_' + fold + '_'
+            self.PREDICTIONS[fold].to_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold + '_'
                                           + self.outer_fold + '.csv', index=False)
 
 
@@ -1560,7 +1567,7 @@ class PredictionsConcatenate(Hyperparameters):
     def concatenate_predictions(self):
         for fold in self.folds:
             for outer_fold in self.outer_folds:
-                Predictions_fold = pd.read_csv(self.path_store + 'Predictions_instances_' + self.version + '_' + fold +
+                Predictions_fold = pd.read_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold +
                                                '_' + outer_fold + '.csv')
                 if fold in self.PREDICTIONS.keys():
                     self.PREDICTIONS[fold] = pd.concat([self.PREDICTIONS[fold], Predictions_fold])
@@ -1569,7 +1576,7 @@ class PredictionsConcatenate(Hyperparameters):
     
     def save_predictions(self):
         for fold in self.folds:
-            self.PREDICTIONS[fold].to_csv(self.path_store + 'Predictions_instances_' + self.version + '_' + fold +
+            self.PREDICTIONS[fold].to_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold +
                                           '.csv', index=False)
 
 
@@ -1588,7 +1595,7 @@ class PredictionsMerge(Hyperparameters):
         self.Predictions_df = None
     
     def _load_data_features(self):
-        self.data_features = pd.read_csv(self.path_store + 'data-features_instances.csv',
+        self.data_features = pd.read_csv(self.path_data + 'data-features_instances.csv',
                                          usecols=self.id_vars + self.demographic_vars)
         for var in self.id_vars:
             self.data_features[var] = self.data_features[var].astype(str)
@@ -1605,15 +1612,15 @@ class PredictionsMerge(Hyperparameters):
             self.data_features = df_all_folds
     
     def _load_previous_merged_predictions(self):
-        if os.path.exists(self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold +
+        if os.path.exists(self.path_data + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold +
                           '.csv'):
-            self.Predictions_df_previous = pd.read_csv(self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' +
+            self.Predictions_df_previous = pd.read_csv(self.path_data + 'PREDICTIONS_withoutEnsembles_instances_' +
                                                        self.target + '_' + self.fold + '.csv')
             self.Predictions_df_previous.drop(columns=['eid', 'instance'] + self.demographic_vars, inplace=True)
     
     def _list_models(self):
         # generate list of predictions that will be integrated in the Predictions dataframe
-        self.list_models = glob.glob(self.path_store + 'Predictions_instances_' + self.target + '_*_' + self.fold +
+        self.list_models = glob.glob(self.path_data + 'Predictions_instances_' + self.target + '_*_' + self.fold +
                                      '.csv')
         # get rid of ensemble models and models already merged
         self.list_models = [model for model in self.list_models if ('*' not in model)]
@@ -1649,7 +1656,7 @@ class PredictionsMerge(Hyperparameters):
                 else:
                     print('Merging the ' + str(i) + 'th model: ' + version)
                     # load csv and format the predictions
-                    prediction = pd.read_csv(self.path_store + file_name)
+                    prediction = pd.read_csv(self.path_data + file_name)
                     print('raw prediction\'s shape: ' + str(prediction.shape))
                     for var in ['id', 'outer_fold']:
                         prediction[var] = prediction[var].apply(str)
@@ -1731,7 +1738,7 @@ class PredictionsMerge(Hyperparameters):
     
     def save_merged_predictions(self):
         print('Writing the merged predictions...')
-        self.Predictions_df.to_csv(self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' +
+        self.Predictions_df.to_csv(self.path_data + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' +
                                    self.fold + '.csv', index=False)
 
 
@@ -1756,14 +1763,14 @@ class PredictionsEids(Hyperparameters):
     def preprocessing(self):
         # Load predictions
         self.Predictions = pd.read_csv(
-            self.path_store + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
+            self.path_data + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
         self.Predictions.drop(columns=['id'], inplace=True)
         self.Predictions['eid'] = self.Predictions['eid'].astype(str)
         self.Predictions.index.name = 'column_names'
         self.pred_versions = [col for col in self.Predictions.columns.values if 'pred_' in col]
         
         # Prepare target values on instance 0 as a reference
-        target_0s = pd.read_csv(self.path_store + 'data-features_eids.csv', usecols=['eid', self.target])
+        target_0s = pd.read_csv(self.path_data + 'data-features_eids.csv', usecols=['eid', self.target])
         target_0s['eid'] = target_0s['eid'].astype(str)
         target_0s.set_index('eid', inplace=True)
         target_0s = target_0s[self.target]
@@ -1838,7 +1845,7 @@ class PredictionsEids(Hyperparameters):
     def _generate_single_model_predictions(self):
         for pred_version in self.pred_versions:
             path_save = \
-                self.path_store + 'Predictions_eids_' + '_'.join(pred_version.split('_')[1:]) + '_' + self.fold + '.csv'
+                self.path_data + 'Predictions_eids_' + '_'.join(pred_version.split('_')[1:]) + '_' + self.fold + '.csv'
             # Generate only if does not exist already.
             if not os.path.exists(path_save):
                 Predictions_version = self.Predictions_eids[['id', 'outer_fold', pred_version]]
@@ -1847,7 +1854,7 @@ class PredictionsEids(Hyperparameters):
                 Predictions_version.to_csv(path_save, index=False)
     
     def save_predictions(self):
-        self.Predictions_eids.to_csv(self.path_store + 'PREDICTIONS_withoutEnsembles_eids_' + self.target + '_' +
+        self.Predictions_eids.to_csv(self.path_data + 'PREDICTIONS_withoutEnsembles_eids_' + self.target + '_' +
                                      self.fold + '.csv', index=False)
         # Generate and save files for every single model
         self._generate_single_model_predictions()
@@ -1889,7 +1896,7 @@ class PerformancesGenerate(Metrics):
     
     def _preprocess_data_features_predictions_for_performances(self):
         # load dataset
-        data_features = pd.read_csv(self.path_store + 'data-features_' + self.pred_type + '.csv',
+        data_features = pd.read_csv(self.path_data + 'data-features_' + self.pred_type + '.csv',
                                     usecols=['id', 'Sex', 'Age'])
         # format data_features to extract y
         data_features.rename(columns={self.target: 'y'}, inplace=True)
@@ -1901,7 +1908,7 @@ class PerformancesGenerate(Metrics):
         self.data_features = data_features
     
     def _preprocess_predictions_for_performances(self):
-        Predictions = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + self.version + '_' +
+        Predictions = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' + self.version + '_' +
                                   self.fold + '.csv')
         Predictions['id'] = Predictions['id'].astype(str)
         self.Predictions = Predictions.merge(self.data_features, how='inner', on=['id'])
@@ -2017,7 +2024,7 @@ class PerformancesGenerate(Metrics):
     
     def save_performances(self):
         for mode in self.modes:
-            path_save = self.path_store + 'Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
+            path_save = self.path_data + 'Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
                         mode + '.csv'
             self.PERFORMANCES[mode].to_csv(path_save, index=False)
 
@@ -2035,7 +2042,7 @@ class PerformancesMerge(Metrics):
         self.names_metrics = self.dict_metrics_names[self.dict_prediction_types[target]]
         self.main_metric_name = self.dict_main_metrics_names[target]
         # list the models that need to be merged
-        self.list_models = glob.glob(self.path_store + 'Performances_' + pred_type + '_' + target + '_*_' + fold +
+        self.list_models = glob.glob(self.path_data + 'Performances_' + pred_type + '_' + target + '_*_' + fold +
                                      '_str.csv')
         # get rid of ensemble models
         if self.ensemble_models:
@@ -2149,7 +2156,7 @@ class PerformancesMerge(Metrics):
         
         # For ensemble models, merge the new performances with the previously computed performances
         if self.ensemble_models:
-            Performances_withoutEnsembles = pd.read_csv(self.path_store + 'PERFORMANCES_tuned_alphabetical_' +
+            Performances_withoutEnsembles = pd.read_csv(self.path_data + 'PERFORMANCES_tuned_alphabetical_' +
                                                         self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
             self.Performances = Performances_withoutEnsembles.append(self.Performances)
             # reorder the columns (weird: automatic alphabetical re-ordering happened when append was called for 'val')
@@ -2168,7 +2175,7 @@ class PerformancesMerge(Metrics):
     
     def save_performances(self):
         name_extension = 'withEnsembles' if self.ensemble_models else 'withoutEnsembles'
-        path = self.path_store + 'PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
+        path = self.path_data + 'PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
                self.target + '_' + self.fold + '.csv'
         self.Performances_alphabetical.to_csv(path, index=False)
         self.Performances_ranked.to_csv(path.replace('_alphabetical_', '_ranked_'), index=False)
@@ -2189,7 +2196,7 @@ class PerformancesTuning(Metrics):
     
     def load_data(self):
         for fold in self.folds:
-            path = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+            path = self.path_data + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
                    '_' + fold + '.csv'
             self.PERFORMANCES[fold] = pd.read_csv(path).set_index('version', drop=False)
             self.PERFORMANCES[fold]['organ'] = self.PERFORMANCES[fold]['organ'].astype(str)
@@ -2235,9 +2242,9 @@ class PerformancesTuning(Metrics):
     def save_data(self):
         # Save the files
         for fold in self.folds:
-            path_pred = self.path_store + 'PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + \
+            path_pred = self.path_data + 'PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + \
                         '.csv'
-            path_perf = self.path_store + 'PERFORMANCES_tuned_ranked_' + self.pred_type + '_' + self.target + '_' + \
+            path_perf = self.path_data + 'PERFORMANCES_tuned_ranked_' + self.pred_type + '_' + self.target + '_' + \
                         fold + '.csv'
             self.PREDICTIONS[fold].to_csv(path_pred, index=False)
             self.PERFORMANCES[fold].to_csv(path_perf, index=False)
@@ -2389,8 +2396,7 @@ class InnerCV:
 # Useful for EnsemblesPredictions. This function needs to be global to allow pool to pickle it.
 def compute_ensemble_folds(ensemble_inputs):
     if len(ensemble_inputs[1]) < 100:
-        print('small sample size:' + str(len(ensemble_inputs[1])))
-        print(ensemble_inputs[1])
+        print('Small sample size:' + str(len(ensemble_inputs[1])))
         n_inner_splits = 5
     else:
         n_inner_splits = 10
@@ -2416,7 +2422,7 @@ class EnsemblesPredictions(Metrics):
         self.version = self._parameters_to_version(self.parameters)
         self.main_metric_name = self.dict_main_metrics_names[target]
         self.init_perf = -np.Inf if self.main_metrics_modes[self.main_metric_name] == 'max' else np.Inf
-        path_perf = self.path_store + 'PERFORMANCES_tuned_ranked_' + pred_type + '_' + target + '_val.csv'
+        path_perf = self.path_data + 'PERFORMANCES_tuned_ranked_' + pred_type + '_' + target + '_val.csv'
         self.Performances = pd.read_csv(path_perf).set_index('version', drop=False)
         self.Performances['organ'] = self.Performances['organ'].astype(str)
         self.list_ensemble_levels = ['transformation', 'view', 'organ']
@@ -2430,9 +2436,9 @@ class EnsemblesPredictions(Metrics):
         self.INSTANCES_DATASETS = {
             '01': ['Eyes', 'Hearing', 'Lungs', 'Arterial', 'Musculoskeletal', 'Biochemistry', 'ImmuneSystem'],
             '1.5x': ['PhysicalActivity'],
-            '23': ['Brain', 'Arterial', 'Heart', 'Abdomen', 'Spine', 'Hips', 'Knees', 'FullBody', 'Anthropometry',
-                   'Heel', 'Hand', 'Biochemistry'],
-            '*': ['Anthropometry', 'Heel', 'Hand']
+            '23': ['Brain', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal'],
+            '*': ['Brain', 'Eyes', 'Hearing', 'Lungs', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal',
+                  'PhysicalActivity', 'ImmuneSystem']
         }
     
     # Get rid of columns and rows for the versions for which all samples as NANs
@@ -2456,7 +2462,7 @@ class EnsemblesPredictions(Metrics):
     def load_data(self):
         for fold in self.folds:
             self.PREDICTIONS[fold] = pd.read_csv(
-                self.path_store + 'PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + '.csv')
+                self.path_data + 'PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + '.csv')
     
     def _build_single_ensemble(self, PREDICTIONS, version):
         # Drop columns that are exclusively NaNs
@@ -2482,9 +2488,15 @@ class EnsemblesPredictions(Metrics):
                 PREDICTIONS_OUTERFOLDS[outer_fold] = {}
                 XS_outer_fold = {}
                 YS_outer_fold = {}
+                dict_fold_to_outer_folds = {
+                    'val': [float(outer_fold)],
+                    'test': [(float(outer_fold) + 1) % self.n_CV_outer_folds],
+                    'train': [float(of) for of in self.outer_folds
+                              if float(of) not in [float(outer_fold), (float(outer_fold) + 1) % self.n_CV_outer_folds]]
+                }
                 for fold in self.folds:
                     PREDICTIONS_OUTERFOLDS[outer_fold][fold] = \
-                        PREDICTIONS[fold][PREDICTIONS[fold]['outer_fold'] == float(outer_fold)]
+                        PREDICTIONS[fold][PREDICTIONS[fold]['outer_fold'].isin(dict_fold_to_outer_folds[fold])]
                     PREDICTIONS_OUTERFOLDS[outer_fold][fold] = PREDICTIONS_OUTERFOLDS[outer_fold][fold][
                         ['id', 'eid', 'instance', self.target] + ensemble_preds_cols].dropna()
                     X = PREDICTIONS_OUTERFOLDS[outer_fold][fold][['id', 'eid', 'instance'] + ensemble_preds_cols]
@@ -2535,11 +2547,18 @@ class EnsemblesPredictions(Metrics):
         if ensemble_level == 'organ':
             for fold in self.folds:
                 self.PREDICTIONS[fold][pred_version] = np.nan
+                # Add an ensemble for each instances (01, 1.5x, and 23)
+                if self.pred_type == 'instances':
+                    for instances_names in self.instancesS[self.pred_type]:
+                        pv = 'pred_' + version.split('_')[0] + '_*instances' + instances_names + '_' + \
+                             '_'.join(version.split('_')[2:])
+                        self.PREDICTIONS[fold][pv] = np.nan
+            
             for instances_names in self.instancesS[self.pred_type]:
                 print('Building final ensemble model for samples in the instances: ' + instances_names)
+                # Take subset of rows and columns
                 instances = self.instances_names_to_numbers[instances_names]
                 instances_datasets = self.INSTANCES_DATASETS[instances_names]
-                # Remove columns with very few samples
                 versions = \
                     [col.replace('pred_', '') for col in self.PREDICTIONS['val'].columns if 'pred_' in col]
                 instances_versions = [version for version in versions
@@ -2551,11 +2570,55 @@ class EnsemblesPredictions(Metrics):
                     PREDICTIONS[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(instances)]
                     PREDICTIONS[fold] = PREDICTIONS[fold][cols_to_keep]
                 self._build_single_ensemble(PREDICTIONS, version)
+
+                # Print a quick performance estimation for each instance(s)
+                df_model = PREDICTIONS['test'][[self.target, 'pred_' + version]].dropna()
+                print(instances_names)
+                print(self.main_metric_name + ' for instance(s) ' + instances_names + ': ' +
+                      str(r2_score(df_model[self.target], df_model['pred_' + version])))
+                print('The sample size is ' + str(len(df_model.index)) + '.')
                 
                 # Add the predictions to the dataframe, chunck by chunk, instances by instances
                 for fold in self.folds:
                     self.PREDICTIONS[fold][pred_version][self.PREDICTIONS[fold].instance.isin(instances)] = \
                         PREDICTIONS[fold][pred_version].values
+                    # Add an ensemble for the instance(s) only
+                    if self.pred_type == 'instances':
+                        pv = 'pred_' + version.split('_')[0] + '_*instances' + instances_names + '_' + \
+                             '_'.join(version.split('_')[2:])
+                        self.PREDICTIONS[fold][pv][self.PREDICTIONS[fold].instance.isin(instances)] = \
+                            PREDICTIONS[fold][pred_version].values
+            
+            # Add three extra ensemble models for eids, to allow larger sample sizes for GWAS purposes
+            if self.pred_type == 'eids':
+                for instances_names in ['01', '1.5x', '23']:
+                    print('Building final sub-ensemble model for samples in the instances: ' + instances_names)
+                    # Keep only relevant columns
+                    instances_datasets = self.INSTANCES_DATASETS[instances_names]
+                    versions = \
+                        [col.replace('pred_', '') for col in self.PREDICTIONS['val'].columns if 'pred_' in col]
+                    instances_versions = [version for version in versions
+                                          if any(dataset in version for dataset in instances_datasets)]
+                    cols_to_keep = self.id_vars + self.demographic_vars + \
+                                   ['pred_' + version for version in instances_versions]
+                    PREDICTIONS = {}
+                    for fold in self.folds:
+                        PREDICTIONS[fold] = self.PREDICTIONS[fold].copy()
+                        PREDICTIONS[fold] = PREDICTIONS[fold][cols_to_keep]
+                    self._build_single_ensemble(PREDICTIONS, version)
+                    
+                    # Print a quick performance estimation for each instance(s)
+                    df_model = PREDICTIONS['test'][[self.target, 'pred_' + version]].dropna()
+                    print(instances_names)
+                    print(self.main_metric_name + ' for instance(s) ' + instances_names + ': ' +
+                          str(r2_score(df_model[self.target], df_model['pred_' + version])))
+                    print('The sample size is ' + str(len(df_model.index)) + '.')
+                    
+                    # Add the predictions to the dataframe
+                    pv = 'pred_' + version.split('_')[0] + '_*instances' + instances_names + '_' + \
+                         '_'.join(version.split('_')[2:])
+                    for fold in self.folds:
+                        self.PREDICTIONS[fold][pv] = PREDICTIONS[fold][pred_version].values
         
         # 2-Compute fold by fold
         else:
@@ -2566,8 +2629,20 @@ class EnsemblesPredictions(Metrics):
             df_single_ensemble = self.PREDICTIONS[fold][['id', 'outer_fold', pred_version]]
             df_single_ensemble.rename(columns={pred_version: 'pred'}, inplace=True)
             df_single_ensemble.dropna(inplace=True, subset=['pred'])
-            df_single_ensemble.to_csv(self.path_store + 'Predictions_' + self.pred_type + '_' + version + '_' + fold +
+            df_single_ensemble.to_csv(self.path_data + 'Predictions_' + self.pred_type + '_' + version + '_' + fold +
                                       '.csv', index=False)
+            # Add extra ensembles at organ level
+            if ensemble_level == 'organ':
+                for instances_names in ['01', '1.5x', '23']:
+                    pv = 'pred_' + version.split('_')[0] + '_*instances' + instances_names + '_' + \
+                         '_'.join(version.split('_')[2:])
+                    version_instances = version.split('_')[0] + '_*instances' + instances_names + '_' + \
+                         '_'.join(version.split('_')[2:])
+                    df_single_ensemble = self.PREDICTIONS[fold][['id', 'outer_fold', pv]]
+                    df_single_ensemble.rename(columns={pv: 'pred'}, inplace=True)
+                    df_single_ensemble.dropna(inplace=True, subset=['pred'])
+                    df_single_ensemble.to_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
+                                              version_instances + '_' + fold + '.csv', index=False)
     
     def _recursive_ensemble_builder(self, Performances_grandparent, parameters_parent, version_parent,
                                     list_ensemble_levels_parent):
@@ -2594,10 +2669,10 @@ class EnsemblesPredictions(Metrics):
         # compute the ensemble model for the parent
         # Check if ensemble model has already been computed. If it has, load the predictions. If it has not, compute it.
         if not self.regenerate_models and \
-                os.path.exists(self.path_store + 'Predictions_' + self.pred_type + '_' + version_parent + '_test.csv'):
+                os.path.exists(self.path_data + 'Predictions_' + self.pred_type + '_' + version_parent + '_test.csv'):
             print('The model ' + version_parent + ' has already been computed. Loading it...')
             for fold in self.folds:
-                df_single_ensemble = pd.read_csv(self.path_store + 'Predictions_' + self.pred_type + '_' +
+                df_single_ensemble = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
                                                  version_parent + '_' + fold + '.csv')
                 df_single_ensemble.rename(columns={'pred': 'pred_' + version_parent}, inplace=True)
                 # Add the ensemble predictions to the dataframe
@@ -2607,13 +2682,34 @@ class EnsemblesPredictions(Metrics):
                 else:
                     df_single_ensemble.drop(columns=['outer_fold'], inplace=True)
                     self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer', on=['id'])
+                # Add the extra ensemble models at the 'organ' level
+                if ensemble_level == 'organ':
+                    if self.pred_type == 'instances':
+                        instances = self.instancesS[self.pred_type]
+                    else:
+                        instances = ['01', '23']
+                    for instances_names in instances:
+                        pv = 'pred_' + version_parent.split('_')[0] + '_*instances' + instances_names + '_' + \
+                             '_'.join(version_parent.split('_')[2:])
+                        version_instances = version_parent.split('_')[0] + '_*instances' + instances_names + '_' + \
+                                            '_'.join(version_parent.split('_')[2:])
+                        df_single_ensemble = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
+                                                         version_instances + '_' + fold + '.csv')
+                        df_single_ensemble.rename(columns={'pred': pv}, inplace=True)
+                        if fold == 'train':
+                            self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer',
+                                                                                  on=['id', 'outer_fold'])
+                        else:
+                            df_single_ensemble.drop(columns=['outer_fold'], inplace=True)
+                            self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer',
+                                                                                  on=['id'])
         else:
             self._build_single_ensemble_wrapper(version_parent, ensemble_level)
         
-        # Print a quick performance approximation along with the sample size for the ensemble model
+        # Print a quick performance estimation
         df_model = self.PREDICTIONS['test'][[self.target, 'pred_' + version_parent]].dropna()
         print(self.main_metric_name + ': ' + str(r2_score(df_model[self.target], df_model['pred_' + version_parent])))
-        print('The sample size is ' + str(df_model['pred_' + version_parent].count()) + '.')
+        print('The sample size is ' + str(len(df_model.index)) + '.')
     
     def generate_ensemble_predictions(self):
         self._recursive_ensemble_builder(self.Performances, self.parameters, self.version, self.list_ensemble_levels)
@@ -2638,7 +2734,7 @@ class EnsemblesPredictions(Metrics):
     
     def save_predictions(self):
         for fold in self.folds:
-            self.PREDICTIONS[fold].to_csv(self.path_store + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' +
+            self.PREDICTIONS[fold].to_csv(self.path_data + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' +
                                           self.target + '_' + fold + '.csv', index=False)
 
 
@@ -2651,7 +2747,7 @@ class ResidualsGenerate(Hyperparameters):
         self.fold = fold
         self.pred_type = pred_type
         self.debug_mode = debug_mode
-        self.Residuals = pd.read_csv(self.path_store + 'PREDICTIONS_withEnsembles_' + pred_type + '_' + target + '_' +
+        self.Residuals = pd.read_csv(self.path_data + 'PREDICTIONS_withEnsembles_' + pred_type + '_' + target + '_' +
                                      fold + '.csv')
         self.list_models = [col_name.replace('pred_', '') for col_name in self.Residuals.columns.values
                             if 'pred_' in col_name]
@@ -2683,7 +2779,7 @@ class ResidualsGenerate(Hyperparameters):
         self.Residuals.rename(columns=lambda x: x.replace('pred_', 'res_'), inplace=True)
     
     def save_residuals(self):
-        self.Residuals.to_csv(self.path_store + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
+        self.Residuals.to_csv(self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
                               '.csv', index=False)
 
 
@@ -2705,7 +2801,7 @@ class ResidualsCorrelations(Hyperparameters):
     
     def preprocessing(self):
         # load data
-        Residuals = pd.read_csv(self.path_store + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
+        Residuals = pd.read_csv(self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
                                 '.csv')
         # Format the dataframe
         Residuals_only = Residuals[[col_name for col_name in Residuals.columns.values if 'res_' in col_name]]
@@ -2751,10 +2847,10 @@ class ResidualsCorrelations(Hyperparameters):
         self.Correlation_sample_sizes = self.Residuals.transpose() @ self.Residuals
     
     def save_correlations(self):
-        self.Correlation_sample_sizes.to_csv(self.path_store + 'ResidualsCorrelations_samplesizes_' + self.pred_type +
+        self.Correlation_sample_sizes.to_csv(self.path_data + 'ResidualsCorrelations_samplesizes_' + self.pred_type +
                                              '_' + self.target + '_' + self.fold + '.csv', index=True)
         for mode in self.modes:
-            self.CORRELATIONS[mode].to_csv(self.path_store + 'ResidualsCorrelations' + mode + '_' + self.pred_type +
+            self.CORRELATIONS[mode].to_csv(self.path_data + 'ResidualsCorrelations' + mode + '_' + self.pred_type +
                                            '_' + self.target + '_' + self.fold + '.csv', index=True)
 
 
@@ -2780,18 +2876,18 @@ class SelectBest(Metrics):
     
     def _load_data(self):
         for fold in self.folds:
-            path_pred = self.path_store + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' + self.target + '_' + \
+            path_pred = self.path_data + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' + self.target + '_' + \
                         fold + '.csv'
-            path_res = self.path_store + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + fold + '.csv'
-            path_perf = self.path_store + 'PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+            path_res = self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + fold + '.csv'
+            path_perf = self.path_data + 'PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + self.target + \
                         '_' + fold + '.csv'
-            path_corr = self.path_store + 'ResidualsCorrelations_str_' + self.pred_type + '_' + self.target + '_' + \
+            path_corr = self.path_data + 'ResidualsCorrelations_str_' + self.pred_type + '_' + self.target + '_' + \
                         fold + '.csv'
             self.PREDICTIONS[fold] = pd.read_csv(path_pred)
             self.RESIDUALS[fold] = pd.read_csv(path_res)
             self.PERFORMANCES[fold] = pd.read_csv(path_perf)
             self.PERFORMANCES[fold].set_index('version', drop=False, inplace=True)
-            self.CORRELATIONS_SAMPLESIZES[fold] = pd.read_csv(self.path_store + 'ResidualsCorrelations_samplesizes_' +
+            self.CORRELATIONS_SAMPLESIZES[fold] = pd.read_csv(self.path_data + 'ResidualsCorrelations_samplesizes_' +
                                                               self.pred_type + '_' + self.target + '_' + fold + '.csv',
                                                               index_col=0)
             self.CORRELATIONS[fold] = {}
@@ -2800,7 +2896,7 @@ class SelectBest(Metrics):
     
     def _select_versions(self):
         # Load val performances
-        path_perf = self.path_store + 'PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+        path_perf = self.path_data + 'PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + self.target + \
                     '_test.csv'
         Performances = pd.read_csv(path_perf)
         Performances.set_index('version', drop=False, inplace=True)
@@ -2846,13 +2942,13 @@ class SelectBest(Metrics):
     
     def save_data(self):
         for fold in self.folds:
-            path_pred = self.path_store + 'PREDICTIONS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold \
+            path_pred = self.path_data + 'PREDICTIONS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold \
                         + '.csv'
-            path_res = self.path_store + 'RESIDUALS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold + \
+            path_res = self.path_data + 'RESIDUALS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold + \
                        '.csv'
-            path_corr = self.path_store + 'ResidualsCorrelations_bestmodels_str_' + self.pred_type + '_' + self.target \
+            path_corr = self.path_data + 'ResidualsCorrelations_bestmodels_str_' + self.pred_type + '_' + self.target \
                         + '_' + fold + '.csv'
-            path_perf = self.path_store + 'PERFORMANCES_bestmodels_ranked_' + self.pred_type + '_' + self.target + '_' \
+            path_perf = self.path_data + 'PERFORMANCES_bestmodels_ranked_' + self.pred_type + '_' + self.target + '_' \
                         + fold + '.csv'
             self.PREDICTIONS[fold].to_csv(path_pred, index=False)
             self.RESIDUALS[fold].to_csv(path_res, index=False)
@@ -2870,6 +2966,7 @@ class SelectCorrelationsNAs(Hyperparameters):
     def __init__(self, target=None):
         Hyperparameters.__init__(self)
         self.target = target
+        self.folds = ['test']
         self.CORRELATIONS = {'*': {'': {}, '_sd': {}, '_str': {}}}
     
     def load_data(self):
@@ -2882,17 +2979,17 @@ class SelectCorrelationsNAs(Hyperparameters):
                     for fold in self.folds:
                         if pred_type == '*':
                             self.CORRELATIONS[models_type][pred_type][mode][fold] = \
-                                pd.read_csv(self.path_store + 'ResidualsCorrelations' + models_type + mode +
+                                pd.read_csv(self.path_data + 'ResidualsCorrelations' + models_type + mode +
                                             '_instances_' + self.target + '_' + fold + '.csv', index_col=0)
                         else:
                             self.CORRELATIONS[models_type][pred_type][mode][fold] = \
-                                pd.read_csv(self.path_store + 'ResidualsCorrelations' + models_type + mode + '_' +
+                                pd.read_csv(self.path_data + 'ResidualsCorrelations' + models_type + mode + '_' +
                                             pred_type + '_' + self.target + '_' + fold + '.csv', index_col=0)
     
     def fill_na(self):
         # Dectect NAs in the instances correlation matrix
         for models_type in ['', '_bestmodels']:
-            NAs_mask = self.CORRELATIONS[models_type]['instances']['']['val'].isna()
+            NAs_mask = self.CORRELATIONS[models_type]['instances']['']['test'].isna()
             for mode in self.modes:
                 for fold in self.folds:
                     self.CORRELATIONS[models_type]['*'][mode][fold] = \
@@ -2904,261 +3001,17 @@ class SelectCorrelationsNAs(Hyperparameters):
         for models_type in ['', '_bestmodels']:
             for mode in self.modes:
                 for fold in self.folds:
-                    self.CORRELATIONS[models_type]['*'][mode][fold].to_csv(self.path_store + 'ResidualsCorrelations' +
+                    self.CORRELATIONS[models_type]['*'][mode][fold].to_csv(self.path_data + 'ResidualsCorrelations' +
                                                                            models_type + mode + '_*_' + self.target +
                                                                            '_' + fold + '.csv', index=True)
-
-
-class GWASPreprocessing(Hyperparameters):
-    
-    def __init__(self, target=None):
-        Hyperparameters.__init__(self)
-        self.target = target
-        self.fam = None
-        self.Residuals = None
-        self.covars = None
-        self.data = None
-        self.list_organs = None
-        self.IIDs_organs = {}
-        self.IIDs_organ_pairs = {}
-    
-    def _generate_fam_file(self):
-        fam = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_genetics/ukb52887_cal_chr1_v2_s488264.fam',
-                          header=None, sep=' ')
-        fam.columns = ['FID', 'IID', 'father', 'mother', 'Sex', 'phenotype']
-        fam['phenotype'] = 1
-        fam.to_csv(self.path_store + 'GWAS.fam', index=False, header=False, sep=' ')
-        fam.to_csv(self.path_store + 'GWAS_exhaustive_placeholder.tab', index=False, sep='\t')
-        self.fam = fam
-    
-    def _preprocess_residuals(self):
-        # Load residuals
-        Residuals = pd.read_csv(self.path_store + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
-        Residuals['id'] = Residuals['eid']
-        Residuals.rename(columns={'id': 'FID', 'eid': 'IID'}, inplace=True)
-        Residuals = Residuals[Residuals['Ethnicity.White'] == 1]
-        cols_to_drop = ['instance', 'outer_fold', 'Sex'] + \
-                       [col for col in Residuals.columns.values if 'Ethnicity.' in col]
-        Residuals.drop(columns=cols_to_drop, inplace=True)
-        self.Residuals = Residuals
-        self.list_organs = [col for col in self.Residuals.columns.values if col not in ['FID', 'IID', 'Age']]
-    
-    def _preprocess_covars(self):
-        # Load covars
-        covar_cols = ['eid', '22001-0.0', '21000-0.0', '54-0.0', '22000-0.0'] + ['22009-0.' + str(i) for i in
-                                                                                 range(1, 41)]
-        covars = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv', usecols=covar_cols)
-        dict_rename = {'eid': 'IID', '22001-0.0': 'Sex', '21000-0.0': 'Ethnicity', '54-0.0': 'Assessment_center',
-                       '22000-0.0': 'Genotyping_batch'}
-        for i in range(1, 41):
-            dict_rename.update(dict.fromkeys(['22009-0.' + str(i)], 'PC' + str(i)))
-        covars.rename(columns=dict_rename, inplace=True)
-        covars.dropna(inplace=True)
-        covars['Sex'][covars['Sex'] == 0] = 2
-        covars['Sex'] = covars['Sex'].astype(int)
-        # remove non whites samples as suggested in BOLT-LMM_v2.3.4_manual.pdf p18
-        covars = covars[covars['Ethnicity'].isin([1, 1001, 1002, 1003])]
-        self.covars = covars
-    
-    def _merge_main_data(self):
-        # Merge both dataframes
-        self.data = self.covars.merge(self.Residuals, on=['IID'])
-        reordered_cols = ['FID', 'IID', 'Assessment_center', 'Genotyping_batch', 'Age', 'Sex', 'Ethnicity'] + \
-                         ['PC' + str(i) for i in range(1, 41)] + self.list_organs
-        self.data = self.data[reordered_cols]
-        print('Preparing data for heritabilities')
-        for organ in self.list_organs:
-            print('Preparing data for ' + organ)
-            data_organ = self.data.copy()
-            cols_to_drop = [organ2 for organ2 in self.list_organs if organ2 != organ]
-            data_organ.drop(columns=cols_to_drop, inplace=True)
-            data_organ.dropna(inplace=True)
-            data_organ.to_csv(self.path_store + 'GWAS_data_' + self.target + '_' + organ + '.tab', index=False,
-                              sep='\t')
-            self.IIDs_organs[organ] = data_organ['IID'].values
-    
-    def _preprocessing_genetic_correlations(self):
-        print('Preparing data for genetic correlations')
-        organs_pairs = pd.DataFrame(columns=['organ1', 'organ2'])
-        for counter, organ1 in enumerate(self.list_organs):
-            for organ2 in self.list_organs[(counter + 1):]:
-                print('Preparing data for the organ pair ' + organ1 + ' and ' + organ2)
-                # Generate GWAS dataframe
-                organs_pairs = organs_pairs.append({'organ1': organ1, 'organ2': organ2}, ignore_index=True)
-                data_organ_pair = self.data.copy()
-                cols_to_drop = [organ3 for organ3 in self.list_organs if organ3 not in [organ1, organ2]]
-                data_organ_pair.drop(columns=cols_to_drop, inplace=True)
-                data_organ_pair.dropna(inplace=True)
-                data_organ_pair.to_csv(self.path_store + 'GWAS_data_' + self.target + '_' + organ1 + '_' + organ2 +
-                                       '.tab', index=False, sep='\t')
-                self.IIDs_organ_pairs[organ1 + '_' + organ2] = data_organ_pair['IID'].values
-                
-        organs_pairs.to_csv(self.path_store + 'GWAS_genetic_correlations_pairs_' + self.target + '.csv', header=False,
-                            index=False)
-    
-    def _list_removed(self):
-        # samples to remove for each organ
-        print('Listing samples to remove for each organ')
-        for organ in self.list_organs:
-            print('Preparing samples to remove for organ ' + organ)
-            remove_organ = self.fam[['FID', 'IID']].copy()
-            remove_organ = remove_organ[-remove_organ['IID'].isin(self.IIDs_organs[organ])]
-            remove_organ.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ + '.tab', index=False,
-                                header=False, sep=' ')
-        
-        # samples to remove for each organ pair
-        print('Listing samples to remove for each organ pair')
-        for counter, organ1 in enumerate(self.list_organs):
-            for organ2 in self.list_organs[(counter + 1):]:
-                print('Preparing samples to remove for organ pair ' + organ1 + ' and ' + organ2)
-                remove_organ_pair = self.fam[['FID', 'IID']].copy()
-                remove_organ_pair = \
-                    remove_organ_pair[-remove_organ_pair['IID'].isin(self.IIDs_organ_pairs[organ1 + '_' + organ2])]
-                remove_organ_pair.to_csv(self.path_store + 'GWAS_remove_' + self.target + '_' + organ1 + '_' + organ2 +
-                                         '.tab', index=False, header=False, sep=' ')
-    
-    def compute_gwas_inputs(self):
-        self._generate_fam_file()
-        self._preprocess_residuals()
-        self._preprocess_covars()
-        self._merge_main_data()
-        self._preprocessing_genetic_correlations()
-        self._list_removed()
-
-
-class GWASPostprocessing(Hyperparameters):
-    
-    def __init__(self, target=None):
-        Hyperparameters.__init__(self)
-        self.target = target
-        self.organs = ['*', 'Brain', 'BrainCognitive', 'BrainMRI', 'Eyes', 'EyesFundus', 'EyesOCT', 'Hearing', 'Lungs',
-                       'Arterial', 'ArterialPulseWaveAnalysis', 'ArterialCarotids', 'Heart', 'HeartECG', 'HeartMRI',
-                       'Abdomen', 'AbdomenLiver', 'AbdomenPancreas', 'Musculoskeletal', 'MusculoskeletalSpine',
-                       'MusculoskeletalHips', 'MusculoskeletalKnees', 'MusculoskeletalScalars', 'PhysicalActivity',
-                       'Biochemistry', 'BiochemistryUrine', 'BiochemistryBlood', 'ImmuneSystem']
-        self.organ = None
-        self.GWAS = None
-        self.FDR_correction = 5e-8
-        self.dict_chr_to_colors = {'1': '#b9b8b5', '2': '#222222', '3': '#f3c300', '4': '#875692', '5': '#f38400',
-                                   '6': '#a1caf1', '7': '#be0032', '8': '#c2b280', '9': '#848482', '10': '#008856',
-                                   '11': '#555555', '12': '#0067a5', '13': '#f99379', '14': '#604e97', '15': '#f6a600',
-                                   '16': '#b3446c', '17': '#dcd300', '18': '#882d17', '19': '#8db600', '20': '#654522',
-                                   '21': '#e25822', '22': '#232f00', '23': '#e68fac'}
-        self.dict_colors = {'light_gray': '#b9b8b5', 'black': '#222222', 'vivid_yellow': '#f3c300',
-                            'strong_purple': '#875692', 'vivid_orange': '#f38400', 'very_light_blue': '#a1caf1',
-                            'vivid_red': '#be0032', 'grayish_yellow': '#c2b280', 'medium_gray': '#848482',
-                            'vivid_green': '#008856', 'dark_gray': '#555555', 'strong_blue': '#0067a5',
-                            'strong_yellowish pink': '#f99379', 'violet': '#604e97', 'vivid_orange_yellow': '#f6a600',
-                            'strong_purplish_red': '#b3446c', 'vivid_greenish_yellow': '#dcd300',
-                            'strong_reddish_brown': '#882d17', 'vivid_yellow_green': '#8db600',
-                            'vivid_yellowish_brown': '#654522', 'vivid_reddish_orange': '#e25822',
-                            'deep_olive_green': '#232f00', 'strong_purplish_pink': '#e68fac'}
-    
-    def _processing(self):
-        self.GWAS = pd.read_csv(self.path_store + 'GWAS_' + self.target + '_' + self.organ + '_X.stats', sep='\t')
-        GWAS_autosome = pd.read_csv(self.path_store + 'GWAS_' + self.target + '_' + self.organ + '_autosome.stats',
-                                    sep='\t')
-        self.GWAS[self.GWAS['CHR'] != 23] = GWAS_autosome
-        self.GWAS_volcano = self.GWAS[self.GWAS['P_BOLT_LMM_INF'] < self.FDR_correction]
-        # Define dict snps to genes
-        self.dict_genes = {"rs116720794": "gene1", "rs10482810": "gene2"}
-    
-    def _save_data(self):
-        self.GWAS.to_csv(self.path_store + 'GWAS_' + self.target + '_' + self.organ + '.csv', index=False)
-        self.GWAS_volcano.to_csv(self.path_store + 'GWAS_volcano_' + self.target + '_' + self.organ + '.csv',
-                                 index=False)
-    
-    def _manhattan_plot(self):
-        color = [self.dict_chr_to_colors[str(chro)] for chro in self.GWAS['CHR'].unique()]
-        # SNPs
-        # visuz.marker.mhat(df=self.GWAS, chr='CHR', pv='P_BOLT_LMM_INF', gwas_sign_line=True,
-        # gwasp=self.FDR_correction, color=color, gstyle=2, r=600, markernames=True, markeridcol='SNP')
-        # os.rename('manhatten.png', '../figures/GWAS/GWAS_ManhattanPlot_' + target + '_' + organ + '_SNPs.png')
-        # Genes
-        visuz.marker.mhat(df=self.GWAS, chr='CHR', pv='P_BOLT_LMM_INF', gwas_sign_line=True, gwasp=self.FDR_correction,
-                          color=color, gstyle=2, r=600, dim=(9, 4), axtickfontsize=1, markernames=self.dict_genes,
-                          markeridcol='SNP')
-        os.rename('manhatten.png', '../figures/GWAS/GWAS_ManhattanPlot_' + self.target + '_' + self.organ +
-                  '_Genes.png')
-    
-    def processing_all_organs(self):
-        if not os.path.exists('../figures/GWAS/'):
-            os.makedirs('../figures/GWAS/')
-        for organ in self.organs:
-            if os.path.exists(self.path_store + 'GWAS_' + self.target + '_' + organ + '_X.stats') & \
-                    os.path.exists(self.path_store + 'GWAS_' + self.target + '_' + organ + '_autosome.stats'):
-                print('Processing data for organ ' + organ)
-                self.organ = organ
-                self._processing()
-                self._save_data()
-                self._manhattan_plot()
-    
-    @staticmethod
-    def _grep(pattern, path):
-        for line in open(path, 'r'):
-            if line.find(pattern) > -1:
-                return True
-        return False
-    
-    def parse_heritability_scores(self):
-        # Generate empty dataframe
-        Heritabilities = np.empty((len(self.organs), 3,))
-        Heritabilities.fill(np.nan)
-        Heritabilities = pd.DataFrame(Heritabilities)
-        Heritabilities.index = self.organs
-        Heritabilities.columns = ['Organ', 'h2', 'h2_sd']
-        # Fill the dataframe
-        for organ in self.organs:
-            path = '../eo/MI09C_reml_' + self.target + '_' + organ + '_X.out'
-            if os.path.exists(path) and self._grep("h2g", path):
-                for line in open('../eo/MI09C_reml_' + self.target + '_' + organ + '_X.out', 'r'):
-                    if line.find('h2g (1,1): ') > -1:
-                        h2 = float(line.split()[2])
-                        h2_sd = float(line.split()[-1][1:-2])
-                        Heritabilities.loc[organ, :] = [organ, h2, h2_sd]
-        # Print and save results
-        print('Heritabilities:')
-        print(Heritabilities)
-        Heritabilities.to_csv(self.path_store + 'GWAS_heritabilities_' + self.target + '.csv')
-    
-    def parse_genetic_correlations(self):
-        # Generate empty dataframe
-        Genetic_correlations = np.empty((len(self.organs), len(self.organs),))
-        Genetic_correlations.fill(np.nan)
-        Genetic_correlations = pd.DataFrame(Genetic_correlations)
-        Genetic_correlations.index = self.organs
-        Genetic_correlations.columns = self.organs
-        Genetic_correlations_sd = Genetic_correlations.copy()
-        Genetic_correlations_str = Genetic_correlations.copy()
-        # Fill the dataframe
-        for counter, organ1 in enumerate(self.organs):
-            for organ2 in self.organs[(counter + 1):]:
-                if os.path.exists('../eo/MI09D_' + self.target + '_' + organ1 + '_' + organ2 + '.out'):
-                    for line in open('../eo/MI09D_' + self.target + '_' + organ1 + '_' + organ2 + '.out', 'r'):
-                        if line.find('gen corr (1,2):') > -1:
-                            corr = float(line.split()[3])
-                            corr_sd = float(line.split()[-1][1:-2])
-                            corr_str = "{:.3f}".format(corr) + '+-' + "{:.3f}".format(corr_sd)
-                            Genetic_correlations.loc[organ1, organ2] = corr
-                            Genetic_correlations.loc[organ2, organ1] = corr
-                            Genetic_correlations_sd.loc[organ1, organ2] = corr_sd
-                            Genetic_correlations_sd.loc[organ2, organ1] = corr_sd
-                            Genetic_correlations_str.loc[organ1, organ2] = corr_str
-                            Genetic_correlations_str.loc[organ2, organ1] = corr_str
-        # Print and save the results
-        print('Genetic correlations:')
-        print(Genetic_correlations)
-        Genetic_correlations.to_csv(self.path_store + 'GWAS_correlations_' + self.target + '.csv')
-        Genetic_correlations_sd.to_csv(self.path_store + 'GWAS_correlations_sd_' + self.target + '.csv')
-        Genetic_correlations_str.to_csv(self.path_store + 'GWAS_correlations_str_' + self.target + '.csv')
 
 
 class AttentionMaps(DeepLearning):
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, debug_mode=False):
         # Partial initialization with placeholders to get access to parameters and functions
-        DeepLearning.__init__(self, target, organ, view, transformation, 'InceptionResNetV2', '1', '1024',
-                              'Adam', '0.0001', '0.1', '0.5', '1.0', False)
+        DeepLearning.__init__(self, target, organ, view, transformation, 'InceptionResNetV2', '1', '1024', 'Adam',
+                              '0.0001', '0.1', '0.5', '1.0', False)
         # Parameters
         self.leftright = True if self.organ + '_' + self.view in self.left_right_organs_views else False
         self.parameters = None
@@ -3175,7 +3028,6 @@ class AttentionMaps(DeepLearning):
         self.df_outer_fold = None
         self.images = None
         self.VISUALIZATION_FILTERS = {}
-        self.plot_title = None
         self.class_mode = None
         self.image = None
         self.saliency_analyzer = None
@@ -3190,10 +3042,10 @@ class AttentionMaps(DeepLearning):
                                                           'InceptionResNetV2': 'conv_7b_ac',
                                                           'EfficientNetB7': 'top_activation'}
         self.last_conv_layer = None
-
+    
     def _select_best_model(self):
         # Pick the best model based on the performances
-        path_perf = self.path_store + 'PERFORMANCES_withoutEnsembles_ranked_instances_' + self.target + '_test.csv'
+        path_perf = self.path_data + 'PERFORMANCES_withoutEnsembles_ranked_instances_' + self.target + '_test.csv'
         Performances = pd.read_csv(path_perf).set_index('version', drop=False)
         Performances = Performances[(Performances['organ'] == self.organ)
                                     & (Performances['view'] == self.view)
@@ -3211,7 +3063,7 @@ class AttentionMaps(DeepLearning):
     
     def _format_residuals(self):
         # Format the residuals
-        Residuals_full = pd.read_csv(self.path_store + 'RESIDUALS_instances_' + self.target + '_test.csv')
+        Residuals_full = pd.read_csv(self.path_data + 'RESIDUALS_instances_' + self.target + '_test.csv')
         Residuals = Residuals_full[['id', 'outer_fold'] + self.demographic_vars + ['res_' + self.version]]
         del Residuals_full
         Residuals.dropna(inplace=True)
@@ -3264,20 +3116,17 @@ class AttentionMaps(DeepLearning):
         
         # Postprocessing
         df_to_plot['Biological_Age'] = df_to_plot['Age'] - df_to_plot['res']
-        df_to_plot['plot_title'] = 'Age = ' + df_to_plot['Age'].round(1).astype(str) + ', Predicted Age = ' + \
-                                   df_to_plot['Biological_Age'].round(1).astype(str) + ', Sex = ' + df_to_plot['sex'] \
-                                   + ', sample ' + df_to_plot['sample'].astype(str)
         activations_path = '../figures/Attention_Maps/' + self.target + '/' + self.organ + '/' + self.view + '/' + \
                            self.transformation + '/' + df_to_plot['sex'] + '/' + df_to_plot['age_category'] + '/' + \
                            df_to_plot['aging_rate']
         file_names = '/imagetypeplaceholder_' + self.target + '_' + self.organ + '_' + self.view + '_' + \
-            self.transformation + '_' + df_to_plot['sex'] + '_' + df_to_plot['age_category'] + '_' + \
-            df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
+                     self.transformation + '_' + df_to_plot['sex'] + '_' + df_to_plot['age_category'] + '_' + \
+                     df_to_plot['aging_rate'] + '_' + df_to_plot['sample'].astype(str)
         if self.leftright:
             activations_path += '/sideplaceholder'
             file_names += '_sideplaceholder'
         df_to_plot['save_title'] = activations_path + file_names
-        path_save = self.path_store + 'AttentionMaps-samples_' + self.target + '_' + self.organ + '_' + self.view + \
+        path_save = self.path_data + 'AttentionMaps-samples_' + self.target + '_' + self.organ + '_' + self.view + \
                     '_' + self.transformation + '.csv'
         df_to_plot.to_csv(path_save, index=False)
         self.df_to_plot = df_to_plot
@@ -3326,7 +3175,7 @@ class AttentionMaps(DeepLearning):
             self.generator_leftovers = None
         
         # load the weights for the fold
-        self.model.load_weights(self.path_store + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
+        self.model.load_weights(self.path_data + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
     
     @staticmethod
     def _process_saliency(saliency):
@@ -3373,7 +3222,7 @@ class AttentionMaps(DeepLearning):
         for j in range(len(y)):
             # select sample
             if self.leftright:
-                idx = j//2
+                idx = j // 2
                 side = 'right' if j % 2 == 0 else 'left'
             else:
                 idx = j
@@ -3387,6 +3236,7 @@ class AttentionMaps(DeepLearning):
             if not os.path.exists(path_dir):
                 os.makedirs(path_dir)
             # Save raw image
+            # Compute path to test if images existed in first place
             path_image = '../images/' + self.organ + '/' + self.view + '/' + self.transformation + '/'
             if self.leftright:
                 path_image += side + '/'
@@ -3394,8 +3244,8 @@ class AttentionMaps(DeepLearning):
             if not os.path.exists(path_image):
                 print('No image found at ' + path_image + ', skipping.')
                 continue
-            new_path_image = path.replace('imagetypeplaceholder', 'RawImage') + '.jpg'
-            shutil.copy(path_image, new_path_image)
+            img = load_img(path_image, target_size=(saliencies.shape[1], saliencies.shape[2]))
+            img.save(path.replace('imagetypeplaceholder', 'RawImage') + '.jpg')
             # Save saliency
             saliency = saliencies[j, :, :]
             saliency = self._process_saliency(saliency)
@@ -3405,7 +3255,7 @@ class AttentionMaps(DeepLearning):
             gradcam = self._process_gradcam(gradcam)
             np.save(path.replace('imagetypeplaceholder', 'Gradcam') + '.npy', gradcam)
     
-    def generate_plots(self):
+    def generate_filters(self):
         for outer_fold in self.outer_folds:
             print('Generate attention maps for outer_fold ' + outer_fold)
             gc.collect()
@@ -3420,3 +3270,453 @@ class AttentionMaps(DeepLearning):
                 print('Generating maps for leftovers')
                 Xs, y = self.generator_leftovers.__getitem__(0)
                 self._generate_maps_for_one_batch(self.df_leftovers, Xs, y)
+
+
+class GWASPreprocessing(Hyperparameters):
+    
+    def __init__(self, target=None):
+        Hyperparameters.__init__(self)
+        self.target = target
+        self.fam = None
+        self.Residuals = None
+        self.covars = None
+        self.data = None
+        self.list_organs = None
+        self.IIDs_organs = {}
+        self.IIDs_organ_pairs = {}
+    
+    def _generate_fam_file(self):
+        fam = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_genetics/ukb52887_cal_chr1_v2_s488264.fam',
+                          header=None, sep=' ')
+        fam.columns = ['FID', 'IID', 'father', 'mother', 'Sex', 'phenotype']
+        fam['phenotype'] = 1
+        fam.to_csv(self.path_data + 'GWAS.fam', index=False, header=False, sep=' ')
+        fam.to_csv(self.path_data + 'GWAS_exhaustive_placeholder.tab', index=False, sep='\t')
+        self.fam = fam
+    
+    def _preprocess_residuals(self):
+        # Load residuals
+        Residuals = pd.read_csv(self.path_data + 'RESIDUALS_bestmodels_eids_' + self.target + '_test.csv')
+        Residuals['id'] = Residuals['eid']
+        Residuals.rename(columns={'id': 'FID', 'eid': 'IID'}, inplace=True)
+        Residuals = Residuals[Residuals['Ethnicity.White'] == 1]
+        cols_to_drop = ['instance', 'outer_fold', 'Sex'] + \
+                       [col for col in Residuals.columns.values if 'Ethnicity.' in col]
+        Residuals.drop(columns=cols_to_drop, inplace=True)
+        self.Residuals = Residuals
+        self.list_organs = [col for col in self.Residuals.columns.values if col not in ['FID', 'IID', 'Age']]
+    
+    def _preprocess_covars(self):
+        # Load covars
+        covar_cols = ['eid', '22001-0.0', '21000-0.0', '54-0.0', '22000-0.0'] + ['22009-0.' + str(i) for i in
+                                                                                 range(1, 41)]
+        covars = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv', usecols=covar_cols)
+        dict_rename = {'eid': 'IID', '22001-0.0': 'Sex', '21000-0.0': 'Ethnicity', '54-0.0': 'Assessment_center',
+                       '22000-0.0': 'Genotyping_batch'}
+        for i in range(1, 41):
+            dict_rename.update(dict.fromkeys(['22009-0.' + str(i)], 'PC' + str(i)))
+        covars.rename(columns=dict_rename, inplace=True)
+        covars.dropna(inplace=True)
+        covars['Sex'][covars['Sex'] == 0] = 2
+        covars['Sex'] = covars['Sex'].astype(int)
+        # remove non whites samples as suggested in BOLT-LMM_v2.3.4_manual.pdf p18
+        covars = covars[covars['Ethnicity'].isin([1, 1001, 1002, 1003])]
+        self.covars = covars
+    
+    def _merge_main_data(self):
+        # Merge both dataframes
+        self.data = self.covars.merge(self.Residuals, on=['IID'])
+        reordered_cols = ['FID', 'IID', 'Assessment_center', 'Genotyping_batch', 'Age', 'Sex', 'Ethnicity'] + \
+                         ['PC' + str(i) for i in range(1, 41)] + self.list_organs
+        self.data = self.data[reordered_cols]
+        print('Preparing data for heritabilities')
+        for organ in self.list_organs:
+            print('Preparing data for ' + organ)
+            data_organ = self.data.copy()
+            cols_to_drop = [organ2 for organ2 in self.list_organs if organ2 != organ]
+            data_organ.drop(columns=cols_to_drop, inplace=True)
+            data_organ.dropna(inplace=True)
+            data_organ.to_csv(self.path_data + 'GWAS_data_' + self.target + '_' + organ + '.tab', index=False,
+                              sep='\t')
+            self.IIDs_organs[organ] = data_organ['IID'].values
+    
+    def _preprocessing_genetic_correlations(self):
+        print('Preparing data for genetic correlations')
+        organs_pairs = pd.DataFrame(columns=['organ1', 'organ2'])
+        for counter, organ1 in enumerate(self.list_organs):
+            for organ2 in self.list_organs[(counter + 1):]:
+                print('Preparing data for the organ pair ' + organ1 + ' and ' + organ2)
+                # Generate GWAS dataframe
+                organs_pairs = organs_pairs.append({'organ1': organ1, 'organ2': organ2}, ignore_index=True)
+                data_organ_pair = self.data.copy()
+                cols_to_drop = [organ3 for organ3 in self.list_organs if organ3 not in [organ1, organ2]]
+                data_organ_pair.drop(columns=cols_to_drop, inplace=True)
+                data_organ_pair.dropna(inplace=True)
+                data_organ_pair.to_csv(self.path_data + 'GWAS_data_' + self.target + '_' + organ1 + '_' + organ2 +
+                                       '.tab', index=False, sep='\t')
+                self.IIDs_organ_pairs[organ1 + '_' + organ2] = data_organ_pair['IID'].values
+                
+        organs_pairs.to_csv(self.path_data + 'GWAS_genetic_correlations_pairs_' + self.target + '.csv', header=False,
+                            index=False)
+    
+    def _list_removed(self):
+        # samples to remove for each organ
+        print('Listing samples to remove for each organ')
+        for organ in self.list_organs:
+            print('Preparing samples to remove for organ ' + organ)
+            remove_organ = self.fam[['FID', 'IID']].copy()
+            remove_organ = remove_organ[-remove_organ['IID'].isin(self.IIDs_organs[organ])]
+            remove_organ.to_csv(self.path_data + 'GWAS_remove_' + self.target + '_' + organ + '.tab', index=False,
+                                header=False, sep=' ')
+        
+        # samples to remove for each organ pair
+        print('Listing samples to remove for each organ pair')
+        for counter, organ1 in enumerate(self.list_organs):
+            for organ2 in self.list_organs[(counter + 1):]:
+                print('Preparing samples to remove for organ pair ' + organ1 + ' and ' + organ2)
+                remove_organ_pair = self.fam[['FID', 'IID']].copy()
+                remove_organ_pair = \
+                    remove_organ_pair[-remove_organ_pair['IID'].isin(self.IIDs_organ_pairs[organ1 + '_' + organ2])]
+                remove_organ_pair.to_csv(self.path_data + 'GWAS_remove_' + self.target + '_' + organ1 + '_' + organ2 +
+                                         '.tab', index=False, header=False, sep=' ')
+    
+    def compute_gwas_inputs(self):
+        self._generate_fam_file()
+        self._preprocess_residuals()
+        self._preprocess_covars()
+        self._merge_main_data()
+        self._preprocessing_genetic_correlations()
+        self._list_removed()
+
+
+class GWASPostprocessing(Hyperparameters):
+    
+    def __init__(self, target=None):
+        Hyperparameters.__init__(self)
+        self.target = target
+        self.organ = None
+        self.GWAS = None
+        self.FDR_correction = 5e-8
+    
+    def _processing(self):
+        self.GWAS = pd.read_csv(self.path_data + 'GWAS_' + self.target + '_' + self.organ + '_X.stats', sep='\t')
+        GWAS_autosome = pd.read_csv(self.path_data + 'GWAS_' + self.target + '_' + self.organ + '_autosome.stats',
+                                    sep='\t')
+        self.GWAS[self.GWAS['CHR'] != 23] = GWAS_autosome
+        self.GWAS_hits = self.GWAS[self.GWAS['P_BOLT_LMM_INF'] < self.FDR_correction]
+    
+    def _save_data(self):
+        self.GWAS.to_csv(self.path_data + 'GWAS_' + self.target + '_' + self.organ + '.csv', index=False)
+        self.GWAS_hits.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_' + self.organ + '.csv',
+                                 index=False)
+    
+    def _merge_all_hits(self):
+        print('Merging all the GWAS hits')
+        # Summarize all the significant SNPs
+        files = [file for file in glob.glob(self.path_data + 'GWAS_hits*') if 'All' not in file]
+        All_hits = None
+        for file in files:
+            hits_organ = pd.read_csv(file)[
+                ['SNP', 'CHR', 'BP', 'GENPOS', 'ALLELE1', 'ALLELE0', 'A1FREQ', 'F_MISS', 'CHISQ_LINREG',
+                 'P_LINREG', 'BETA', 'SE', 'CHISQ_BOLT_LMM_INF', 'P_BOLT_LMM_INF']]
+            hits_organ['organ'] = file.split('_')[-1].split('.')[0]
+            if All_hits is None:
+                All_hits = hits_organ
+            else:
+                All_hits = pd.concat([All_hits, hits_organ])
+        All_hits.sort_values(by=['CHR', 'BP'], inplace=True)
+        All_hits.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_All.csv', index=False)
+    
+    def processing_all_organs(self):
+        if not os.path.exists('../figures/GWAS/'):
+            os.makedirs('../figures/GWAS/')
+        for organ in self.organs_XWAS:
+            if os.path.exists(self.path_data + 'GWAS_' + self.target + '_' + organ + '_X.stats') & \
+                    os.path.exists(self.path_data + 'GWAS_' + self.target + '_' + organ + '_autosome.stats'):
+                print('Processing data for organ ' + organ)
+                self.organ = organ
+                self._processing()
+                self._save_data()
+        self._merge_all_hits()
+    
+    @staticmethod
+    def _grep(pattern, path):
+        for line in open(path, 'r'):
+            if line.find(pattern) > -1:
+                return True
+        return False
+    
+    def parse_heritability_scores(self):
+        # Generate empty dataframe
+        Heritabilities = np.empty((len(self.organs_XWAS), 3,))
+        Heritabilities.fill(np.nan)
+        Heritabilities = pd.DataFrame(Heritabilities)
+        Heritabilities.index = self.organs_XWAS
+        Heritabilities.columns = ['Organ', 'h2', 'h2_sd']
+        # Fill the dataframe
+        for organ in self.organs_XWAS:
+            path = '../eo/MI09C_reml_' + self.target + '_' + organ + '_X.out'
+            if os.path.exists(path) and self._grep("h2g", path):
+                for line in open('../eo/MI09C_reml_' + self.target + '_' + organ + '_X.out', 'r'):
+                    if line.find('h2g (1,1): ') > -1:
+                        h2 = float(line.split()[2])
+                        h2_sd = float(line.split()[-1][1:-2])
+                        Heritabilities.loc[organ, :] = [organ, h2, h2_sd]
+        # Print and save results
+        print('Heritabilities:')
+        print(Heritabilities)
+        Heritabilities.to_csv(self.path_data + 'GWAS_heritabilities_' + self.target + '.csv')
+    
+    def parse_genetic_correlations(self):
+        # Generate empty dataframe
+        Genetic_correlations = np.empty((len(self.organs_XWAS), len(self.organs_XWAS),))
+        Genetic_correlations.fill(np.nan)
+        Genetic_correlations = pd.DataFrame(Genetic_correlations)
+        Genetic_correlations.index = self.organs_XWAS
+        Genetic_correlations.columns = self.organs_XWAS
+        Genetic_correlations_sd = Genetic_correlations.copy()
+        Genetic_correlations_str = Genetic_correlations.copy()
+        # Fill the dataframe
+        for counter, organ1 in enumerate(self.organs_XWAS):
+            for organ2 in self.organs_XWAS[(counter + 1):]:
+                if os.path.exists('../eo/MI09D_' + self.target + '_' + organ1 + '_' + organ2 + '.out'):
+                    for line in open('../eo/MI09D_' + self.target + '_' + organ1 + '_' + organ2 + '.out', 'r'):
+                        if line.find('gen corr (1,2):') > -1:
+                            corr = float(line.split()[3])
+                            corr_sd = float(line.split()[-1][1:-2])
+                            corr_str = "{:.3f}".format(corr) + '+-' + "{:.3f}".format(corr_sd)
+                            Genetic_correlations.loc[organ1, organ2] = corr
+                            Genetic_correlations.loc[organ2, organ1] = corr
+                            Genetic_correlations_sd.loc[organ1, organ2] = corr_sd
+                            Genetic_correlations_sd.loc[organ2, organ1] = corr_sd
+                            Genetic_correlations_str.loc[organ1, organ2] = corr_str
+                            Genetic_correlations_str.loc[organ2, organ1] = corr_str
+        # Print and save the results
+        print('Genetic correlations:')
+        print(Genetic_correlations)
+        Genetic_correlations.to_csv(self.path_data + 'GWAS_correlations_' + self.target + '.csv')
+        Genetic_correlations_sd.to_csv(self.path_data + 'GWAS_correlations_sd_' + self.target + '.csv')
+        Genetic_correlations_str.to_csv(self.path_data + 'GWAS_correlations_str_' + self.target + '.csv')
+
+
+class GWASAnnotate(Hyperparameters):
+    
+    def __init__(self, target=None):
+        Hyperparameters.__init__(self)
+        self.target = target
+        self.All_hits = None
+        self.All_hits_missing = None
+    
+    def download_data(self):
+        os.chdir('/Users/Alan/Desktop/Aging/Medical_Images/bash_local/')
+        os.system('scp al311@transfer.rc.hms.harvard.edu:/n/groups/patel/Alan/Aging/Medical_Images/data/' +
+                  self.path_data + 'GWAS_hits_' + self.target + '_All.csv' + ' ../data/')
+        self.All_hits = pd.read_csv(self.path_data + 'GWAS_hits_' + self.target + '_All.csv')
+    
+    @staticmethod
+    def _find_nearest_gene(row, key):
+        if row['Overlapped Gene'] != 'None':
+            gene = row['Overlapped Gene']
+            gene_type = row['Type']
+        elif row['Distance to Nearest Downstream Gene'] <= row['Distance to Nearest Upstream Gene']:
+            gene = row['Nearest Downstream Gene']
+            gene_type = row['Type of Nearest Downstream Gene']
+        else:
+            gene = row['Nearest Upstream Gene']
+            gene_type = row['Type of Nearest Upstream Gene']
+        to_return = pd.Series([row[key], gene, gene_type])
+        to_return.index = [key, 'Gene', 'Gene_type']
+        return to_return
+    
+    @staticmethod
+    def _concatenate_genes(group, key):
+        row = group.drop_duplicates(subset=[key])
+        unique_genes_rows = group.drop_duplicates(subset=[key, 'Gene'])
+        row['Gene'] = ', '.join(list(unique_genes_rows['Gene']))
+        row['Gene_type'] = ', '.join(list(unique_genes_rows['Gene_type']))
+        return row
+    
+    def preprocessing_rs(self):
+        # Generate the list of SNPs to annotate in two formats to input into https://www.snp-nexus.org/v4/
+        # Format 1: based on rs#
+        snps_rs = pd.Series(self.All_hits['SNP'].unique())
+        snps_rs.index = ['dbsnp'] * len(snps_rs.index)
+        snps_rs.to_csv(self.path_data + 'snps_rs.txt', sep='\t', header=False)
+    
+    def postprocessing_rs(self):
+        # Load the output fromsnp-nexus and fill the available rows
+        genes_rs = pd.read_csv(self.path_data + 'GWAS_genes_rs.txt', sep='\t')
+        # Find the nearest gene
+        genes_rs = genes_rs.apply(self._find_nearest_gene, args=(['Variation ID']), axis=1)
+        # Concatenate the findinds when several genes matched
+        genes_rs = genes_rs.groupby(by='Variation ID').apply(self._concatenate_genes, 'Variation ID')
+        # Fill the rows from the main dataframe when possible
+        genes_rs.set_index('Variation ID', inplace=True)
+        self.All_hits['Gene'] = np.NaN
+        self.All_hits['Gene_type'] = np.NaN
+        self.All_hits.set_index('SNP', drop=False, inplace=True)
+        self.All_hits.loc[genes_rs.index, ['Gene', 'Gene_type']] = genes_rs
+    
+    def preprocessing_chrbp(self):
+        # Format 2: based on CHR and BP
+        snps_chrbp = self.All_hits.loc[self.All_hits['Gene'].isna(), ['CHR', 'BP', 'ALLELE0', 'ALLELE1']]
+        snps_chrbp['strand'] = 1
+        snps_chrbp.index = ['chromosome'] * len(snps_chrbp.index)
+        snps_chrbp.drop_duplicates(inplace=True)
+        snps_chrbp.to_csv(self.path_data + 'snps_chrbp.txt', sep='\t', header=False)
+    
+    def postprocessing_chrbp(self):
+        # Load the output from snp-nexus and fill the available rows
+        genes_chrbp = pd.read_csv(self.path_data + 'GWAS_genes_chrbp.txt', sep='\t')
+        genes_chrbp['chrbp'] = genes_chrbp['Chromosome'].astype(str) + ':' + genes_chrbp['Position'].astype(str)
+        # Find the nearest gene
+        genes_chrbp = genes_chrbp.apply(self._find_nearest_gene, args=(['chrbp']), axis=1)
+        # Concatenate the findinds when several genes matched
+        genes_chrbp = genes_chrbp.groupby(by='chrbp').apply(self._concatenate_genes, 'chrbp')
+        # Fill the rows from the main dataframe when possible
+        genes_chrbp.set_index('chrbp', inplace=True)
+        self.All_hits['chrbp'] = 'chr' + self.All_hits['CHR'].astype(str) + ':' + self.All_hits['BP'].astype(str)
+        self.All_hits.set_index('chrbp', drop=False, inplace=True)
+        # Only keep subset of genes that actually are hits (somehow extra SNPs are returned too
+        genes_chrbp = genes_chrbp[genes_chrbp.index.isin(self.All_hits.index.values)]
+        self.All_hits.loc[genes_chrbp.index, ['Gene', 'Gene_type']] = genes_chrbp
+    
+    def preprocessing_missing(self):
+        # Identify which SNPs were not matched so far, and use zoom locus to fill the gaps
+        self.All_hits_missing = self.All_hits[self.All_hits['Gene'].isna()]
+        print(str(len(self.All_hits_missing.drop_duplicates(subset=['SNP']).index)) + ' missing SNPs out of ' +
+              str(len(self.All_hits.drop_duplicates(subset=['SNP']).index)) + '.')
+        self.All_hits_missing.to_csv(self.path_data + 'All_hits_missing.csv', index=False, sep='\t')
+    
+    def postprocessing_missing(self):
+        # The gene_type column was filled using https://www.genecards.org/
+        self.All_hits.loc['chr1:3691997', ['Gene', 'Gene_type']] = ['TP73', '']
+        self.All_hits.loc['chr2:24194313', ['Gene', 'Gene_type']] = ['FAM228A', '']
+        self.All_hits.loc['chr2:27656822', ['Gene', 'Gene_type']] = ['SUPT7L', '']
+        self.All_hits.loc['chr2:42396721', ['Gene', 'Gene_type']] = ['COX7A2L', '']
+        self.All_hits.loc['chr2:71661855', ['Gene', 'Gene_type']] = ['DYSF', '']
+        self.All_hits.loc['chr2:227896885', ['Gene', 'Gene_type']] = ['DAW1', 'protein_coding']
+        self.All_hits.loc['chr3:136574578', ['Gene', 'Gene_type']] = ['STAG1', 'protein_coding']
+        self.All_hits.loc['chr3:141081497', ['Gene', 'Gene_type']] = ['SPSB4', '']
+        self.All_hits.loc['chr4:106317506', ['Gene', 'Gene_type']] = ['TBCK, AIMP1', '']
+        self.All_hits.loc['chr5:156966773', ['Gene', 'Gene_type']] = ['TIMD4', '']
+        self.All_hits.loc['chr6:29797695', ['Gene', 'Gene_type']] = ['HLA-V', '']
+        self.All_hits.loc['chr6:31084935', ['Gene', 'Gene_type']] = ['RNU6-1133P', '']
+        self.All_hits.loc['chr6:31105857', ['Gene', 'Gene_type']] = ['C6orf15', '']
+        self.All_hits.loc['chr6:31106501', ['Gene', 'Gene_type']] = ['C6orf15', '']
+        self.All_hits.loc['chr6:31322216', ['Gene', 'Gene_type']] = ['HLA-B', '']
+        self.All_hits.loc['chr6:32552146', ['Gene', 'Gene_type']] = ['HLA-DRB6', '']
+        self.All_hits.loc['chr6:33377481', ['Gene', 'Gene_type']] = ['LYPLA2P1', '']
+        self.All_hits.loc['chr8:9683437', ['Gene', 'Gene_type']] = ['TNKS', '']
+        self.All_hits.loc['chr8:19822809', ['Gene', 'Gene_type']] = ['INTS10', '']
+        self.All_hits.loc['chr8:75679126', ['Gene', 'Gene_type']] = ['HNF4G', 'protein_coding']
+        self.All_hits.loc['chr10:18138488', ['Gene', 'Gene_type']] = ['CACNB2', 'protein_coding']
+        self.All_hits.loc['chr10:96084372', ['Gene', 'Gene_type']] = ['ENTPD1-AS1', 'rna_gene']
+        self.All_hits.loc['chr11:293001', ['Gene', 'Gene_type']] = ['PGGHG', '']
+        self.All_hits.loc['chr15:74282833', ['Gene', 'Gene_type']] = ['CCDCC3', '']
+        self.All_hits.loc['chr15:89859932', ['Gene', 'Gene_type']] = ['AP3S2, ARPIN-AP3S2',
+                                                                      'protein_coding, protein_coding']
+        self.All_hits.loc['chr17:44341869', ['Gene', 'Gene_type']] = ['GRN', 'protein_coding']
+        self.All_hits.loc['chr17:62530885', ['Gene', 'Gene_type']] = ['TLK2', '']
+        self.All_hits.loc['chr17:79911164', ['Gene', 'Gene_type']] = ['LINC01979', '']
+        self.All_hits.loc['chr18:43833701', ['Gene', 'Gene_type']] = ['AC083760.1', '']
+        self.All_hits.loc['chr20:57829821', ['Gene', 'Gene_type']] = ['AL162291.1', '']
+        self.All_hits.loc['chr22:29130347', ['Gene', 'Gene_type']] = ['KREMEN1', '']
+        self.All_hits.loc['chr22:50943232', ['Gene', 'Gene_type']] = ['RPL23AP82', '']
+        # The following gene was named "0" in locuszoom, so I used this source instead:
+        # https://www.rcsb.org/pdb/chromosome.do
+        self.All_hits.loc['chr23:13771531', ['Gene', 'Gene_type']] = ['GPM6B', 'protein_coding']
+        # The following gene did not have a match
+        self.All_hits.loc['chr23:56640134', ['Gene', 'Gene_type']] = ['UNKNOWN', 'UNKNOWN']
+        
+        # Ensuring that all SNPs have been annotated
+        print('Ensuring that all SNPs have been annotated:')
+        assert self.All_hits['Gene'].isna().sum() == 0
+        print('Passed.')
+        
+        # Counter number of unique genes involved, and generating the list
+        unique_genes = list(set((', '.join(self.All_hits['Gene'].unique())).split(', ')))
+        print('A total of ' + str(len(unique_genes)) + ' unique genes are associated with accelerated aging.')
+        np.save(self.path_data + 'GWAS_unique_genes.npy', np.array(unique_genes))
+    
+    def postprocessing_hits(self):
+        self.All_hits.drop(columns=['chrbp'], inplace=True)
+        self.All_hits.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_All.csv', index=False)
+        for organ in self.organs_XWAS:
+            Hits_organ = self.All_hits[self.All_hits['organ'] == organ].drop(columns=['organ'])
+            Hits_organ.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_' + organ + '.csv', index=False)
+    
+    def upload_data(self):
+        files = ['snps_rs.txt', 'GWAS_genes_rs.txt', 'snps_chrbp.txt', 'GWAS_genes_chrbp.txt', 'All_hits_missing.csv',
+                 'GWAS_unique_genes.npy']
+        for organ in ['All'] + self.organs_XWAS:
+            files.append('GWAS_hits_' + self.target + '_' + organ + '.csv')
+        files = [self.path_data + file for file in files]
+        for file in files:
+            os.system('scp ' + file +
+                      ' al311@transfer.rc.hms.harvard.edu:/n/groups/patel/Alan/Aging/Medical_Images/data/')
+
+
+class GWASPlots(Hyperparameters):
+    
+    def __init__(self, target=None):
+        Hyperparameters.__init__(self)
+        self.target = target
+        self.organs = \
+            [file.split('_')[2].replace('.csv', '') for file in glob.glob(self.path_data + 'GWAS_' + target + '_*.csv')]
+        self.organs.sort()
+        self.organs = ['All'] + self.organs
+        self.FDR_correction = 5e-8
+        # 23 colors for plot, to maximize two by two contrast (mostly important for the volcano plot)
+        self.dict_chr_to_colors = {'1': '#b9b8b5', '2': '#222222', '3': '#f3c300', '4': '#875692', '5': '#f38400',
+                                   '6': '#a1caf1', '7': '#be0032', '8': '#c2b280', '9': '#848482', '10': '#008856',
+                                   '11': '#555555', '12': '#0067a5', '13': '#f99379', '14': '#604e97', '15': '#f6a600',
+                                   '16': '#b3446c', '17': '#dcd300', '18': '#882d17', '19': '#8db600', '20': '#654522',
+                                   '21': '#e25822', '22': '#232f00', '23': '#e68fac'}
+        self.dict_colors = {'light_gray': '#b9b8b5', 'black': '#222222', 'vivid_yellow': '#f3c300',
+                            'strong_purple': '#875692', 'vivid_orange': '#f38400', 'very_light_blue': '#a1caf1',
+                            'vivid_red': '#be0032', 'grayish_yellow': '#c2b280', 'medium_gray': '#848482',
+                            'vivid_green': '#008856', 'dark_gray': '#555555', 'strong_blue': '#0067a5',
+                            'strong_yellowish pink': '#f99379', 'violet': '#604e97', 'vivid_orange_yellow': '#f6a600',
+                            'strong_purplish_red': '#b3446c', 'vivid_greenish_yellow': '#dcd300',
+                            'strong_reddish_brown': '#882d17', 'vivid_yellow_green': '#8db600',
+                            'vivid_yellowish_brown': '#654522', 'vivid_reddish_orange': '#e25822',
+                            'deep_olive_green': '#232f00', 'strong_purplish_pink': '#e68fac'}
+    
+    def generate_manhattan_plots(self):
+        for organ in self.organs:
+            print('Generating Manhattan plot for ' + organ)
+            # Preprocessing
+            if organ == 'All':
+                GWAS = pd.read_csv('../data/GWAS_hits_Age_All.csv',
+                                   usecols=['SNP', 'CHR', 'BP', 'P_BOLT_LMM_INF', 'Gene'])
+                GWAS.set_index('SNP', drop=False, inplace=True)
+            else:
+                GWAS = pd.read_csv('../data/GWAS_Age_' + organ + '.csv', usecols=['SNP', 'CHR', 'BP', 'P_BOLT_LMM_INF'])
+                GWAS.set_index('SNP', drop=False, inplace=True)
+                Genes = pd.read_csv('../data/GWAS_hits_Age_' + organ + '.csv', index_col='SNP', usecols=['SNP', 'Gene'])
+                GWAS['Gene'] = Genes['Gene']
+                GWAS.loc[GWAS['Gene'].isna(), 'Gene'] = 'not significant'
+            # replace 0 with numerical limit for p-values so that log can be safely taken by mhat
+            GWAS['P_BOLT_LMM_INF'] = GWAS['P_BOLT_LMM_INF'].replace([0], [10 ** (-323)])
+            # Create a column to label SNPs without ambiguity for 'All' organs, as can have several hits for same SNP
+            GWAS['SNP_P'] = GWAS['SNP'] + '_' + GWAS['P_BOLT_LMM_INF'].astype(str)
+            
+            # Generate dictionary of annotations for Genes
+            GWAS.sort_values(by='P_BOLT_LMM_INF', inplace=True)
+            Genes_annotations = {}
+            for chro in GWAS[GWAS['Gene'] != 'not significant']['CHR'].unique():
+                df_chr = GWAS[GWAS['CHR'] == chro]
+                Genes_annotations.update({df_chr['SNP_P'][0]: df_chr['Gene'][0]})
+            GWAS.sort_values(by=['CHR', 'BP'], inplace=True)
+            
+            # Generate plots
+            color = [self.dict_chr_to_colors[str(ch)] for ch in GWAS['CHR'].unique()]
+            kwargs = {'df': GWAS, 'chr': 'CHR', 'pv': 'P_BOLT_LMM_INF', 'gwas_sign_line': True,
+                      'gwasp': self.FDR_correction, 'color': color, 'gfont': 4, 'gstyle': 1, 'r': 600, 'dim': (9, 4),
+                      'axlabelfontsize': 4, 'markernames': Genes_annotations, 'markeridcol': 'SNP_P'}
+            if GWAS['P_BOLT_LMM_INF'].min() < 10 ** (-23):
+                kwargs.update({'ylm': (0, -np.log10(GWAS['P_BOLT_LMM_INF'].min()),
+                                       -np.log10(GWAS['P_BOLT_LMM_INF'].min()) / 10)})
+            visuz.marker.mhat(**kwargs)
+            os.rename('manhatten.png', '../figures/GWAS/GWAS_ManhattanPlot_' + self.target + '_' + organ + '.png')

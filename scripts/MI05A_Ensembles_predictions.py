@@ -9,7 +9,7 @@ if len(sys.argv) != 3:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('instances')  # pred_type
+    sys.argv.append('eids')  # pred_type
 
 # Compute results
 Ensembles_Predictions = EnsemblesPredictions(target=sys.argv[1], pred_type=sys.argv[2],
