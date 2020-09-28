@@ -1,7 +1,7 @@
 #!/bin/bash
 targets=( "Age" )
 time=60
-memory=8G
+memory=24G
 for target in "${targets[@]}"; do
 	version=MI09G_${target}
 	job_name="$version.job"

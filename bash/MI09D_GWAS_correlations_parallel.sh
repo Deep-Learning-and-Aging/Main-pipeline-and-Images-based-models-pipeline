@@ -11,7 +11,8 @@ for target in "${targets[@]}"; do
 		organ2=$(echo $line | cut -d ',' -f2)
 		sample_size=$(wc -l < ../data/GWAS_data_"${target}"_"${organ1}"_"${organ2}".tab)
 		mem_per_cpu=$(printf "%.0f" $(expr 0.27*${sample_size}*0.1+1000 | bc))
-		time=$(printf "%.0f" $( echo "1.2*e(1.5*l(${sample_size}/1000))+45" | bc -l))
+		# Use multiplicative coef 1.2 at first, then double it for the rare jobs that time out.
+		time=$(printf "%.0f" $( echo "2.4*e(1.5*l(${sample_size}/1000))+45" | bc -l))
 		if [ $time -lt 720 ]; then
 			partition=short
 		elif [ $time -lt 7200 ]; then

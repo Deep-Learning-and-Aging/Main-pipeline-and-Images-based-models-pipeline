@@ -9,7 +9,7 @@ if len(sys.argv) != 2:
 
 # Compute results
 GWAS_Plots = GWASPlots(target=sys.argv[1])
-GWAS_Plots.generate_manhattan_plots()
+GWAS_Plots.generate_manhattan_and_qq_plots()
 
 # Exit
 print('Done.')

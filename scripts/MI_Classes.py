@@ -3010,9 +3010,14 @@ class AttentionMaps(DeepLearning):
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, debug_mode=False):
         # Partial initialization with placeholders to get access to parameters and functions
-        DeepLearning.__init__(self, target, organ, view, transformation, 'InceptionResNetV2', '1', '1024', 'Adam',
+        DeepLearning.__init__(self, 'Age', 'Abdomen', 'Liver', 'Raw', 'InceptionResNetV2', '1', '1024', 'Adam',
                               '0.0001', '0.1', '0.5', '1.0', False)
         # Parameters
+        self.target = target
+        self.organ = organ
+        self.view = view
+        self.transformation = transformation
+        self.version = None
         self.leftright = True if self.organ + '_' + self.view in self.left_right_organs_views else False
         self.parameters = None
         self.image_width = None
@@ -3042,6 +3047,20 @@ class AttentionMaps(DeepLearning):
                                                           'InceptionResNetV2': 'conv_7b_ac',
                                                           'EfficientNetB7': 'top_activation'}
         self.last_conv_layer = None
+        self.organs_views_transformations_images = \
+            ['Brain_MRI_SaggitalRaw', 'Brain_MRI_SaggitalReference', 'Brain_MRI_CoronalRaw',
+             'Brain_MRI_CoronalReference', 'Brain_MRI_TransverseRaw', 'Brain_MRI_TransverseReference',
+             'Eyes_Fundus_Raw', 'Eyes_OCT_Raw', 'Arterial_Carotids_Mixed', 'Arterial_Carotids_LongAxis',
+             'Arterial_Carotids_CIMT120', 'Arterial_Carotids_CIMT150', 'Arterial_Carotids_ShortAxis',
+             'Heart_MRI_2chambers_Raw', 'Heart_MRI_2chambers_Contrast', 'Heart_MRI_3chambers_Raw',
+             'Heart_MRI_3chambers_Contrast', 'Heart_MRI_4chambers_Raw', 'Heart_MRI_4chambers_Contrast',
+             'Abdomen_Liver_Raw', 'Abdomen_Liver_Contrast', 'Abdomen_Pancreas_Raw', 'Abdomen_Pancreas_Contrast',
+             'Musculoskeletal_Spine_Sagittal', 'Musculoskeletal_Spine_Coronal', 'Musculoskeletal_Hips_MRI',
+             'Musculoskeletal_Knees_MRI', 'Musculoskeletal_FullBody_Mixed', 'Musculoskeletal_FullBody_Figure',
+             'Musculoskeletal_FullBody_Skeleton', 'Musculoskeletal_FullBody_Flesh', 'Musculoskeletal_FullBody_Flesh',
+             'PhysicalActivity_FullWeek_GramianAngularField1minDifference',
+             'PhysicalActivity_FullWeek_GramianAngularField1minSummation',
+             'PhysicalActivity_FullWeek_MarkovTransitionField1min', 'PhysicalActivity_FullWeek_RecurrencePlots1min']
     
     def _select_best_model(self):
         # Pick the best model based on the performances
@@ -3050,16 +3069,17 @@ class AttentionMaps(DeepLearning):
         Performances = Performances[(Performances['organ'] == self.organ)
                                     & (Performances['view'] == self.view)
                                     & (Performances['transformation'] == self.transformation)]
-        version = Performances['version'].values[0]
+        self.version = Performances['version'].values[0]
         del Performances
         # other parameters
-        self.parameters = self._version_to_parameters(version)
-        DeepLearning.__init__(self, self.parameters['target'], self.parameters['organ'], self.parameters['view'],
-                              self.parameters['transformation'], self.parameters['architecture'],
-                              self.parameters['n_fc_layers'], self.parameters['n_fc_nodes'],
-                              self.parameters['optimizer'], self.parameters['learning_rate'],
-                              self.parameters['weight_decay'], self.parameters['dropout_rate'],
-                              self.parameters['data_augmentation_factor'], False)
+        self.parameters = self._version_to_parameters(self.version)
+        if self.organ + '_' + self.view + '_' + self.transformation in self.organs_views_transformations_images:
+            DeepLearning.__init__(self, self.parameters['target'], self.parameters['organ'], self.parameters['view'],
+                                  self.parameters['transformation'], self.parameters['architecture'],
+                                  self.parameters['n_fc_layers'], self.parameters['n_fc_nodes'],
+                                  self.parameters['optimizer'], self.parameters['learning_rate'],
+                                  self.parameters['weight_decay'], self.parameters['dropout_rate'],
+                                  self.parameters['data_augmentation_factor'], False)
     
     def _format_residuals(self):
         # Format the residuals
@@ -3133,11 +3153,6 @@ class AttentionMaps(DeepLearning):
     
     def preprocessing(self):
         self._select_best_model()
-        self._generate_architecture()
-        self.model.compile(optimizer=self.optimizers[self.optimizer](lr=self.learning_rate, clipnorm=1.0),
-                           loss=self.loss_function, metrics=self.metrics)
-        
-        self.last_conv_layer = self.dict_architecture_to_last_conv_layer_name[self.parameters['architecture']]
         self._format_residuals()
         self._select_representative_samples()
     
@@ -3174,8 +3189,9 @@ class AttentionMaps(DeepLearning):
         else:
             self.generator_leftovers = None
         
-        # load the weights for the fold
-        self.model.load_weights(self.path_data + 'model-weights_' + self.version + '_' + outer_fold + '.h5')
+        # load the weights for the fold (for test images in fold i, load the corresponding model: (i-1)%N_CV_folds
+        outer_fold_model = str((int(outer_fold) - 1) % self.n_CV_outer_folds)
+        self.model.load_weights(self.path_data + 'model-weights_' + self.version + '_' + outer_fold_model + '.h5')
     
     @staticmethod
     def _process_saliency(saliency):
@@ -3256,20 +3272,25 @@ class AttentionMaps(DeepLearning):
             np.save(path.replace('imagetypeplaceholder', 'Gradcam') + '.npy', gradcam)
     
     def generate_filters(self):
-        for outer_fold in self.outer_folds:
-            print('Generate attention maps for outer_fold ' + outer_fold)
-            gc.collect()
-            self._preprocess_for_outer_fold(outer_fold)
-            n_samples_per_batch = self.batch_size // 2 if self.leftright else self.batch_size
-            for i in range(self.n_images // self.batch_size):
-                print('Generating maps for batch ' + str(i))
-                Xs, y = self.generator_batch.__getitem__(i)
-                df = self.df_batch.iloc[n_samples_per_batch * i: n_samples_per_batch * (i + 1), :]
-                self._generate_maps_for_one_batch(df, Xs, y)
-            if self.n_samples_leftovers > 0:
-                print('Generating maps for leftovers')
-                Xs, y = self.generator_leftovers.__getitem__(0)
-                self._generate_maps_for_one_batch(self.df_leftovers, Xs, y)
+        if self.organ + '_' + self.view + '_' + self.transformation in self.organs_views_transformations_images:
+            self._generate_architecture()
+            self.model.compile(optimizer=self.optimizers[self.optimizer](lr=self.learning_rate, clipnorm=1.0),
+                               loss=self.loss_function, metrics=self.metrics)
+            self.last_conv_layer = self.dict_architecture_to_last_conv_layer_name[self.parameters['architecture']]
+            for outer_fold in self.outer_folds:
+                print('Generate attention maps for outer_fold ' + outer_fold)
+                gc.collect()
+                self._preprocess_for_outer_fold(outer_fold)
+                n_samples_per_batch = self.batch_size // 2 if self.leftright else self.batch_size
+                for i in range(self.n_images // self.batch_size):
+                    print('Generating maps for batch ' + str(i))
+                    Xs, y = self.generator_batch.__getitem__(i)
+                    df = self.df_batch.iloc[n_samples_per_batch * i: n_samples_per_batch * (i + 1), :]
+                    self._generate_maps_for_one_batch(df, Xs, y)
+                if self.n_samples_leftovers > 0:
+                    print('Generating maps for leftovers')
+                    Xs, y = self.generator_leftovers.__getitem__(0)
+                    self._generate_maps_for_one_batch(self.df_leftovers, Xs, y)
 
 
 class GWASPreprocessing(Hyperparameters):
@@ -3411,7 +3432,7 @@ class GWASPostprocessing(Hyperparameters):
                                  index=False)
     
     def _merge_all_hits(self):
-        print('Merging all the GWAS hits')
+        print('Merging all the GWAS results into a model called All...')
         # Summarize all the significant SNPs
         files = [file for file in glob.glob(self.path_data + 'GWAS_hits*') if 'All' not in file]
         All_hits = None
@@ -3465,7 +3486,7 @@ class GWASPostprocessing(Hyperparameters):
         # Print and save results
         print('Heritabilities:')
         print(Heritabilities)
-        Heritabilities.to_csv(self.path_data + 'GWAS_heritabilities_' + self.target + '.csv')
+        Heritabilities.to_csv(self.path_data + 'GWAS_heritabilities_' + self.target + '.csv', index=False)
     
     def parse_genetic_correlations(self):
         # Generate empty dataframe
@@ -3590,42 +3611,39 @@ class GWASAnnotate(Hyperparameters):
     
     def postprocessing_missing(self):
         # The gene_type column was filled using https://www.genecards.org/
-        self.All_hits.loc['chr1:3691997', ['Gene', 'Gene_type']] = ['TP73', '']
-        self.All_hits.loc['chr2:24194313', ['Gene', 'Gene_type']] = ['FAM228A', '']
-        self.All_hits.loc['chr2:27656822', ['Gene', 'Gene_type']] = ['SUPT7L', '']
-        self.All_hits.loc['chr2:42396721', ['Gene', 'Gene_type']] = ['COX7A2L', '']
-        self.All_hits.loc['chr2:71661855', ['Gene', 'Gene_type']] = ['DYSF', '']
-        self.All_hits.loc['chr2:227896885', ['Gene', 'Gene_type']] = ['DAW1', 'protein_coding']
-        self.All_hits.loc['chr3:136574578', ['Gene', 'Gene_type']] = ['STAG1', 'protein_coding']
-        self.All_hits.loc['chr3:141081497', ['Gene', 'Gene_type']] = ['SPSB4', '']
-        self.All_hits.loc['chr4:106317506', ['Gene', 'Gene_type']] = ['TBCK, AIMP1', '']
-        self.All_hits.loc['chr5:156966773', ['Gene', 'Gene_type']] = ['TIMD4', '']
-        self.All_hits.loc['chr6:29797695', ['Gene', 'Gene_type']] = ['HLA-V', '']
-        self.All_hits.loc['chr6:31084935', ['Gene', 'Gene_type']] = ['RNU6-1133P', '']
-        self.All_hits.loc['chr6:31105857', ['Gene', 'Gene_type']] = ['C6orf15', '']
-        self.All_hits.loc['chr6:31106501', ['Gene', 'Gene_type']] = ['C6orf15', '']
-        self.All_hits.loc['chr6:31322216', ['Gene', 'Gene_type']] = ['HLA-B', '']
-        self.All_hits.loc['chr6:32552146', ['Gene', 'Gene_type']] = ['HLA-DRB6', '']
-        self.All_hits.loc['chr6:33377481', ['Gene', 'Gene_type']] = ['LYPLA2P1', '']
-        self.All_hits.loc['chr8:9683437', ['Gene', 'Gene_type']] = ['TNKS', '']
-        self.All_hits.loc['chr8:19822809', ['Gene', 'Gene_type']] = ['INTS10', '']
-        self.All_hits.loc['chr8:75679126', ['Gene', 'Gene_type']] = ['HNF4G', 'protein_coding']
-        self.All_hits.loc['chr10:18138488', ['Gene', 'Gene_type']] = ['CACNB2', 'protein_coding']
-        self.All_hits.loc['chr10:96084372', ['Gene', 'Gene_type']] = ['ENTPD1-AS1', 'rna_gene']
-        self.All_hits.loc['chr11:293001', ['Gene', 'Gene_type']] = ['PGGHG', '']
-        self.All_hits.loc['chr15:74282833', ['Gene', 'Gene_type']] = ['CCDCC3', '']
-        self.All_hits.loc['chr15:89859932', ['Gene', 'Gene_type']] = ['AP3S2, ARPIN-AP3S2',
-                                                                      'protein_coding, protein_coding']
-        self.All_hits.loc['chr17:44341869', ['Gene', 'Gene_type']] = ['GRN', 'protein_coding']
-        self.All_hits.loc['chr17:62530885', ['Gene', 'Gene_type']] = ['TLK2', '']
-        self.All_hits.loc['chr17:79911164', ['Gene', 'Gene_type']] = ['LINC01979', '']
-        self.All_hits.loc['chr18:43833701', ['Gene', 'Gene_type']] = ['AC083760.1', '']
-        self.All_hits.loc['chr20:57829821', ['Gene', 'Gene_type']] = ['AL162291.1', '']
-        self.All_hits.loc['chr22:29130347', ['Gene', 'Gene_type']] = ['KREMEN1', '']
-        self.All_hits.loc['chr22:50943232', ['Gene', 'Gene_type']] = ['RPL23AP82', '']
-        # The following gene was named "0" in locuszoom, so I used this source instead:
-        # https://www.rcsb.org/pdb/chromosome.do
-        self.All_hits.loc['chr23:13771531', ['Gene', 'Gene_type']] = ['GPM6B', 'protein_coding']
+        self.All_hits.loc['chr1:3691997', ['Gene', 'Gene_type']] = ['SMIM1', 'protein_coding']
+        self.All_hits.loc['chr2:24194313', ['Gene', 'Gene_type']] = ['COL4A4', 'protein_coding']
+        self.All_hits.loc['chr2:227896885', ['Gene', 'Gene_type']] = ['UBXN2A', 'protein_coding']
+        self.All_hits.loc['chr2:27656822', ['Gene', 'Gene_type']] = ['NRBP1', 'protein_coding']
+        self.All_hits.loc['chr2:42396721', ['Gene', 'Gene_type']] = ['AC083949.1, EML4', 'rna_gene, protein_coding']
+        self.All_hits.loc['chr2:71661855', ['Gene', 'Gene_type']] = ['ZNF638', 'protein_coding']
+        self.All_hits.loc['chr3:141081497', ['Gene', 'Gene_type']] = ['PXYLP1, AC117383.1, ZBTB38',
+                                                                        'protein_coding, rna_gene, protein_coding']
+        self.All_hits.loc['chr4:106317506', ['Gene', 'Gene_type']] = ['PPA2', 'protein_coding']
+        self.All_hits.loc['chr5:156966773', ['Gene', 'Gene_type']] = ['ADAM19', 'protein_coding']
+        self.All_hits.loc['chr6:29797695', ['Gene', 'Gene_type']] = ['HLA-G', 'protein_coding']
+        self.All_hits.loc['chr6:31106501', ['Gene', 'Gene_type']] = ['PSORS1C1, PSORS1C2',
+                                                                     'protein_coding, protein_coding']
+        self.All_hits.loc['chr6:31322216', ['Gene', 'Gene_type']] = ['HLA-B', 'protein_coding']
+        self.All_hits.loc['chr6:32552146', ['Gene', 'Gene_type']] = ['HLA-DRB1', 'protein_coding']
+        self.All_hits.loc['chr6:33377481', ['Gene', 'Gene_type']] = ['KIFC1', 'protein_coding']
+        self.All_hits.loc['chr8:9683437', ['Gene', 'Gene_type']] = ['snoU13', 'small_nucleolar_rna_gene']
+        self.All_hits.loc['chr8:19822809', ['Gene', 'Gene_type']] = ['LPL', 'protein_coding']
+        self.All_hits.loc['chr8:75679126', ['Gene', 'Gene_type']] = ['MIR2052HG', 'rna_gene']
+        self.All_hits.loc['chr10:18138488', ['Gene', 'Gene_type']] = ['MRC1', 'protein_coding']
+        self.All_hits.loc['chr10:96084372', ['Gene', 'Gene_type']] = ['PLCE1', 'protein_coding']
+        self.All_hits.loc['chr11:293001', ['Gene', 'Gene_type']] = ['PGGHG', 'protein_coding']
+        self.All_hits.loc['chr15:74282833', ['Gene', 'Gene_type']] = ['STOML1', 'protein_coding']
+        self.All_hits.loc['chr15:89859932', ['Gene', 'Gene_type']] = ['FANCI, POLG', 'protein_coding, protein_coding']
+        self.All_hits.loc['chr17:44341869', ['Gene', 'Gene_type']] = ['AC005829.1', 'pseudo_gene']
+        self.All_hits.loc['chr17:79911164', ['Gene', 'Gene_type']] = ['NOTUM', 'protein_coding']
+        self.All_hits.loc['chr20:57829821', ['Gene', 'Gene_type']] = ['ZNF831', 'protein_coding']
+        self.All_hits.loc['chr22:29130347', ['Gene', 'Gene_type']] = ['CHEK2', 'protein_coding']
+        # The following genes were not found by locuszoom, so I used https://www.rcsb.org/pdb/chromosome.do :
+        self.All_hits.loc['chr6:31084935', ['Gene', 'Gene_type']] = ['CDSN', 'protein_coding']
+        self.All_hits.loc['chr6:31105857', ['Gene', 'Gene_type']] = ['PSORS1C2', 'protein_coding']
+        # The following genes was named "0" in locuszoom, so I used https://www.rcsb.org/pdb/chromosome.do :
+        self.All_hits.loc['chr23:13771531', ['Gene', 'Gene_type']] = ['OFD1', 'protein_coding']
         # The following gene did not have a match
         self.All_hits.loc['chr23:56640134', ['Gene', 'Gene_type']] = ['UNKNOWN', 'UNKNOWN']
         
@@ -3641,16 +3659,16 @@ class GWASAnnotate(Hyperparameters):
     
     def postprocessing_hits(self):
         self.All_hits.drop(columns=['chrbp'], inplace=True)
-        self.All_hits.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_All.csv', index=False)
+        self.All_hits.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_All_withGenes.csv', index=False)
         for organ in self.organs_XWAS:
             Hits_organ = self.All_hits[self.All_hits['organ'] == organ].drop(columns=['organ'])
-            Hits_organ.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_' + organ + '.csv', index=False)
+            Hits_organ.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_' + organ + '_withGenes.csv', index=False)
     
     def upload_data(self):
         files = ['snps_rs.txt', 'GWAS_genes_rs.txt', 'snps_chrbp.txt', 'GWAS_genes_chrbp.txt', 'All_hits_missing.csv',
                  'GWAS_unique_genes.npy']
         for organ in ['All'] + self.organs_XWAS:
-            files.append('GWAS_hits_' + self.target + '_' + organ + '.csv')
+            files.append('GWAS_hits_' + self.target + '_' + organ + '_withGenes.csv')
         files = [self.path_data + file for file in files]
         for file in files:
             os.system('scp ' + file +
@@ -3665,7 +3683,6 @@ class GWASPlots(Hyperparameters):
         self.organs = \
             [file.split('_')[2].replace('.csv', '') for file in glob.glob(self.path_data + 'GWAS_' + target + '_*.csv')]
         self.organs.sort()
-        self.organs = ['All'] + self.organs
         self.FDR_correction = 5e-8
         # 23 colors for plot, to maximize two by two contrast (mostly important for the volcano plot)
         self.dict_chr_to_colors = {'1': '#b9b8b5', '2': '#222222', '3': '#f3c300', '4': '#875692', '5': '#f38400',
@@ -3683,25 +3700,25 @@ class GWASPlots(Hyperparameters):
                             'vivid_yellowish_brown': '#654522', 'vivid_reddish_orange': '#e25822',
                             'deep_olive_green': '#232f00', 'strong_purplish_pink': '#e68fac'}
     
-    def generate_manhattan_plots(self):
-        for organ in self.organs:
-            print('Generating Manhattan plot for ' + organ)
+    def generate_manhattan_and_qq_plots(self):
+        GWAS_All = None
+        for organ in self.organs + ['All']:
+            print('Generating Manhattan plot and QQ plot for ' + organ)
             # Preprocessing
             if organ == 'All':
-                GWAS = pd.read_csv('../data/GWAS_hits_Age_All.csv',
-                                   usecols=['SNP', 'CHR', 'BP', 'P_BOLT_LMM_INF', 'Gene'])
-                GWAS.set_index('SNP', drop=False, inplace=True)
+                GWAS = GWAS_All
             else:
                 GWAS = pd.read_csv('../data/GWAS_Age_' + organ + '.csv', usecols=['SNP', 'CHR', 'BP', 'P_BOLT_LMM_INF'])
                 GWAS.set_index('SNP', drop=False, inplace=True)
-                Genes = pd.read_csv('../data/GWAS_hits_Age_' + organ + '.csv', index_col='SNP', usecols=['SNP', 'Gene'])
+                Genes = pd.read_csv('../data/GWAS_hits_Age_' + organ + '_withGenes.csv', index_col='SNP',
+                                    usecols=['SNP', 'Gene'])
                 GWAS['Gene'] = Genes['Gene']
                 GWAS.loc[GWAS['Gene'].isna(), 'Gene'] = 'not significant'
-            # replace 0 with numerical limit for p-values so that log can be safely taken by mhat
-            GWAS['P_BOLT_LMM_INF'] = GWAS['P_BOLT_LMM_INF'].replace([0], [10 ** (-323)])
-            # Create a column to label SNPs without ambiguity for 'All' organs, as can have several hits for same SNP
-            GWAS['SNP_P'] = GWAS['SNP'] + '_' + GWAS['P_BOLT_LMM_INF'].astype(str)
-            
+                # replace 0 with numerical limit for p-values so that log can be safely taken by mhat
+                GWAS['P_BOLT_LMM_INF'] = GWAS['P_BOLT_LMM_INF'].replace([0], [10 ** (-323)])
+                # Create a column to label SNPs without ambiguity for 'All' organs (can have several hits for same SNP)
+                GWAS['SNP_P'] = GWAS['SNP'] + '_' + GWAS['P_BOLT_LMM_INF'].astype(str)
+                
             # Generate dictionary of annotations for Genes
             GWAS.sort_values(by='P_BOLT_LMM_INF', inplace=True)
             Genes_annotations = {}
@@ -3710,7 +3727,7 @@ class GWASPlots(Hyperparameters):
                 Genes_annotations.update({df_chr['SNP_P'][0]: df_chr['Gene'][0]})
             GWAS.sort_values(by=['CHR', 'BP'], inplace=True)
             
-            # Generate plots
+            # Generate Manhattan plot
             color = [self.dict_chr_to_colors[str(ch)] for ch in GWAS['CHR'].unique()]
             kwargs = {'df': GWAS, 'chr': 'CHR', 'pv': 'P_BOLT_LMM_INF', 'gwas_sign_line': True,
                       'gwasp': self.FDR_correction, 'color': color, 'gfont': 4, 'gstyle': 1, 'r': 600, 'dim': (9, 4),
@@ -3720,3 +3737,24 @@ class GWASPlots(Hyperparameters):
                                        -np.log10(GWAS['P_BOLT_LMM_INF'].min()) / 10)})
             visuz.marker.mhat(**kwargs)
             os.rename('manhatten.png', '../figures/GWAS/GWAS_ManhattanPlot_' + self.target + '_' + organ + '.png')
+            
+            # Generate QQ plot
+            # Prepare data
+            observed = GWAS['P_BOLT_LMM_INF'].sort_values()
+            lobs = -np.log10(observed)
+            expected = np.array(range(len(lobs))) + 1
+            lexp = -(np.log10(expected / (len(expected) + 1)))
+            # Plot figure
+            plt.clf()
+            plt.scatter(lexp, lobs, marker='*', color='b', s=3)
+            plt.plot(lexp, lexp, color='r')
+            plt.xlabel('Expected -log10(p)')
+            plt.ylabel('Observed -log10(p)')
+            plt.savefig('../figures/GWAS/GWAS_QQPlot_' + self.target + '_' + organ + '.png', dpi=600)
+            
+            # Append the dataframe to the union of all dataframes for the 'All' plot
+            if organ != 'All':
+                if GWAS_All is None:
+                    GWAS_All = GWAS
+                else:
+                    GWAS_All = GWAS_All.append(GWAS)
