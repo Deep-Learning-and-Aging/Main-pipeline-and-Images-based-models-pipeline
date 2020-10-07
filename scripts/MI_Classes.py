@@ -929,9 +929,9 @@ class DeepLearning(Metrics):
                            'Heart_MRI_3chambersContrast', 'Heart_MRI_4chambersRaw', 'Heart_MRI_4chambersContrast'],
                           (316, 316)))  # initial size (200, 200)
         self.dict_organ_view_transformation_to_image_size.update(
-            dict.fromkeys(['Abdomen_Liver_Raw', 'Abdomen_Liver_Contrast'], (288, 364)))  # initial size (364, 288)
+            dict.fromkeys(['Abdomen_Liver_Raw', 'Abdomen_Liver_Contrast'], (288, 364)))  # initial size (288, 364)
         self.dict_organ_view_transformation_to_image_size.update(
-            dict.fromkeys(['Abdomen_Pancreas_Raw', 'Abdomen_Pancreas_Contrast'], (288, 350)))  # initial size (350, 288)
+            dict.fromkeys(['Abdomen_Pancreas_Raw', 'Abdomen_Pancreas_Contrast'], (288, 350)))  # initial size (288, 350)
         self.dict_organ_view_transformation_to_image_size.update(
             dict.fromkeys(['Musculoskeletal_FullBody_Figure', 'Musculoskeletal_FullBody_Skeleton',
                            'Musculoskeletal_FullBody_Flesh', 'Musculoskeletal_FullBody_Mixed'],
@@ -3031,33 +3031,26 @@ class AttentionMaps(DeepLearning):
         self.Residuals = None
         self.df_to_plot = None
         self.df_outer_fold = None
-        self.images = None
-        self.VISUALIZATION_FILTERS = {}
         self.class_mode = None
         self.image = None
-        self.saliency_analyzer = None
-        self.guided_backprop_analyzer = None
         self.generator = None
-        self.dict_architecture_to_last_conv_layer_name = {'VGG16': 'block5_conv3', 'VGG19': 'block5_conv4',
-                                                          'MobileNet': 'conv_pw_13_relu', 'MobileNetV2': 'out_relu',
-                                                          'DenseNet121': 'relu', 'DenseNet169': 'relu',
-                                                          'DenseNet201': 'relu', 'NASNetMobile': 'activation_1136',
-                                                          'NASNetLarge': 'activation_1396',
-                                                          'Xception': 'block14_sepconv2_act', 'InceptionV3': 'mixed10',
-                                                          'InceptionResNetV2': 'conv_7b_ac',
-                                                          'EfficientNetB7': 'top_activation'}
+        self.dict_architecture_to_last_conv_layer_name = \
+            {'VGG16': 'block5_conv3', 'VGG19': 'block5_conv4', 'MobileNet': 'conv_pw_13_relu',
+             'MobileNetV2': 'out_relu', 'DenseNet121': 'relu', 'DenseNet169': 'relu', 'DenseNet201': 'relu',
+             'NASNetMobile': 'activation_1136', 'NASNetLarge': 'activation_1396', 'Xception': 'block14_sepconv2_act',
+             'InceptionV3': 'mixed10', 'InceptionResNetV2': 'conv_7b_ac', 'EfficientNetB7': 'top_activation'}
         self.last_conv_layer = None
         self.organs_views_transformations_images = \
-            ['Brain_MRI_SaggitalRaw', 'Brain_MRI_SaggitalReference', 'Brain_MRI_CoronalRaw',
+            ['Brain_MRI_SagittalRaw', 'Brain_MRI_SagittalReference', 'Brain_MRI_CoronalRaw',
              'Brain_MRI_CoronalReference', 'Brain_MRI_TransverseRaw', 'Brain_MRI_TransverseReference',
              'Eyes_Fundus_Raw', 'Eyes_OCT_Raw', 'Arterial_Carotids_Mixed', 'Arterial_Carotids_LongAxis',
              'Arterial_Carotids_CIMT120', 'Arterial_Carotids_CIMT150', 'Arterial_Carotids_ShortAxis',
-             'Heart_MRI_2chambers_Raw', 'Heart_MRI_2chambers_Contrast', 'Heart_MRI_3chambers_Raw',
-             'Heart_MRI_3chambers_Contrast', 'Heart_MRI_4chambers_Raw', 'Heart_MRI_4chambers_Contrast',
+             'Heart_MRI_2chambersRaw', 'Heart_MRI_2chambersContrast', 'Heart_MRI_3chambersRaw',
+             'Heart_MRI_3chambersContrast', 'Heart_MRI_4chambersRaw', 'Heart_MRI_4chambersContrast',
              'Abdomen_Liver_Raw', 'Abdomen_Liver_Contrast', 'Abdomen_Pancreas_Raw', 'Abdomen_Pancreas_Contrast',
              'Musculoskeletal_Spine_Sagittal', 'Musculoskeletal_Spine_Coronal', 'Musculoskeletal_Hips_MRI',
              'Musculoskeletal_Knees_MRI', 'Musculoskeletal_FullBody_Mixed', 'Musculoskeletal_FullBody_Figure',
-             'Musculoskeletal_FullBody_Skeleton', 'Musculoskeletal_FullBody_Flesh', 'Musculoskeletal_FullBody_Flesh',
+             'Musculoskeletal_FullBody_Skeleton', 'Musculoskeletal_FullBody_Flesh',
              'PhysicalActivity_FullWeek_GramianAngularField1minDifference',
              'PhysicalActivity_FullWeek_GramianAngularField1minSummation',
              'PhysicalActivity_FullWeek_MarkovTransitionField1min', 'PhysicalActivity_FullWeek_RecurrencePlots1min']
@@ -3428,13 +3421,13 @@ class GWASPostprocessing(Hyperparameters):
     
     def _save_data(self):
         self.GWAS.to_csv(self.path_data + 'GWAS_' + self.target + '_' + self.organ + '.csv', index=False)
-        self.GWAS_hits.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_' + self.organ + '.csv',
-                                 index=False)
+        self.GWAS_hits.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_' + self.organ + '.csv', index=False)
     
     def _merge_all_hits(self):
         print('Merging all the GWAS results into a model called All...')
         # Summarize all the significant SNPs
-        files = [file for file in glob.glob(self.path_data + 'GWAS_hits*') if 'All' not in file]
+        files = [file for file in glob.glob(self.path_data + 'GWAS_hits*')
+                 if ('All' not in file) & ('_withGenes' not in file)]
         All_hits = None
         for file in files:
             hits_organ = pd.read_csv(file)[
