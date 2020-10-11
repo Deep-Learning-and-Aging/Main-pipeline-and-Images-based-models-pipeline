@@ -30,11 +30,10 @@ from sklearn.utils import resample
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, \
     precision_score, recall_score, confusion_matrix, average_precision_score
-from sklearn import linear_model
 from sklearn.utils.validation import check_is_fitted
 from sklearn.model_selection import KFold, PredefinedSplit, cross_validate
 from sklearn.pipeline import Pipeline
-from sklearn.linear_model import ElasticNet
+from sklearn.linear_model import LinearRegression, ElasticNet
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
@@ -1779,9 +1778,21 @@ class PredictionsEids(Hyperparameters):
         self.Predictions = self.Predictions.merge(target_0s, on='eid')
         
         # Compute biological ages reported to target_0
-        correction = self.Predictions['target_0'] - self.Predictions[self.target]
         for pred in self.pred_versions:
-            self.Predictions[pred] = self.Predictions[pred] + correction
+            # Compute the biais of the predictions as a function of age #TODO confirm this is working
+            print('Generating residuals for model ' + pred.replace('pred_', ''))
+            df_model = self.Predictions[['Age', pred]]
+            df_model.dropna(inplace=True)
+            if (len(df_model.index)) > 0:
+                age = df_model.loc[:, ['Age']]
+                res = df_model['Age'] - df_model[pred]
+                regr = LinearRegression()
+                regr.fit(age, res)
+                self.Predictions[pred.replace('pred_', 'correction_')] = regr.predict(self.Predictions[['Age']])
+                # Take the residuals bias into account when "translating" the prediction to instance 0
+                correction = self.Predictions['target_0'] - self.Predictions[self.target] + \
+                             regr.predict(self.Predictions[['Age']]) - regr.predict(self.Predictions[['target_0']])
+                self.Predictions[pred] = self.Predictions[pred] + correction
         self.Predictions[self.target] = self.Predictions['target_0']
         self.Predictions.drop(columns=['target_0'], inplace=True)
         self.Predictions.index.name = 'column_names'
@@ -2763,7 +2774,7 @@ class ResidualsGenerate(Hyperparameters):
             if (len(df_model.index)) > 0:
                 age = df_model.loc[:, ['Age']]
                 res = df_model['Age'] - df_model['pred_' + model]
-                regr = linear_model.LinearRegression()
+                regr = LinearRegression()
                 regr.fit(age, res)
                 res_correction = regr.predict(age)
                 res_corrected = res - res_correction
@@ -2773,7 +2784,7 @@ class ResidualsGenerate(Hyperparameters):
                     print('Bias for the residuals ' + model, regr.coef_)
                     plt.scatter(age, res)
                     plt.scatter(age, res_corrected)
-                    regr2 = linear_model.LinearRegression()
+                    regr2 = LinearRegression()
                     regr2.fit(age, res_corrected)
                     print('Coefficients after: \n', regr2.coef_)
         self.Residuals.rename(columns=lambda x: x.replace('pred_', 'res_'), inplace=True)
