@@ -13,9 +13,9 @@ if len(sys.argv) != 5:
     print('WRONG NUMBER OF INPUT PARAMETERS! RUNNING WITH DEFAULT SETTINGS!\n')
     sys.argv = ['']
     sys.argv.append('Age')  # target
-    sys.argv.append('Arterial')  # organ
-    sys.argv.append('PulseWaveAnalysis')  # view
-    sys.argv.append('TimeSeries')  # transformation
+    sys.argv.append('Abdomen')  # organ
+    sys.argv.append('Liver')  # view
+    sys.argv.append('Contrast')  # transformation
 
 # Generate results
 Attention_Maps = AttentionMaps(target=sys.argv[1], organ=sys.argv[2], view=sys.argv[3], transformation=sys.argv[4],

@@ -67,7 +67,6 @@ from tensorflow_addons.metrics import RSquare, F1Score
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from PIL import Image
-import seaborn as sns
 from bioinfokit import visuz
 
 # Model's attention
@@ -1779,7 +1778,7 @@ class PredictionsEids(Hyperparameters):
         
         # Compute biological ages reported to target_0
         for pred in self.pred_versions:
-            # Compute the biais of the predictions as a function of age #TODO confirm this is working
+            # Compute the biais of the predictions as a function of age
             print('Generating residuals for model ' + pred.replace('pred_', ''))
             df_model = self.Predictions[['Age', pred]]
             df_model.dropna(inplace=True)
@@ -3231,10 +3230,10 @@ class AttentionMaps(DeepLearning):
         weights = get_gradients_of_activations(self.model, Xs, y, layer_name=self.last_conv_layer,
                                                )[self.last_conv_layer]
         weights = weights.mean(axis=(1, 2))
-        weights /= weights.max() + 1e-7  # for numerical stability
+        weights /= np.abs(weights.max()) + 1e-7  # for numerical stability #TODO I think I should used the abs here.
         activations = get_activations(self.model, Xs, layer_name=self.last_conv_layer)[self.last_conv_layer]
-        gradcams = np.einsum('il,ijkl->ijk', weights, activations)
-        # Expand the gradcam map to match the dimension of the input
+        # We must take the absolute value because for Grad-RAM, unlike for Grad-Cam, we care both about + and - effects
+        gradcams = np.abs(np.einsum('il,ijkl->ijk', weights, activations))
         zoom_factor = [1] + list(np.array(Xs[0].shape[1:3]) / np.array(gradcams.shape[1:]))
         gradcams = zoom(gradcams, zoom_factor)
         
@@ -3735,7 +3734,7 @@ class GWASPlots(Hyperparameters):
             color = [self.dict_chr_to_colors[str(ch)] for ch in GWAS['CHR'].unique()]
             kwargs = {'df': GWAS, 'chr': 'CHR', 'pv': 'P_BOLT_LMM_INF', 'gwas_sign_line': True,
                       'gwasp': self.FDR_correction, 'color': color, 'gfont': 4, 'gstyle': 1, 'r': 600, 'dim': (9, 4),
-                      'axlabelfontsize': 4, 'markernames': Genes_annotations, 'markeridcol': 'SNP_P'}
+                      'axlabelfontsize': 11, 'markernames': Genes_annotations, 'markeridcol': 'SNP_P'}
             if GWAS['P_BOLT_LMM_INF'].min() < 10 ** (-23):
                 kwargs.update({'ylm': (0, -np.log10(GWAS['P_BOLT_LMM_INF'].min()),
                                        -np.log10(GWAS['P_BOLT_LMM_INF'].min()) / 10)})

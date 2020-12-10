@@ -2,14 +2,13 @@
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
-#architectures=( "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "ResNeXt101" )
-#architectures=( "InceptionResNetV2" "InceptionV3" )
-#architectures=( "DenseNet201" )
-#architectures=( "Xception" )
-#architectures=( "ResNet152V2" )
-architectures=( "DenseNet121" )
-architectures=( "DenseNet169" )
-#architectures=( "ResNeXt101" )
+#architectures=( "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "ResNeXt101" "ResNet152V2" )
+#Done
+#architectures=( "DenseNet121" "DenseNet169" "ResNet152V2" "ResNeXt101" "ResNet50V2" )
+# Alan
+#architectures=( "ResNet50V2" )
+# Sasha
+architectures=( "ResNet101V2" "ResNeXt50" )
 #n_fc_layersS=( "0" "1" "2" "3" "4" "5" )
 n_fc_layersS=( "1" )
 #n_fc_nodesS=( "16" "64" "128" "256" "512" "1024" )
