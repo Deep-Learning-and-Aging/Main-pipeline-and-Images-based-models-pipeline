@@ -22,6 +22,7 @@ GWAS_Annotate.preprocessing_missing()
 GWAS_Annotate.postprocessing_missing()
 GWAS_Annotate.postprocessing_hits()
 GWAS_Annotate.upload_data()
+GWAS_Annotate.summarize_results()
 
 # Exit
 print('Done.')

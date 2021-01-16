@@ -3,9 +3,7 @@ regenerate_predictions=false
 #targets=( "Age" "Sex" )
 targets=( "Age" )
 organs=( "Brain" "Eyes" "Arterial" "Heart" "Abdomen" "Musculoskeletal" "PhysicalActivity" )
-architectures=( "VGG16" "VGG19" "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "ResNeXt101" "EfficientNetB7" )
-architectures=( "DenseNet201" "ResNext101" "InceptionResNetV2" "EfficientNetB7" )
-architectures=( "InceptionV3" "InceptionResNetV2" )
+architectures=( "DenseNet121" "DenseNet169" "DenseNet201" "Xception" "InceptionV3" "InceptionResNetV2" "ResNeXt50" "ResNeXt101" "ResNet50V2" "ResNet101V2" "ResNet152V2" )
 n_fc_layersS=( "1" )
 n_fc_nodesS=( "1024" )
 #optimizers=( "Adam" "RMSprop" "Adadelta" )
@@ -88,9 +86,11 @@ for target in "${targets[@]}"; do
 														time=$(( 2*$time ))
 													fi
 													# time multiplicator as a function of architecture
-													if [ $architecture == "InceptionResNetV2" ]; then
+													if [ $architecture == "InceptionResNetV2" ] || [ $architecture == "ResNeXt50" ]  || [ $architecture == "ResNeXt101" ] || [ $architecture == "ResNet152V2" ]; then
 														time=$(( 2*$time ))
 													fi
+													# time multiplicator for failed jobs. default: 1
+													#time=$(( 2*$time ))
 													#check if all weights have already been generated. If not, do not run the model.
 													path_weights="../data/model-weights_${version}.h5"
 													if ! test -f $path_weights; then

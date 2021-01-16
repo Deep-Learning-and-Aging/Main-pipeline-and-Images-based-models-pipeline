@@ -53,8 +53,8 @@ import tensorflow as tf
 from keras_preprocessing.image import ImageDataGenerator, Iterator
 from keras_preprocessing.image.utils import load_img, img_to_array, array_to_img
 from tensorflow.keras.utils import Sequence
-from tensorflow.keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
 from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.layers import Flatten, Dense, Dropout, GlobalAveragePooling2D, concatenate
 from tensorflow.keras import regularizers
 from tensorflow.keras.optimizers import Adam, RMSprop, Adadelta
 from tensorflow.keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
@@ -73,6 +73,9 @@ from bioinfokit import visuz
 from keract import get_activations, get_gradients_of_activations
 from scipy.ndimage.interpolation import zoom
 
+# Survival
+from lifelines.utils import concordance_index
+
 # Necessary to define MyCSVLogger
 import collections
 import csv
@@ -87,7 +90,7 @@ pd.set_option('display.max_rows', 200)
 
 
 # CLASSES
-class Hyperparameters:
+class Basics:
     
     def __init__(self):
         # seeds for reproducibility
@@ -124,6 +127,7 @@ class Hyperparameters:
                                        'data_augmentation_factor']
         self.targets_regression = ['Age']
         self.targets_binary = ['Sex']
+        self.models_types = ['', '_bestmodels']
         self.dict_prediction_types = {'Age': 'regression', 'Sex': 'binary'}
         self.dict_side_predictors = {'Age': ['Sex'] + self.ethnicities_vars_forgot_Other,
                                      'Sex': ['Age'] + self.ethnicities_vars_forgot_Other}
@@ -196,11 +200,11 @@ class Hyperparameters:
         return boolean
 
 
-class Metrics(Hyperparameters):
+class Metrics(Basics):
     
     def __init__(self):
         # Parameters
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
         self.metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
         self.dict_metrics_names_K = {'regression': ['RMSE'],  # For now, RSquare is buggy. Try again in a few months.
@@ -220,7 +224,9 @@ class Metrics(Hyperparameters):
         self.dict_main_metrics_names = {'Age': 'R-Squared', 'Sex': 'ROC-AUC',
                                         'imbalanced_binary_placeholder': 'PR-AUC'}
         self.main_metrics_modes = {'loss': 'min', 'R-Squared': 'max', 'RMSE': 'min', 'ROC-AUC': 'max', 'PR-AUC': 'max',
-                                   'F1-Score': 'max'}
+                                   'F1-Score': 'max', 'C-Index': 'max', 'C-Index-difference': 'max'}
+        
+        self.n_bootstrap_iterations = 1000
         
         def rmse(y_true, y_pred):
             return math.sqrt(mean_squared_error(y_true, y_pred))
@@ -265,12 +271,19 @@ class Metrics(Hyperparameters):
                                      'False-Positives': false_positives_score,
                                      'False-Negatives': false_negatives_score,
                                      'True-Negatives': true_negatives_score}
+    
+    def _bootstrap(self, data, function):
+        results = []
+        for i in range(self.n_bootstrap_iterations):
+            data_i = resample(data, replace=True, n_samples=len(data.index))
+            results.append(function(data_i['y'], data_i['pred']))
+        return np.mean(results), np.std(results)
 
 
-class PreprocessingMain(Hyperparameters):
+class PreprocessingMain(Basics):
     
     def __init__(self):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.data_raw = None
         self.data_features = None
         self.data_features_eids = None
@@ -305,7 +318,7 @@ class PreprocessingMain(Hyperparameters):
             self.data_raw['Sex'][self.data_raw['Sex_genetic'].isna()]
         self.data_raw.drop(['Sex'], axis=1, inplace=True)
         self.data_raw.rename(columns={'Sex_genetic': 'Sex'}, inplace=True)
-        self.data_raw = self.data_raw.dropna(subset=['Sex'])
+        self.data_raw.dropna(subset=['Sex'], inplace=True)
     
     def _compute_age(self):
         # Recompute age with greater precision by leveraging the month of birth
@@ -431,10 +444,10 @@ class PreprocessingMain(Hyperparameters):
         self.data_features_eids.to_csv(self.path_data + 'data-features_eids.csv', index=False)
 
 
-class PreprocessingImagesIDs(Hyperparameters):
+class PreprocessingImagesIDs(Basics):
     
     def __init__(self):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         # Instances 2 and 3 datasets (most medical images, mostly medical images)
         self.instances23_eids = None
         self.HEART_EIDs = None
@@ -624,13 +637,108 @@ class PreprocessingFolds(Metrics):
         self._split_data()
 
 
-class MyImageDataGenerator(Hyperparameters, Sequence, ImageDataGenerator):
+class PreprocessingSurvival(Basics):
+    
+    def __init__(self):
+        Basics.__init__(self)
+        self.data_raw = None
+        self.data_features = None
+        self.data_features_eids = None
+        self.survival_vars = ['FollowUpTime', 'Death']
+    
+    def _preprocessing(self):
+        usecols = ['eid', '40000-0.0', '34-0.0', '52-0.0', '53-0.0', '53-1.0', '53-2.0', '53-3.0']
+        self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv', usecols=usecols)
+        dict_UKB_fields_to_names = {'40000-0.0': 'FollowUpDate', '34-0.0': 'Year_of_birth', '52-0.0': 'Month_of_birth',
+                                    '53-0.0': 'Date_attended_center_0', '53-1.0': 'Date_attended_center_1',
+                                    '53-2.0': 'Date_attended_center_2', '53-3.0': 'Date_attended_center_3'}
+        self.data_raw.rename(columns=dict_UKB_fields_to_names, inplace=True)
+        self.data_raw['eid'] = self.data_raw['eid'].astype(str)
+        self.data_raw.set_index('eid', drop=False, inplace=True)
+        self.data_raw.index.name = 'column_names'
+        # Format survival data
+        self.data_raw['Death'] = ~self.data_raw['FollowUpDate'].isna()
+        self.data_raw['FollowUpDate'][self.data_raw['FollowUpDate'].isna()] = '2020-04-27'
+        self.data_raw['FollowUpDate'] = self.data_raw['FollowUpDate'].apply(
+            lambda x: pd.NaT if pd.isna(x) else datetime.strptime(x, '%Y-%m-%d'))
+        assert ('FollowUpDate.1' not in self.data_raw.columns)
+    
+    def _add_physicalactivity_instances(self):
+        data_pa = pd.read_csv(
+            '/n/groups/patel/Alan/Aging/TimeSeries/series/PhysicalActivity/90001/features/PA_visit_date.csv')
+        data_pa['eid'] = data_pa['eid'].astype(str)
+        data_pa.set_index('eid', drop=False, inplace=True)
+        data_pa.index.name = 'column_names'
+        self.data_raw = self.data_raw.merge(data_pa, on=['eid'], how='outer')
+        self.data_raw.set_index('eid', drop=False, inplace=True)
+    
+    def _compute_age(self):
+        # Recompute age with greater precision by leveraging the month of birth
+        self.data_raw.dropna(subset=['Year_of_birth'], inplace=True)
+        self.data_raw['Year_of_birth'] = self.data_raw['Year_of_birth'].astype(int)
+        self.data_raw['Month_of_birth'] = self.data_raw['Month_of_birth'].astype(int)
+        self.data_raw['Date_of_birth'] = self.data_raw.apply(
+            lambda row: datetime(row.Year_of_birth, row.Month_of_birth, 15), axis=1)
+        for i in self.instances:
+            self.data_raw['Date_attended_center_' + i] = self.data_raw['Date_attended_center_' + i].apply(
+                lambda x: pd.NaT if pd.isna(x) else datetime.strptime(x, '%Y-%m-%d'))
+            self.data_raw['Age_' + i] = self.data_raw['Date_attended_center_' + i] - self.data_raw['Date_of_birth']
+            self.data_raw['Age_' + i] = self.data_raw['Age_' + i].dt.days / 365.25
+            self.data_raw['FollowUpTime_' + i] = self.data_raw['FollowUpDate'] - self.data_raw[
+                'Date_attended_center_' + i]
+            self.data_raw['FollowUpTime_' + i] = self.data_raw['FollowUpTime_' + i].dt.days / 365.25
+            self.data_raw.drop(['Date_attended_center_' + i], axis=1, inplace=True)
+        
+        self.data_raw.drop(['Year_of_birth', 'Month_of_birth', 'Date_of_birth', 'FollowUpDate'], axis=1, inplace=True)
+        self.data_raw.dropna(how='all', subset=['Age_0', 'Age_1', 'Age_1.5', 'Age_1.51', 'Age_1.52', 'Age_1.53',
+                                                'Age_1.54', 'Age_2', 'Age_3'], inplace=True)
+    
+    def _concatenate_instances(self):
+        self.data_features = None
+        for i in self.instances:
+            print('Preparing the samples for instance ' + i)
+            df_i = self.data_raw.dropna(subset=['Age_' + i])
+            print(str(len(df_i.index)) + ' samples found in instance ' + i)
+            dict_names = {}
+            features = ['Age', 'FollowUpTime']
+            
+            for feature in features:
+                dict_names[feature + '_' + i] = feature
+            self.dict_names = dict_names
+            df_i.rename(columns=dict_names, inplace=True)
+            df_i['instance'] = i
+            df_i['id'] = df_i['eid'] + '_' + df_i['instance']
+            df_i = df_i[['id', 'eid', 'instance'] + self.survival_vars]
+            if self.data_features is None:
+                self.data_features = df_i
+            else:
+                self.data_features = self.data_features.append(df_i)
+            print('The size of the full concatenated dataframe is now ' + str(len(self.data_features.index)))
+        
+        # Add * instance for eids
+        survival_eids = self.data_features[self.data_features['instance'] == '0']
+        survival_eids['instance'] = '*'
+        survival_eids['id'] = survival_eids['eid'] + '_' + survival_eids['instance']
+        self.data_features = self.data_features.append(survival_eids)
+    
+    def generate_data(self):
+        # Formatting
+        self._preprocessing()
+        self._add_physicalactivity_instances()
+        self._compute_age()
+        self._concatenate_instances()
+        
+        # save data
+        self.data_features.to_csv('../data/data_survival.csv', index=False)
+
+
+class MyImageDataGenerator(Basics, Sequence, ImageDataGenerator):
     
     def __init__(self, target=None, organ=None, view=None, data_features=None, n_samples_per_subepoch=None,
                  batch_size=None, training_mode=None, side_predictors=None, dir_images=None, images_width=None,
                  images_height=None, data_augmentation=False, data_augmentation_factor=None, seed=None):
         # Parameters
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.target = target
         if target in self.targets_regression:
             self.labels = data_features[target]
@@ -958,7 +1066,7 @@ class DeepLearning(Metrics):
                         'MobileNet': 128, 'MobileNetV2': 64, 'NASNetMobile': 64, 'NASNetLarge': 4}}
         # Define batch size
         if organ + '_' + view in self.dict_batch_sizes.keys():
-            self.batch_size = self.dict_batch_sizes[organ + '_' + view][architecture]
+            randoself.batch_size = self.dict_batch_sizes[organ + '_' + view][architecture]
         else:
             self.batch_size = self.dict_batch_sizes['Default'][architecture]
         # double the batch size for the teslaM40 cores that have bigger memory
@@ -1418,8 +1526,8 @@ class Training(DeepLearning):
         reduce_lr_on_plateau = ReduceLROnPlateau(monitor='loss', factor=0.5, patience=patience_reduce_lr, verbose=1,
                                                  mode='min', min_delta=0, cooldown=0, min_lr=0)
         early_stopping = EarlyStopping(monitor='val_' + self.main_metric.name, min_delta=0, patience=15, verbose=0,
-                                       mode=self.main_metric_mode,
-                                       baseline=self.baseline_performance)
+                                       mode=self.main_metric_mode, baseline=self.baseline_performance,
+                                       restore_best_weights=True)
         self.callbacks = [csv_logger, model_checkpoint_backup, model_checkpoint, early_stopping, reduce_lr_on_plateau]
     
     def build_model(self):
@@ -1549,13 +1657,13 @@ class PredictionsGenerate(DeepLearning):
                                           + self.outer_fold + '.csv', index=False)
 
 
-class PredictionsConcatenate(Hyperparameters):
+class PredictionsConcatenate(Basics):
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
                  n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
                  data_augmentation_factor=None):
         # Initialize parameters
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.version = target + '_' + organ + '_' + view + '_' + transformation + '_' + architecture + '_' + \
                        n_fc_layers + '_' + n_fc_nodes + '_' + optimizer + '_' + learning_rate + '_' + weight_decay + \
                        '_' + dropout_rate + '_' + data_augmentation_factor
@@ -1578,11 +1686,11 @@ class PredictionsConcatenate(Hyperparameters):
                                           '.csv', index=False)
 
 
-class PredictionsMerge(Hyperparameters):
+class PredictionsMerge(Basics):
     
     def __init__(self, target=None, fold=None):
         
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         
         # Define dictionaries attributes for data, generators and predictions
         self.target = target
@@ -1740,10 +1848,10 @@ class PredictionsMerge(Hyperparameters):
                                    self.fold + '.csv', index=False)
 
 
-class PredictionsEids(Hyperparameters):
+class PredictionsEids(Basics):
     
     def __init__(self, target=None, fold=None, debug_mode=None):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         
         # Define dictionaries attributes for data, generators and predictions
         self.target = target
@@ -1974,13 +2082,6 @@ class PerformancesGenerate(Metrics):
         self._preprocess_data_features_predictions_for_performances()
         self._preprocess_predictions_for_performances()
         self._initiate_empty_performances_df()
-    
-    def _bootstrap(self, data, function):
-        results = []
-        for i in range(self.n_bootstrap_iterations):
-            data_i = resample(data, replace=True, n_samples=len(data.index))
-            results.append(function(data_i['y'], data_i['pred']))
-        return np.mean(results), np.std(results)
     
     # Fill the columns for this model, outer_fold by outer_fold
     def compute_performances(self):
@@ -2260,6 +2361,156 @@ class PerformancesTuning(Metrics):
             self.PERFORMANCES[fold].to_csv(path_perf, index=False)
             Performances_alphabetical = self.PERFORMANCES[fold].sort_values(by='version')
             Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
+
+
+class PerformancesSurvival(Metrics):
+    
+    def __init__(self, target=None, fold=None, pred_type=None, debug_mode=None):
+        Metrics.__init__(self)
+        
+        self.target = target
+        self.fold = fold
+        self.pred_type = pred_type
+        if debug_mode:
+            self.n_bootstrap_iterations = 3
+        else:
+            self.n_bootstrap_iterations = 1000
+    
+    def _bootstrap_CI(self, data):
+        results = []
+        for i in range(self.n_bootstrap_iterations):
+            data_i = resample(data, replace=True, n_samples=len(data.index))
+            if len(data_i['Death'].unique()) == 2:
+                results.append(concordance_index(data_i['Age'], -data_i['pred'], data_i['Death']))
+            if len(results) > 0:
+                results_mean = np.mean(results)
+                results_std = np.std(results)
+            else:
+                results_mean = np.nan
+                results_std = np.nan
+        return results_mean, results_std
+    
+    def load_data(self):
+        # Load and preprocess PERFORMANCES
+        self.PERFORMANCES = pd.read_csv(self.path_data + 'PERFORMANCES_withEnsembles_alphabetical_' +
+                                        self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
+        self.PERFORMANCES.set_index('version', drop=False, inplace=True)
+        self.PERFORMANCES.index.name = 'index'
+        for inner_fold in ['all'] + [str(i) for i in range(10)]:
+            for metric in ['C-Index', 'C-Index-difference']:
+                for mode in self.modes:
+                    self.PERFORMANCES[metric + mode + '_' + inner_fold] = np.nan
+        
+        Residuals = pd.read_csv(
+            self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
+        Survival = pd.read_csv(self.path_data + 'data_survival.csv')
+        self.Survival = pd.merge(Survival[['id', 'FollowUpTime', 'Death']], Residuals, on='id')
+        data_folds = pd.read_csv(self.path_data + 'data-features_eids.csv', usecols=['eid', 'outer_fold'])
+        self.SURV = {}
+        for i in range(10):
+            self.SURV[i] = \
+                self.Survival[self.Survival['eid'].isin(data_folds['eid'][data_folds['outer_fold'] == i].values)]
+    
+    def compute_CIs_and_save_data(self):
+        models = [col.replace('res_', '') for col in self.Survival.columns if 'res_' in col]
+        for k, model in enumerate(models):
+            print(model)
+            if k % 30 == 0:
+                print('Computing CI for the ' + str(k) + 'th model out of ' + str(len(models)) + ' models.')
+            # Load Performances dataframes
+            PERFS = {}
+            for mode in self.modes:
+                PERFS[mode] = pd.read_csv('../data/Performances_' + self.pred_type + '_' + model + '_' + self.fold +
+                                          mode + '.csv')
+                PERFS[mode].set_index('outer_fold', drop=False, inplace=True)
+                PERFS[mode]['C-Index'] = np.nan
+                PERFS[mode]['C-Index-difference'] = np.nan
+            df_model = self.Survival[['FollowUpTime', 'Death', 'Age', 'res_' + model]].dropna()
+            df_model.rename(columns={'res_' + model: 'pred'}, inplace=True)
+            # Compute CI over all samples
+            if len(df_model['Death'].unique()) == 2:
+                ci_model = concordance_index(df_model['FollowUpTime'], -(df_model['Age'] - df_model['pred']),
+                                             df_model['Death'])
+                ci_age = concordance_index(df_model['FollowUpTime'], -df_model['Age'], df_model['Death'])
+                ci_diff = ci_model - ci_age
+                PERFS[''].loc['all', 'C-Index'] = ci_model
+                PERFS[''].loc['all', 'C-Index-difference'] = ci_diff
+                self.PERFORMANCES.loc[model, 'C-Index_all'] = ci_model
+                self.PERFORMANCES.loc[model, 'C-Index-difference_all'] = ci_model
+                _, ci_sd = self._bootstrap_CI(df_model)
+                PERFS['_sd'].loc['all', 'C-Index'] = ci_sd
+                PERFS['_sd'].loc['all', 'C-Index-difference'] = ci_sd
+                self.PERFORMANCES.loc[model, 'C-Index_sd_all'] = ci_sd
+                self.PERFORMANCES.loc[model, 'C-Index-difference_sd_all'] = ci_sd
+            # Compute CI over each fold
+            for i in range(10):
+                df_model_i = self.SURV[i][['FollowUpTime', 'Death', 'Age', 'res_' + model]].dropna()
+                df_model_i.rename(columns={'res_' + model: 'pred'}, inplace=True)
+                if len(df_model_i['Death'].unique()) == 2:
+                    ci_model_i = concordance_index(df_model_i['FollowUpTime'],
+                                                   -(df_model_i['Age'] - df_model_i['pred']),
+                                                   df_model_i['Death'])
+                    ci_age_i = concordance_index(df_model_i['FollowUpTime'], -df_model_i['Age'], df_model_i['Death'])
+                    ci_diff_i = ci_model_i - ci_age_i
+                    PERFS[''].loc[str(i), 'C-Index'] = ci_model_i
+                    PERFS[''].loc[str(i), 'C-Index-difference'] = ci_diff_i
+                    self.PERFORMANCES.loc[model, 'C-Index_' + str(i)] = ci_model_i
+                    self.PERFORMANCES.loc[model, 'C-Index-difference_' + str(i)] = ci_diff_i
+                    _, ci_i_sd = self._bootstrap_CI(df_model_i)
+                    PERFS['_sd'].loc[str(i), 'C-Index'] = ci_i_sd
+                    PERFS['_sd'].loc[str(i), 'C-Index-difference'] = ci_i_sd
+                    self.PERFORMANCES.loc[model, 'C-Index_sd_' + str(i)] = ci_i_sd
+                    self.PERFORMANCES.loc[model, 'C-Index-difference_sd_' + str(i)] = ci_i_sd
+            # Compute sd using all folds
+            ci_str = round(PERFS[''][['C-Index', 'C-Index-difference']], 3).astype(str) + '+-' + \
+                     round(PERFS['_sd'][['C-Index', 'C-Index-difference']], 3).astype(str)
+            PERFS['_str'][['C-Index', 'C-Index-difference']] = ci_str
+            for col in ['C-Index', 'C-Index-difference']:
+                cols = [col + '_str_' + str(i) for i in range(10)]
+                # Fill model's performance matrix
+                ci_std_lst = PERFS['_str'].loc['all', col].split('+-')
+                ci_std_lst.insert(1, str(round(PERFS[''][col].iloc[1:].std(), 3)))
+                ci_std_str = '+-'.join(ci_std_lst)
+                PERFS['_str'].loc['all', col] = ci_std_str
+                # Fill global performances matrix
+                self.PERFORMANCES.loc[model, cols] = ci_str[col].values[1:]
+                self.PERFORMANCES.loc[model, col + '_str_all'] = ci_std_str
+            print(PERFS['_str'])
+            # Save new performances
+            for mode in self.modes:
+                PERFS[mode].to_csv('../data/Performances_' + self.pred_type + '_withCI_' + model + '_' + self.fold +
+                                   mode + '.csv')
+        
+        # Save PERFORMANCES dataframes
+        self.PERFORMANCES.to_csv(self.path_data + 'PERFORMANCES_withCI_withEnsembles_alphabetical_' +
+                                 self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
+        
+        # Ranking, printing and saving
+        # Sort by alphabetical order
+        self.Performances_alphabetical = self.PERFORMANCES.sort_values(by='version')
+        cols_to_print = ['version', 'C-Index-difference_str_all']
+        print('Performances of the models ranked by models\'names:')
+        print(self.Performances_alphabetical[cols_to_print])
+        self.Performances_alphabetical.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_alphabetical_' +
+                                              self.pred_type + '_' + self.target + '_' + self.fold + '.csv',
+                                              index=False)
+        # Sort by C-Index difference, to print
+        print('Performances of the models ranked by C-Index difference with C-Index based on age only,'
+              ' on all the samples:')
+        self.Performances_ranked = self.PERFORMANCES.sort_values(by='C-Index-difference_all', ascending=False)
+        print(self.Performances_ranked[cols_to_print])
+        # Sort by main metric, to save
+        sort_by = self.dict_main_metrics_names[self.target] + '_all'
+        sort_ascending = self.main_metrics_modes[self.dict_main_metrics_names[self.target]] == 'min'
+        self.Performances_ranked = self.PERFORMANCES.sort_values(by=sort_by, ascending=sort_ascending)
+        self.Performances_ranked.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_withEnsembles_ranked_' +
+                                        self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
+        # Save with ensembles
+        models_nonensembles = [idx for idx in self.Performances_alphabetical.index if '*' not in idx]
+        path_save = self.path_data + 'PERFORMANCES_withoutEnsembles_withCI_alphabetical_' + self.pred_type + '_' + \
+                    self.target + '_' + self.fold + '.csv'
+        self.Performances_alphabetical.loc[models_nonensembles, :].to_csv(path_save, index=False)
+        self.Performances_ranked.loc[models_nonensembles, :].to_csv(path_save.replace('alphabetical', 'ranked'))
 
 
 # This class was coded by Samuel Diai.
@@ -2748,11 +2999,11 @@ class EnsemblesPredictions(Metrics):
                                           self.target + '_' + fold + '.csv', index=False)
 
 
-class ResidualsGenerate(Hyperparameters):
+class ResidualsGenerate(Basics):
     
     def __init__(self, target=None, fold=None, pred_type=None, debug_mode=False):
         # Parameters
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.target = target
         self.fold = fold
         self.pred_type = pred_type
@@ -2793,10 +3044,10 @@ class ResidualsGenerate(Hyperparameters):
                               '.csv', index=False)
 
 
-class ResidualsCorrelations(Hyperparameters):
+class ResidualsCorrelations(Basics):
     
     def __init__(self, target=None, fold=None, pred_type=None, debug_mode=False):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.target = target
         self.fold = fold
         self.pred_type = pred_type
@@ -2889,8 +3140,8 @@ class SelectBest(Metrics):
             path_pred = self.path_data + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' + self.target + '_' + \
                         fold + '.csv'
             path_res = self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + fold + '.csv'
-            path_perf = self.path_data + 'PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + self.target + \
-                        '_' + fold + '.csv'
+            path_perf = self.path_data + 'PERFORMANCES_withEnsembles_withCI_ranked_' + self.pred_type + '_' + \
+                        self.target + '_' + fold + '.csv'
             path_corr = self.path_data + 'ResidualsCorrelations_str_' + self.pred_type + '_' + self.target + '_' + \
                         fold + '.csv'
             self.PREDICTIONS[fold] = pd.read_csv(path_pred)
@@ -2906,7 +3157,7 @@ class SelectBest(Metrics):
     
     def _select_versions(self):
         # Load val performances
-        path_perf = self.path_data + 'PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+        path_perf = self.path_data + 'PERFORMANCES_withEnsembles_withCI_ranked_' + self.pred_type + '_' + self.target + \
                     '_test.csv'
         Performances = pd.read_csv(path_perf)
         Performances.set_index('version', drop=False, inplace=True)
@@ -2971,16 +3222,16 @@ class SelectBest(Metrics):
                 self.CORRELATIONS[fold][mode].to_csv(path_corr.replace('_str', mode), index=True)
 
 
-class SelectCorrelationsNAs(Hyperparameters):
+class SelectCorrelationsNAs(Basics):
     
     def __init__(self, target=None):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.target = target
         self.folds = ['test']
         self.CORRELATIONS = {'*': {'': {}, '_sd': {}, '_str': {}}}
     
     def load_data(self):
-        for models_type in ['', '_bestmodels']:
+        for models_type in self.models_types:
             self.CORRELATIONS[models_type] = {}
             for pred_type in ['instances', 'eids', '*']:
                 self.CORRELATIONS[models_type][pred_type] = {}
@@ -2998,7 +3249,7 @@ class SelectCorrelationsNAs(Hyperparameters):
     
     def fill_na(self):
         # Dectect NAs in the instances correlation matrix
-        for models_type in ['', '_bestmodels']:
+        for models_type in self.models_types:
             NAs_mask = self.CORRELATIONS[models_type]['instances']['']['test'].isna()
             for mode in self.modes:
                 for fold in self.folds:
@@ -3008,12 +3259,244 @@ class SelectCorrelationsNAs(Hyperparameters):
                         self.CORRELATIONS[models_type]['eids'][mode][fold][NAs_mask]
     
     def save_correlations(self):
-        for models_type in ['', '_bestmodels']:
+        for models_type in self.models_types:
             for mode in self.modes:
                 for fold in self.folds:
                     self.CORRELATIONS[models_type]['*'][mode][fold].to_csv(self.path_data + 'ResidualsCorrelations' +
                                                                            models_type + mode + '_*_' + self.target +
                                                                            '_' + fold + '.csv', index=True)
+
+
+class CorrelationsAverages:
+    
+    def __init__(self):
+        self.Performances = pd.read_csv("../data/PERFORMANCES_withEnsembles_ranked_eids_Age_test.csv")
+        self.Correlations = pd.read_csv("../data/ResidualsCorrelations_eids_Age_test.csv", index_col=0)
+    
+    def _melt_correlation_matrix(self, models):
+        models = ['_'.join(c.split('_')[1:]) for c in models]
+        Corrs = self.Correlations.loc[models, models]
+        Corrs = Corrs.where(np.triu(np.ones(Corrs.shape), 1).astype(np.bool))
+        Corrs = Corrs.stack().reset_index()
+        Corrs.columns = ['Row', 'Column', 'Correlation']
+        return Corrs
+    
+    @staticmethod
+    def _split_version(row):
+        names = ['organ', 'view', 'transformation', 'architecture', 'n_fc_layers', 'n_fc_nodes', 'optimizer',
+                 'learning_rate', 'weight_decay', 'dropout_rate', 'data_augmentation_factor']
+        row_names = ['row_' + name for name in names]
+        col_names = ['col_' + name for name in names]
+        row_params = row['Row'].split('_')
+        col_params = row['Column'].split('_')
+        new_row = pd.Series(row_params + col_params + [row['Correlation']])
+        new_row.index = row_names + col_names + ['Correlation']
+        return new_row
+    
+    @staticmethod
+    def _compute_stats(data, title):
+        m = data['Correlation'].mean()
+        s = data['Correlation'].std()
+        n = len(data.index)
+        print('Correlation between ' + title + ': ' + str(round(m, 3)) + '+-' + str(round(s, 3)) + ', n_pairs=' +
+              str(n))
+    
+    @staticmethod
+    def _generate_pairs(ls):
+        pairs = []
+        for i in range(len(ls)):
+            for j in range((i + 1), len(ls)):
+                pairs.append((ls[i], ls[j]))
+        return pairs
+    
+    @staticmethod
+    def _extract_pair(Corrs, pair, level):
+        extracted = Corrs[((Corrs['row_' + level] == pair[0]) & (Corrs['col_' + level] == pair[1])) |
+                          ((Corrs['row_' + level] == pair[1]) & (Corrs['col_' + level] == pair[0]))]
+        return extracted
+    
+    def _extract_pairs(self, Corrs, pairs, level):
+        extracted = None
+        for pair in pairs:
+            extracted_pair = self._extract_pair(Corrs, pair, level)
+            if extracted is None:
+                extracted = extracted_pair
+            else:
+                extracted = extracted.append(extracted_pair)
+        return extracted
+    
+    def correlations_all(self):
+        Corrs = self._melt_correlation_matrix(self.Performances['version'].values)
+        self._compute_stats(Corrs, 'All models')
+    
+    def correlations_dimensions(self):
+        Perf = self.Performances[(self.Performances['view'] == '*') &
+                                 ~(self.Performances['organ'].isin(['*', '*instances01', '*instances1.5x',
+                                                                    '*instances23']))]
+        Corrs = self._melt_correlation_matrix(Perf['version'].values)
+        self._compute_stats(Corrs, 'Main Dimensions')
+    
+    def correlations_subdimensions(self):
+        # Subdimensions
+        dict_dims_to_subdims = {
+            'Brain': ['Cognitive', 'MRI'],
+            'Eyes': ['OCT', 'Fundus', 'IntraocularPressure', 'Acuity', 'Autorefraction'],
+            'Arterial': ['PulseWaveAnalysis', 'Carotids'],
+            'Heart': ['ECG', 'MRI'],
+            'Abdomen': ['Liver', 'Pancreas'],
+            'Musculoskeletal': ['Spine', 'Hips', 'Knees', 'FullBody', 'Scalars'],
+            'PhysicalActivity': ['FullWeek', 'Walking'],
+            'Biochemistry': ['Urine', 'Blood']
+        }
+        Corrs_subdim = None
+        for dim in dict_dims_to_subdims.keys():
+            models = ['Age_' + dim + '_' + subdim + '_*' * 9 for subdim in dict_dims_to_subdims[dim]]
+            Corrs_dim = self._melt_correlation_matrix(models)
+            self._compute_stats(Corrs_dim, dim + ' subdimensions')
+            if Corrs_subdim is None:
+                Corrs_subdim = Corrs_dim
+            else:
+                Corrs_subdim = Corrs_subdim.append(Corrs_dim)
+        
+        # Compute the average over the subdimensions
+        self._compute_stats(Corrs_subdim, 'Subdimensions')
+    
+    def correlations_subsubdimensions(self):
+        # Only select the ensemble models at the architecture level,
+        Perf_ss = self.Performances[self.Performances['architecture'] == '*']
+        
+        # Brain - Cognitive
+        Perf = Perf_ss[(Perf_ss['organ'] == 'Brain') & (Perf_ss['view'] == 'Cognitive')]
+        # Remove ensemble model and all scalars
+        Perf = Perf[~Perf['transformation'].isin(['*', 'AllScalars'])]
+        Corrs_bc = self._melt_correlation_matrix(Perf['version'].values)
+        self._compute_stats(Corrs_bc, 'Brain cognitive sub-subdimensions')
+        
+        # Musculoskeletal - Scalars
+        Perf = Perf_ss[(Perf_ss['organ'] == 'Musculoskeletal') & (Perf_ss['view'] == 'Scalars')]
+        Perf = Perf[~Perf['transformation'].isin(['*', 'AllScalars'])]
+        Corrs_ms = self._melt_correlation_matrix(Perf['version'].values)
+        self._compute_stats(Corrs_ms, 'Musculoskeletal - Scalars sub-subdimensions')
+        
+        # Average over subsubdimensions
+        Corrs_subsubdimensions = Corrs_bc.append(Corrs_ms)
+        self._compute_stats(Corrs_subsubdimensions, 'Sub-subdimensions')
+    
+    def correlations_views(self):
+        # Variables
+        dict_dim_to_view = {
+            'Brain_MRI': [['SagittalReference', 'CoronalReference', 'TransverseReference', 'dMRIWeightedMeans',
+                           'SubcorticalVolumes', 'GreyMatterVolumes'],
+                          ['SagittalRaw', 'CoronalRaw', 'TransverseRaw']],
+            'Arterial_PulseWaveAnalysis': [['Scalars', 'TimeSeries']],
+            'Arterial_Carotids': [['Scalars', 'LongAxis', 'CIMT120', 'CIMT150', 'ShortAxis']],
+            'Heart_ECG': [['Scalars', 'TimeSeries']],
+            'Heart_MRI': [['2chambersRaw', '3chambersRaw', '4chambersRaw'],
+                          ['2chambersContrast', '3chambersContrast', '4chambersContrast']],
+            'Musculoskeletal_Spine': [['Sagittal', 'Coronal']],
+            'Musculoskeletal_FullBody': [['Figure', 'Flesh']],
+            'PhysicalActivity_FullWeek': [
+                ['Scalars', 'Acceleration', 'TimeSeriesFeatures', 'GramianAngularField1minDifference',
+                 'GramianAngularField1minSummation', 'MarkovTransitionField1min',
+                 'RecurrencePlots1min']]
+        }
+        
+        Corrs_views = None
+        for dim in dict_dim_to_view.keys():
+            Corrs_dims = None
+            for i, views in enumerate(dict_dim_to_view[dim]):
+                models = ['Age_' + dim + '_' + view + '_*' * 8 for view in dict_dim_to_view[dim][i]]
+                Corrs_dim = self._melt_correlation_matrix(models)
+                if Corrs_dims is None:
+                    Corrs_dims = Corrs_dim
+                else:
+                    Corrs_dims = Corrs_dims.append(Corrs_dim)
+            self._compute_stats(Corrs_dims, dim + ' views')
+            
+            if Corrs_views is None:
+                Corrs_views = Corrs_dims
+            else:
+                Corrs_views = Corrs_views.append(Corrs_dims)
+        
+        # Compute the average over the views
+        self._compute_stats(Corrs_views, 'Views')
+    
+    def correlations_transformations(self):
+        # Raw vs. Contrast (Heart MRI, Abdomen Liver, Abdomen Pancreas), Raw vs. Reference (Brain MRI),
+        # Figure vs Skeleton (Musculoskeltal FullBody)
+        # Filter out the models that are ensembles at the architecture level
+        models_to_keep = [model for model in self.Correlations.index.values if model.split('_')[3] != '*']
+        # Select only the models that are Heart MRI, Abdomen, or Brain MRI
+        models_to_keep = [model for model in models_to_keep if
+                          ((model.split('_')[0] == 'Abdomen') & (model.split('_')[1] in ['Liver', 'Pancreas'])) |
+                          ((model.split('_')[0] == 'Brain') & (model.split('_')[1] == 'MRI')) |
+                          ((model.split('_')[0] == 'Heart') & (model.split('_')[1] == 'MRI')) |
+                          ((model.split('_')[0] == 'Musculoskeletal') & (model.split('_')[1] == 'FullBody') &
+                           (model.split('_')[2] in ['Figure', 'Skeleton']))]
+        # Select only the models that have the relevant preprocessing/transformations
+        models_to_keep = [model for model in models_to_keep if model.split('_')[2] in
+                          ['Raw', 'Contrast', '2chambersRaw', '2chambersContrast', '3chambersRaw', '3chambersContrast',
+                           '4chambersRaw', '4chambersContrast', 'SagittalRaw', 'SagittalReference', 'CoronalRaw',
+                           'CoronalReference', 'TransverseRaw', 'TransverseReference', 'Figure', 'Skeleton']]
+        # Select the corresponding rows and columns
+        Corrs = self.Correlations.loc[models_to_keep, models_to_keep]
+        # Melt correlation matrix to dataframe
+        Corrs = Corrs.where(np.triu(np.ones(Corrs.shape), 1).astype(np.bool))
+        Corrs = Corrs.stack().reset_index()
+        Corrs.columns = ['Row', 'Column', 'Correlation']
+        Corrs = Corrs.apply(self._split_version, axis=1)
+        # Only keep the models that have the same organ, view and architecture
+        Corrs = Corrs[(Corrs['row_organ'] == Corrs['col_organ']) & (Corrs['row_view'] == Corrs['col_view']) &
+                      (Corrs['row_architecture'] == Corrs['col_architecture'])]
+        
+        # Define preprocessing pairs
+        dict_preprocessing = {
+            'Raw-Reference': [('SagittalRaw', 'SagittalReference'), ('CoronalRaw', 'CoronalReference'),
+                              ('TransverseRaw', 'TransverseReference')],
+            'Raw-Contrast': [('Raw', 'Contrast'), ('2chambersRaw', '2chambersContrast'),
+                             ('3chambersRaw', '3chambersContrast'), ('4chambersRaw', '4chambersContrast')],
+            'Figure-Skeleton': [('Figure', 'Skeleton')]
+        }
+        
+        # Compute average correlation between each pair of transformations
+        Corrs_transformations = None
+        for comparison in dict_preprocessing.keys():
+            Corrs_comp = self._extract_pairs(Corrs, dict_preprocessing[comparison], 'transformation')
+            print(comparison)
+            print(Corrs_comp)
+            self._compute_stats(Corrs_comp, comparison)
+            if Corrs_transformations is None:
+                Corrs_transformations = Corrs_comp
+            else:
+                Corrs_transformations = Corrs_transformations.append(Corrs_comp)
+        
+        # Compute average correlation between transformations
+        self._compute_stats(Corrs_transformations, 'Transformations')
+    
+    def correlations_algorithms(self):
+        # Variables
+        algorithms_scalars = ['ElasticNet', 'LightGBM', 'NeuralNetwork']
+        algorithms_images = ['InceptionV3', 'InceptionResNetV2']
+        
+        # Filter out the ensemble models (at the level of the algorithm)
+        models_to_keep = [model for model in self.Correlations.index.values if model.split('_')[3] != '*']
+        Corrs = self.Correlations.loc[models_to_keep, models_to_keep]
+        # Melt correlation matrix to dataframe
+        Corrs = Corrs.where(np.triu(np.ones(Corrs.shape), 1).astype(np.bool))
+        Corrs = Corrs.stack().reset_index()
+        Corrs.columns = ['Row', 'Column', 'Correlation']
+        Corrs = Corrs.apply(self._split_version, axis=1)
+        # Select the rows for which everything is identical aside from the dataset
+        for name in ['organ', 'view', 'transformation']:
+            Corrs = Corrs[Corrs['row_' + name] == Corrs['col_' + name]]
+        
+        # Compute average correlation between algorithms
+        self._compute_stats(Corrs, 'Algorithms')
+        algorithms_pairs = self._generate_pairs(algorithms_scalars) + self._generate_pairs(algorithms_images)
+        # Compute average correlation between each algorithm pair
+        for pair in algorithms_pairs:
+            Corrs_pair = self._extract_pair(Corrs, pair, 'architecture')
+            self._compute_stats(Corrs_pair, pair[0] + ' and ' + pair[1])
 
 
 class AttentionMaps(DeepLearning):
@@ -3230,7 +3713,7 @@ class AttentionMaps(DeepLearning):
         weights = get_gradients_of_activations(self.model, Xs, y, layer_name=self.last_conv_layer,
                                                )[self.last_conv_layer]
         weights = weights.mean(axis=(1, 2))
-        weights /= np.abs(weights.max()) + 1e-7  # for numerical stability #TODO I think I should used the abs here.
+        weights /= np.abs(weights.max()) + 1e-7  # for numerical stability
         activations = get_activations(self.model, Xs, layer_name=self.last_conv_layer)[self.last_conv_layer]
         # We must take the absolute value because for Grad-RAM, unlike for Grad-Cam, we care both about + and - effects
         gradcams = np.abs(np.einsum('il,ijkl->ijk', weights, activations))
@@ -3296,10 +3779,10 @@ class AttentionMaps(DeepLearning):
                     self._generate_maps_for_one_batch(self.df_leftovers, Xs, y)
 
 
-class GWASPreprocessing(Hyperparameters):
+class GWASPreprocessing(Basics):
     
     def __init__(self, target=None):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.target = target
         self.fam = None
         self.Residuals = None
@@ -3413,10 +3896,10 @@ class GWASPreprocessing(Hyperparameters):
         self._list_removed()
 
 
-class GWASPostprocessing(Hyperparameters):
+class GWASPostprocessing(Basics):
     
     def __init__(self, target=None):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.target = target
         self.organ = None
         self.GWAS = None
@@ -3439,11 +3922,13 @@ class GWASPostprocessing(Hyperparameters):
         files = [file for file in glob.glob(self.path_data + 'GWAS_hits*')
                  if ('All' not in file) & ('_withGenes' not in file)]
         All_hits = None
+        print(files)
         for file in files:
+            print(file)
             hits_organ = pd.read_csv(file)[
                 ['SNP', 'CHR', 'BP', 'GENPOS', 'ALLELE1', 'ALLELE0', 'A1FREQ', 'F_MISS', 'CHISQ_LINREG',
                  'P_LINREG', 'BETA', 'SE', 'CHISQ_BOLT_LMM_INF', 'P_BOLT_LMM_INF']]
-            hits_organ['organ'] = file.split('_')[-1].split('.')[0]
+            hits_organ['organ'] = '.'.join(file.split('_')[-1].split('.')[:-1])
             if All_hits is None:
                 All_hits = hits_organ
             else:
@@ -3462,13 +3947,29 @@ class GWASPostprocessing(Hyperparameters):
                 self._processing()
                 self._save_data()
         self._merge_all_hits()
-    
+        
     @staticmethod
     def _grep(pattern, path):
         for line in open(path, 'r'):
             if line.find(pattern) > -1:
                 return True
         return False
+    
+    @staticmethod
+    def _melt_correlation_matrix(Correlations, models):
+        Corrs = Correlations.loc[models, models]
+        Corrs = Corrs.where(np.triu(np.ones(Corrs.shape), 1).astype(np.bool))
+        Corrs = Corrs.stack().reset_index()
+        Corrs.columns = ['Row', 'Column', 'Correlation']
+        return Corrs
+    
+    @staticmethod
+    def _compute_stats(data, title):
+        m = data['Correlation'].mean()
+        s = data['Correlation'].std()
+        n = len(data.index)
+        print('Correlation between ' + title + ': ' + str(round(m, 3)) + '+-' + str(round(s, 3)) +
+              ', n_pairs=' + str(n))
     
     def parse_heritability_scores(self):
         # Generate empty dataframe
@@ -3521,12 +4022,147 @@ class GWASPostprocessing(Hyperparameters):
         Genetic_correlations.to_csv(self.path_data + 'GWAS_correlations_' + self.target + '.csv')
         Genetic_correlations_sd.to_csv(self.path_data + 'GWAS_correlations_sd_' + self.target + '.csv')
         Genetic_correlations_str.to_csv(self.path_data + 'GWAS_correlations_str_' + self.target + '.csv')
+        
+        # Save sample size for the GWAS correlations
+        Correlations_sample_sizes = Genetic_correlations.copy()
+        Correlations_sample_sizes = Correlations_sample_sizes * np.NaN
+        dimensions = Correlations_sample_sizes.columns.values
+        for i1, dim1 in enumerate(dimensions):
+            for i2, dim2 in enumerate(dimensions[i1:]):
+                # Find the sample size
+                path = '../data/GWAS_data_Age_' + dim1 + '_' + dim2 + '.tab'
+                if os.path.exists(path):
+                    ss = len(pd.read_csv(path, sep='\t').index)
+                    Correlations_sample_sizes.loc[dim1, dim2] = ss
+                    Correlations_sample_sizes.loc[dim2, dim1] = ss
+        Correlations_sample_sizes.to_csv(self.path_data + 'GWAS_correlations_sample_sizes_' + self.target + '.csv')
+        
+        # Print correlations between main dimensions
+        main_dims = ['Abdomen', 'Musculoskeletal', 'Lungs', 'Eyes', 'Heart', 'Arterial', 'Brain', 'Biochemistry',
+                     'Hearing', 'ImmuneSystem', 'PhysicalActivity']
+        Corrs_main = self._melt_correlation_matrix(Correlations, main_dims)
+        Corrs_main_sd = self._melt_correlation_matrix(Correlations_sd, main_dims)
+        Corrs_main['Correlation_sd'] = Corrs_main_sd['Correlation']
+        Corrs_main['Correlation_str'] = Corrs_main['Correlation'] + '+-' + Corrs_main['Correlation_sd']
+        # Fill the table with sample sizes
+        sample_sizes = []
+        to_remove_ss = []
+        for i, row in Corrs_main.iterrows():
+            # Fill the sample size
+            sample_size = Correlations_sample_sizes.loc[row['Row'], row['Column']]
+            if sample_size <= 15000:
+                to_remove_ss.append(i)
+            sample_sizes.append(sample_size)
+        Corrs_main['Sample_size'] = sample_sizes
+        self._compute_stats(Corrs_main, 'all pairs')
+        self._compute_stats(Corrs_main.drop(index=to_remove_ss), 'after filtering sample sizes <= 15000')
+        
+        # Print correlations between subdimensions
+        pairs_all = \
+            [['BrainMRI', 'BrainCognitive'], ['EyesOCT', 'EyesFundus'], ['HeartECG', 'HeartMRI'],
+             ['AbdomenLiver', 'AbdomenPancreas'], ['BiochemistryBlood', 'BiochemistryUrine'],
+             ['MusculoskeletalScalars', 'MusculoskeletalFullBody'], ['MusculoskeletalScalars', 'MusculoskeletalSpine'],
+             ['MusculoskeletalScalars', 'MusculoskeletalHips'], ['MusculoskeletalScalars', 'MusculoskeletalKnees'],
+             ['MusculoskeletalFullBody', 'MusculoskeletalSpine'], ['MusculoskeletalFullBody', 'MusculoskeletalHips'],
+             ['MusculoskeletalFullBody', 'MusculoskeletalKnees'], ['MusculoskeletalSpine', 'MusculoskeletalHips'],
+             ['MusculoskeletalSpine', 'MusculoskeletalKnees'], ['MusculoskeletalHips', 'MusculoskeletalKnees']]
+        pairs_musculo = \
+            [['MusculoskeletalScalars', 'MusculoskeletalFullBody'], ['MusculoskeletalScalars', 'MusculoskeletalSpine'],
+             ['MusculoskeletalScalars', 'MusculoskeletalHips'], ['MusculoskeletalScalars', 'MusculoskeletalKnees']]
+        pairs_musculo_images = \
+            [['MusculoskeletalFullBody', 'MusculoskeletalSpine'], ['MusculoskeletalFullBody', 'MusculoskeletalHips'],
+             ['MusculoskeletalFullBody', 'MusculoskeletalKnees'], ['MusculoskeletalSpine', 'MusculoskeletalHips'],
+             ['MusculoskeletalSpine', 'MusculoskeletalKnees'], ['MusculoskeletalHips', 'MusculoskeletalKnees']]
+        PAIRS = {'all subdimensions': pairs_all, 'musculo scalars vs others': pairs_musculo,
+                 'musculo-no scalars': pairs_musculo_images}
+        for _, (key, pairs) in enumerate(PAIRS.items()):
+            print(key)
+            cors_pairs = []
+            for pair in pairs:
+                cor = Correlations.loc[pair[0], pair[1]]
+                cor_sd = Correlations_sd.loc[pair[0], pair[1]]
+                ss = Correlations_sample_sizes.loc[pair[0], pair[1]]
+                print('Correlation between ' + pair[0] + ' and ' + pair[1] + ' = ' + str(round(cor, 3)) + '+-' +
+                      str(round(cor_sd, 3)) + '; sample size = ' + str(ss))
+                cors_pairs.append(cor)
+            print('Mean correlation for ' + key + ' = ' + str(round(np.mean(cors_pairs), 3)) + '+-' +
+                  str(round(np.std(cors_pairs), 3)) + ', sample size = ' + str(int(ss)) + ', number of pairs = ' +
+                  str(len(pairs)))
+    
+    def compare_phenotypic_correlation_with_genetic_correlations(self):
+        Phenotypic_correlations = pd.read_csv('../data/ResidualsCorrelations_bestmodels_eids_Age_test.csv', index_col=0)
+        Phenotypic_correlations_sd = pd.read_csv('../data/ResidualsCorrelations_bestmodels_sd_eids_Age_test.csv',
+                                                 index_col=0)
+        Genetic_correlations = pd.read_csv('../data/GWAS_correlations_Age.csv', index_col=0)
+        Genetic_correlations_sd = pd.read_csv('../data/GWAS_correlations_sd_Age.csv', index_col=0)
+        Correlations_sample_sizes = pd.read_csv('../data/GWAS_correlations_sample_sizes_Age.csv', index_col=0)
+        Genetic_correlations_filtered = Genetic_correlations.where(Correlations_sample_sizes > 15000)
+        Phenotypic_correlations_filtered = Phenotypic_correlations.where(~Genetic_correlations_filtered.isna())
+        
+        dict_dims_layers = {
+            'all_dims': Phenotypic_correlations_filtered.columns.values,
+            'main_dims': ['Brain', 'Eyes', 'Hearing', 'Lungs', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal',
+                          'PhysicalActivity', 'Biochemistry', 'ImmuneSystem'],
+            'sub_dims': ['BrainCognitive', 'BrainMRI', 'EyesFundus', 'EyesOCT', 'ArterialPulseWaveAnalysis',
+                         'ArterialCarotids',
+                         'HeartECG', 'HeartMRI', 'AbdomenLiver', 'AbdomenPancreas', 'MusculoskeletalSpine',
+                         'MusculoskeletalHips', 'MusculoskeletalKnees', 'MusculoskeletalFullBody',
+                         'MusculoskeletalScalars',
+                         'BiochemistryUrine', 'BiochemistryBlood']
+        }
+
+        def _print_comparisons_between_pheno_and_geno(dims):
+            Pheno_dims = Phenotypic_correlations_filtered.loc[dims, dims]
+            Geno_dims = Genetic_correlations_filtered.loc[dims, dims]
+            Pheno_dims = Pheno_dims.where(np.triu(np.ones(Pheno_dims.shape), 1).astype(np.bool))
+            Pheno_dims = Pheno_dims.stack().reset_index()
+            Geno_dims = Geno_dims.where(np.triu(np.ones(Geno_dims.shape), 1).astype(np.bool))
+            Geno_dims = Geno_dims.stack().reset_index()
+            Pheno_dims.columns = ['Row', 'Column', 'Correlation']
+            Geno_dims.columns = ['Row', 'Column', 'Correlation']
+            Correlations_dims = Pheno_dims.copy()
+            Correlations_dims = Correlations_dims.rename(columns={'Correlation': 'Phenotypic'})
+            Correlations_dims['Genetic'] = Geno_dims['Correlation']
+            final_cor = str(round(Correlations_dims[['Phenotypic', 'Genetic']].corr().iloc[0, 1], 3))
+            # Find min and max difference:
+            Correlations_dims['Difference'] = Correlations_dims['Phenotypic'] - Correlations_dims['Genetic']
+            # min
+            min_diff = Correlations_dims.iloc[Correlations_dims['Difference'].idxmin(), :]
+            min_pheno_sd = Phenotypic_correlations_sd.loc[min_diff['Row'], min_diff['Column']]
+            min_genetic_sd = Genetic_correlations_sd.loc[min_diff['Row'], min_diff['Column']]
+            min_diff_sd = np.sqrt(min_pheno_sd ** 2 + min_genetic_sd ** 2)
+            # max
+            max_diff = Correlations_dims.iloc[Correlations_dims['Difference'].idxmax(), :]
+            max_pheno_sd = Phenotypic_correlations_sd.loc[max_diff['Row'], max_diff['Column']]
+            max_genetic_sd = Genetic_correlations_sd.loc[max_diff['Row'], max_diff['Column']]
+            max_diff_sd = np.sqrt(max_pheno_sd ** 2 + max_genetic_sd ** 2)
+            # print key results
+            print('The correlation between phenotypic and genetic correlations is: ' + final_cor)
+            print('The min difference between phenotypic and genetic correlations is between ' + min_diff[
+                'Row'] + ' and ' +
+                  min_diff['Column'] + '. Difference = ' + str(round(min_diff['Difference'], 3)) + '+-' +
+                  str(round(min_diff_sd, 3)) + '; Phenotypic correlation = ' + str(
+                round(min_diff['Phenotypic'], 3)) + '+-' +
+                  str(round(min_pheno_sd, 3)) + '; Genetic correlation = ' + str(round(min_diff['Genetic'], 3)) + '+-' +
+                  str(round(min_genetic_sd, 3)))
+            print('The max difference between phenotypic and genetic correlations is between ' + max_diff[
+                'Row'] + ' and ' +
+                  max_diff['Column'] + '. Difference = ' + str(round(max_diff['Difference'], 3)) + '+-' +
+                  str(round(max_diff_sd, 3)) + '; Phenotypic correlation = ' + str(
+                round(max_diff['Phenotypic'], 3)) + '+-' +
+                  str(round(max_pheno_sd, 3)) + '; Genetic correlation = ' + str(round(max_diff['Genetic'], 3)) + '+-' +
+                  str(round(max_genetic_sd, 3)))
+    
+        for _, (dims_name, dims) in enumerate(dict_dims_layers.items()):
+            print('Printing the comparison between the phenotypic and genetic correlations at the following level: ' +
+                  dims_name)
+            _print_comparisons_between_pheno_and_geno(dims)
 
 
-class GWASAnnotate(Hyperparameters):
+class GWASAnnotate(Basics):
     
     def __init__(self, target=None):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.target = target
         self.All_hits = None
         self.All_hits_missing = None
@@ -3667,6 +4303,91 @@ class GWASAnnotate(Hyperparameters):
             Hits_organ = self.All_hits[self.All_hits['organ'] == organ].drop(columns=['organ'])
             Hits_organ.to_csv(self.path_data + 'GWAS_hits_' + self.target + '_' + organ + '_withGenes.csv', index=False)
     
+    def summarize_results(self):
+        # Generate empty dataframe
+        organs = ['*', '*instances01', '*instances1.5x', '*instances23', 'Abdomen', 'AbdomenLiver', 'AbdomenPancreas',
+                  'Arterial', 'ArterialCarotids', 'ArterialPulseWaveAnalysis', 'Biochemistry', 'BiochemistryBlood',
+                  'BiochemistryUrine', 'Brain', 'BrainCognitive', 'BrainMRI', 'Eyes', 'EyesFundus', 'EyesOCT',
+                  'Hearing', 'Heart', 'HeartECG', 'HeartMRI', 'ImmuneSystem', 'Lungs', 'Musculoskeletal',
+                  'MusculoskeletalFullBody', 'MusculoskeletalHips', 'MusculoskeletalKnees', 'MusculoskeletalScalars',
+                  'MusculoskeletalSpine', 'PhysicalActivity']
+        cols = ['Organ', 'Sample size', 'SNPs', 'Genes', 'Heritability', 'CA_prediction_R2']
+        GWAS_summary = np.empty((len(organs), len(cols),))
+        GWAS_summary.fill(np.nan)
+        GWAS_summary = pd.DataFrame(GWAS_summary)
+        GWAS_summary.index = organs
+        GWAS_summary.columns = cols
+        GWAS_summary['Organ'] = organs
+        
+        # Fill dataframe
+        All_hits = pd.read_csv(self.path_data + 'GWAS_hits_' + self.target + '_All_withGenes.csv')
+        Heritabilities = pd.read_csv(self.path_data + 'GWAS_heritabilities_' + self.target + '.csv', index_col=0)
+        Performances = pd.read_csv(self.path_data + 'PERFORMANCES_bestmodels_alphabetical_instances_Age_test.csv')
+        dict_organ_to_organ_view = {
+            'AbdomenLiver': ['Abdomen', 'Liver'],
+            'AbdomenPancreas': ['Abdomen', 'Pancreas'],
+            'ArterialCarotids': ['Arterial', 'Carotids'],
+            'ArterialPulseWaveAnalysis': ['Arterial', 'PulseWaveAnalysis'],
+            'BiochemistryBlood': ['Biochemistry', 'Blood'],
+            'BiochemistryUrine': ['Biochemistry', 'Urine'],
+            'BrainCognitive': ['Brain', 'Cognitive'],
+            'BrainMRI': ['Brain', 'MRI'],
+            'EyesFundus': ['Eyes', 'Fundus'],
+            'EyesOCT': ['Eyes', 'OCT'],
+            'HeartECG': ['Heart', 'ECG'],
+            'HeartMRI': ['Heart', 'MRI'],
+            'MusculoskeletalFullBody': ['Musculoskeletal', 'FullBody'],
+            'MusculoskeletalHips': ['Musculoskeletal', 'Hips'],
+            'MusculoskeletalKnees': ['Musculoskeletal', 'Knees'],
+            'MusculoskeletalScalars': ['Musculoskeletal', 'Scalars'],
+            'MusculoskeletalSpine': ['Musculoskeletal', 'Spine']
+        }
+        
+        for organ in organs:
+            organ_hits = All_hits[All_hits['organ'] == organ]
+            data_organ = pd.read_csv(self.path_data + 'GWAS_data_Age_' + organ + '.tab')
+            GWAS_summary.loc[organ, 'Sample size'] = len(data_organ.index)
+            GWAS_summary.loc[organ, 'SNPs'] = len(organ_hits['SNP'].unique())
+            GWAS_summary.loc[organ, 'Genes'] = len(organ_hits['Gene'].unique())
+            if organ in Heritabilities.index:
+                GWAS_summary.loc[organ, 'Heritability'] = str(round(Heritabilities.loc[organ, 'h2'] * 100, 1)) + '+-' \
+                                                          + str(round(Heritabilities.loc[organ, 'h2_sd'] * 100, 1))
+            if organ in Performances['organ'].values:
+                GWAS_summary.loc[organ, 'CA_prediction_R2'] = \
+                    str(round(Performances[Performances['organ'] == organ]['R-Squared_all'].values[0] * 100,
+                              1)) + '+-' + \
+                    str(round(Performances[Performances['organ'] == organ]['R-Squared_sd_all'].values[0] * 100, 1))
+            else:
+                org, view = dict_organ_to_organ_view[organ]
+                GWAS_summary.loc[organ, 'CA_prediction_R2'] = \
+                    str(round(Performances[(Performances['organ'] == org) &
+                                           (Performances['view'] == view)]['R-Squared_all'].values[0] * 100,
+                              1)) + '+-' + \
+                    str(round(Performances[(Performances['organ'] == org) &
+                                           (Performances['view'] == view)]['R-Squared_sd_all'].values[0] * 100, 1))
+        
+        # Format dataframe
+        for col in ['Sample size', 'SNPs', 'Genes']:
+            GWAS_summary[col] = GWAS_summary[col].astype(int)
+        
+        # Save data
+        print('GWAS summary:')
+        print(GWAS_summary)
+        GWAS_summary.to_csv(self.path_data + 'GWAS_summary' + self.target + '.csv')
+        
+        # Report the correlation between R2s and h2_gs:
+        GWAS_summary.dropna(subset=['Heritability', 'CA_prediction_R2'], inplace=True)
+        # Local helper function
+        def extract_h2r2(row):
+            h2 = float(row['Heritability'].split('+-')[0])
+            r2 = float(row['CA_prediction_R2'].split('+-')[0])
+            return pd.Series([h2, r2])
+        
+        h2r2s = GWAS_summary.apply(extract_h2r2, axis=1)
+        Corr_h2s_r2s = h2r2s.corr().loc[0, 1]
+        print('Correlation between R2s when predicting chronological age and h2_g when performing the GWAS = ' +
+              str(round(Corr_h2s_r2s, 3)))
+    
     def upload_data(self):
         files = ['snps_rs.txt', 'GWAS_genes_rs.txt', 'snps_chrbp.txt', 'GWAS_genes_chrbp.txt', 'All_hits_missing.csv',
                  'GWAS_unique_genes.npy']
@@ -3678,10 +4399,10 @@ class GWASAnnotate(Hyperparameters):
                       ' al311@transfer.rc.hms.harvard.edu:/n/groups/patel/Alan/Aging/Medical_Images/data/')
 
 
-class GWASPlots(Hyperparameters):
+class GWASPlots(Basics):
     
     def __init__(self, target=None):
-        Hyperparameters.__init__(self)
+        Basics.__init__(self)
         self.target = target
         self.organs = \
             [file.split('_')[2].replace('.csv', '') for file in glob.glob(self.path_data + 'GWAS_' + target + '_*.csv')]
