@@ -2375,19 +2375,22 @@ class PerformancesSurvival(Metrics):
             self.n_bootstrap_iterations = 3
         else:
             self.n_bootstrap_iterations = 1000
+        self.PERFORMANCES = None
+        self.Survival = None
+        self.SURV = None
     
-    def _bootstrap_CI(self, data):
+    def _bootstrap_c_index(self, data):
         results = []
         for i in range(self.n_bootstrap_iterations):
             data_i = resample(data, replace=True, n_samples=len(data.index))
             if len(data_i['Death'].unique()) == 2:
                 results.append(concordance_index(data_i['Age'], -data_i['pred'], data_i['Death']))
-            if len(results) > 0:
-                results_mean = np.mean(results)
-                results_std = np.std(results)
-            else:
-                results_mean = np.nan
-                results_std = np.nan
+        if len(results) > 0:
+            results_mean = np.mean(results)
+            results_std = np.std(results)
+        else:
+            results_mean = np.nan
+            results_std = np.nan
         return results_mean, results_std
     
     def load_data(self):
@@ -2411,7 +2414,7 @@ class PerformancesSurvival(Metrics):
             self.SURV[i] = \
                 self.Survival[self.Survival['eid'].isin(data_folds['eid'][data_folds['outer_fold'] == i].values)]
     
-    def compute_CIs_and_save_data(self):
+    def compute_c_index_and_save_data(self):
         models = [col.replace('res_', '') for col in self.Survival.columns if 'res_' in col]
         for k, model in enumerate(models):
             print(model)
@@ -2437,7 +2440,7 @@ class PerformancesSurvival(Metrics):
                 PERFS[''].loc['all', 'C-Index-difference'] = ci_diff
                 self.PERFORMANCES.loc[model, 'C-Index_all'] = ci_model
                 self.PERFORMANCES.loc[model, 'C-Index-difference_all'] = ci_model
-                _, ci_sd = self._bootstrap_CI(df_model)
+                _, ci_sd = self._bootstrap_c_index(df_model)
                 PERFS['_sd'].loc['all', 'C-Index'] = ci_sd
                 PERFS['_sd'].loc['all', 'C-Index-difference'] = ci_sd
                 self.PERFORMANCES.loc[model, 'C-Index_sd_all'] = ci_sd
@@ -2456,7 +2459,7 @@ class PerformancesSurvival(Metrics):
                     PERFS[''].loc[str(i), 'C-Index-difference'] = ci_diff_i
                     self.PERFORMANCES.loc[model, 'C-Index_' + str(i)] = ci_model_i
                     self.PERFORMANCES.loc[model, 'C-Index-difference_' + str(i)] = ci_diff_i
-                    _, ci_i_sd = self._bootstrap_CI(df_model_i)
+                    _, ci_i_sd = self._bootstrap_c_index(df_model_i)
                     PERFS['_sd'].loc[str(i), 'C-Index'] = ci_i_sd
                     PERFS['_sd'].loc[str(i), 'C-Index-difference'] = ci_i_sd
                     self.PERFORMANCES.loc[model, 'C-Index_sd_' + str(i)] = ci_i_sd
@@ -2487,30 +2490,30 @@ class PerformancesSurvival(Metrics):
         
         # Ranking, printing and saving
         # Sort by alphabetical order
-        self.Performances_alphabetical = self.PERFORMANCES.sort_values(by='version')
+        Performances_alphabetical = self.PERFORMANCES.sort_values(by='version')
         cols_to_print = ['version', 'C-Index-difference_str_all']
         print('Performances of the models ranked by models\'names:')
-        print(self.Performances_alphabetical[cols_to_print])
-        self.Performances_alphabetical.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_alphabetical_' +
+        print(Performances_alphabetical[cols_to_print])
+        Performances_alphabetical.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_alphabetical_' +
                                               self.pred_type + '_' + self.target + '_' + self.fold + '.csv',
                                               index=False)
         # Sort by C-Index difference, to print
         print('Performances of the models ranked by C-Index difference with C-Index based on age only,'
               ' on all the samples:')
-        self.Performances_ranked = self.PERFORMANCES.sort_values(by='C-Index-difference_all', ascending=False)
-        print(self.Performances_ranked[cols_to_print])
+        Performances_ranked = self.PERFORMANCES.sort_values(by='C-Index-difference_all', ascending=False)
+        print(Performances_ranked[cols_to_print])
         # Sort by main metric, to save
         sort_by = self.dict_main_metrics_names[self.target] + '_all'
         sort_ascending = self.main_metrics_modes[self.dict_main_metrics_names[self.target]] == 'min'
-        self.Performances_ranked = self.PERFORMANCES.sort_values(by=sort_by, ascending=sort_ascending)
-        self.Performances_ranked.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_withEnsembles_ranked_' +
+        Performances_ranked = self.PERFORMANCES.sort_values(by=sort_by, ascending=sort_ascending)
+        Performances_ranked.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_withEnsembles_ranked_' +
                                         self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
         # Save with ensembles
         models_nonensembles = [idx for idx in self.Performances_alphabetical.index if '*' not in idx]
         path_save = self.path_data + 'PERFORMANCES_withoutEnsembles_withCI_alphabetical_' + self.pred_type + '_' + \
                     self.target + '_' + self.fold + '.csv'
-        self.Performances_alphabetical.loc[models_nonensembles, :].to_csv(path_save, index=False)
-        self.Performances_ranked.loc[models_nonensembles, :].to_csv(path_save.replace('alphabetical', 'ranked'))
+        Performances_alphabetical.loc[models_nonensembles, :].to_csv(path_save, index=False)
+        Performances_ranked.loc[models_nonensembles, :].to_csv(path_save.replace('alphabetical', 'ranked'))
 
 
 # This class was coded by Samuel Diai.
@@ -3157,8 +3160,8 @@ class SelectBest(Metrics):
     
     def _select_versions(self):
         # Load val performances
-        path_perf = self.path_data + 'PERFORMANCES_withEnsembles_withCI_ranked_' + self.pred_type + '_' + self.target + \
-                    '_test.csv'
+        path_perf = self.path_data + 'PERFORMANCES_withEnsembles_withCI_ranked_' + self.pred_type + '_' + \
+                    self.target + '_test.csv'
         Performances = pd.read_csv(path_perf)
         Performances.set_index('version', drop=False, inplace=True)
         list_organs = Performances['organ'].unique()
@@ -4082,14 +4085,14 @@ class GWASPostprocessing(Basics):
                 cor = Correlations.loc[pair[0], pair[1]]
                 cor_sd = Correlations_sd.loc[pair[0], pair[1]]
                 ss = Correlations_sample_sizes.loc[pair[0], pair[1]]
+                cors_pairs.append(cor)
                 print('Correlation between ' + pair[0] + ' and ' + pair[1] + ' = ' + str(round(cor, 3)) + '+-' +
                       str(round(cor_sd, 3)) + '; sample size = ' + str(ss))
-                cors_pairs.append(cor)
             print('Mean correlation for ' + key + ' = ' + str(round(np.mean(cors_pairs), 3)) + '+-' +
-                  str(round(np.std(cors_pairs), 3)) + ', sample size = ' + str(int(ss)) + ', number of pairs = ' +
-                  str(len(pairs)))
+                  str(round(np.std(cors_pairs), 3)) + ', number of pairs = ' + str(len(pairs)))
     
-    def compare_phenotypic_correlation_with_genetic_correlations(self):
+    @staticmethod
+    def compare_phenotypic_correlation_with_genetic_correlations():
         Phenotypic_correlations = pd.read_csv('../data/ResidualsCorrelations_bestmodels_eids_Age_test.csv', index_col=0)
         Phenotypic_correlations_sd = pd.read_csv('../data/ResidualsCorrelations_bestmodels_sd_eids_Age_test.csv',
                                                  index_col=0)
@@ -4111,9 +4114,9 @@ class GWASPostprocessing(Basics):
                          'BiochemistryUrine', 'BiochemistryBlood']
         }
 
-        def _print_comparisons_between_pheno_and_geno(dims):
-            Pheno_dims = Phenotypic_correlations_filtered.loc[dims, dims]
-            Geno_dims = Genetic_correlations_filtered.loc[dims, dims]
+        def _print_comparisons_between_pheno_and_geno(dimensions):
+            Pheno_dims = Phenotypic_correlations_filtered.loc[dimensions, dimensions]
+            Geno_dims = Genetic_correlations_filtered.loc[dimensions, dimensions]
             Pheno_dims = Pheno_dims.where(np.triu(np.ones(Pheno_dims.shape), 1).astype(np.bool))
             Pheno_dims = Pheno_dims.stack().reset_index()
             Geno_dims = Geno_dims.where(np.triu(np.ones(Geno_dims.shape), 1).astype(np.bool))
@@ -4377,6 +4380,7 @@ class GWASAnnotate(Basics):
         
         # Report the correlation between R2s and h2_gs:
         GWAS_summary.dropna(subset=['Heritability', 'CA_prediction_R2'], inplace=True)
+        
         # Local helper function
         def extract_h2r2(row):
             h2 = float(row['Heritability'].split('+-')[0])
