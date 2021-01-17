@@ -28,8 +28,8 @@ import timeit
 # sklearn
 from sklearn.utils import resample
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.metrics import mean_squared_error, r2_score, log_loss, roc_auc_score, accuracy_score, f1_score, \
-    precision_score, recall_score, confusion_matrix, average_precision_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, log_loss, roc_auc_score, accuracy_score, \
+    f1_score, precision_score, recall_score, confusion_matrix, average_precision_score
 from sklearn.utils.validation import check_is_fitted
 from sklearn.model_selection import KFold, PredefinedSplit, cross_validate
 from sklearn.pipeline import Pipeline
@@ -37,6 +37,8 @@ from sklearn.linear_model import LinearRegression, ElasticNet
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
+# other metrics
+from scipy.stats import pearsonr
 
 # Other tools for ensemble models building (Samuel Diai's InnerCV class)
 from hyperopt import fmin, tpe, space_eval, Trials, hp, STATUS_OK
@@ -59,8 +61,8 @@ from tensorflow.keras import regularizers
 from tensorflow.keras.optimizers import Adam, RMSprop, Adadelta
 from tensorflow.keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, CSVLogger
 from tensorflow.keras.losses import MeanSquaredError, BinaryCrossentropy
-from tensorflow.keras.metrics import RootMeanSquaredError, AUC, BinaryAccuracy, Precision, Recall, TruePositives, \
-    FalsePositives, FalseNegatives, TrueNegatives
+from tensorflow.keras.metrics import RootMeanSquaredError, MeanAbsoluteError, AUC, BinaryAccuracy, Precision, Recall, \
+    TruePositives, FalsePositives, FalseNegatives, TrueNegatives
 from tensorflow_addons.metrics import RSquare, F1Score
 
 # Plots
@@ -207,24 +209,24 @@ class Metrics(Basics):
         Basics.__init__(self)
         self.metrics_displayed_in_int = ['True-Positives', 'True-Negatives', 'False-Positives', 'False-Negatives']
         self.metrics_needing_classpred = ['F1-Score', 'Binary-Accuracy', 'Precision', 'Recall']
-        self.dict_metrics_names_K = {'regression': ['RMSE'],  # For now, RSquare is buggy. Try again in a few months.
+        self.dict_metrics_names_K = {'regression': ['RMSE'],  # For now, R-Square is buggy. Try again in a few months.
                                      'binary': ['ROC-AUC', 'PR-AUC', 'F1-Score', 'Binary-Accuracy', 'Precision',
                                                 'Recall', 'True-Positives', 'False-Positives', 'False-Negatives',
                                                 'True-Negatives'],
                                      'multiclass': ['Categorical-Accuracy']}
-        self.dict_metrics_names = {'regression': ['RMSE', 'R-Squared'],
+        self.dict_metrics_names = {'regression': ['RMSE', 'MAE', 'R-Squared', 'Pearson-Correlation'],
                                    'binary': ['ROC-AUC', 'F1-Score', 'PR-AUC', 'Binary-Accuracy', 'Sensitivity',
                                               'Specificity', 'Precision', 'Recall', 'True-Positives', 'False-Positives',
                                               'False-Negatives', 'True-Negatives'],
                                    'multiclass': ['Categorical-Accuracy']}
         self.dict_losses_names = {'regression': 'MSE', 'binary': 'Binary-Crossentropy',
                                   'multiclass': 'categorical_crossentropy'}
-        self.dict_main_metrics_names_K = {'Age': 'RMSE', 'Sex': 'PR-AUC',
-                                          'imbalanced_binary_placeholder': 'PR-AUC'}
+        self.dict_main_metrics_names_K = {'Age': 'MAE', 'Sex': 'PR-AUC', 'imbalanced_binary_placeholder': 'PR-AUC'}
         self.dict_main_metrics_names = {'Age': 'R-Squared', 'Sex': 'ROC-AUC',
                                         'imbalanced_binary_placeholder': 'PR-AUC'}
-        self.main_metrics_modes = {'loss': 'min', 'R-Squared': 'max', 'RMSE': 'min', 'ROC-AUC': 'max', 'PR-AUC': 'max',
-                                   'F1-Score': 'max', 'C-Index': 'max', 'C-Index-difference': 'max'}
+        self.main_metrics_modes = {'loss': 'min', 'R-Squared': 'max', 'Pearson-Correlation': 'max', 'RMSE': 'min',
+                                   'MAE': 'min', 'ROC-AUC': 'max', 'PR-AUC': 'max', 'F1-Score': 'max', 'C-Index': 'max',
+                                   'C-Index-difference': 'max'}
         
         self.n_bootstrap_iterations = 1000
         
@@ -256,7 +258,9 @@ class Metrics(Basics):
             return tn
         
         self.dict_metrics_sklearn = {'mean_squared_error': mean_squared_error,
+                                     'mean_absolute_error': mean_absolute_error,
                                      'RMSE': rmse,
+                                     'Pearson-Correlation': pearsonr,
                                      'R-Squared': r2_score,
                                      'Binary-Crossentropy': log_loss,
                                      'ROC-AUC': roc_auc_score,
@@ -2384,7 +2388,13 @@ class PerformancesSurvival(Metrics):
         for i in range(self.n_bootstrap_iterations):
             data_i = resample(data, replace=True, n_samples=len(data.index))
             if len(data_i['Death'].unique()) == 2:
-                results.append(concordance_index(data_i['Age'], -data_i['pred'], data_i['Death']))
+                try:
+                    results.append(concordance_index(data_i['Age'], -data_i['pred'], data_i['Death']))
+                except: #TODO remove
+                    print('WEIRD, should not happen! Printing the df')
+                    print(data_i)
+                    self.data_i_debug = data_i
+                    break
         if len(results) > 0:
             results_mean = np.mean(results)
             results_std = np.std(results)
@@ -2415,9 +2425,9 @@ class PerformancesSurvival(Metrics):
                 self.Survival[self.Survival['eid'].isin(data_folds['eid'][data_folds['outer_fold'] == i].values)]
     
     def compute_c_index_and_save_data(self):
-        models = [col.replace('res_', '') for col in self.Survival.columns if 'res_' in col]
+        models = [col.replace('res_' + self.target, self.target) for col in self.Survival.columns if 'res_' in col]
         for k, model in enumerate(models):
-            print(model)
+            print(model) #TODO remove
             if k % 30 == 0:
                 print('Computing CI for the ' + str(k) + 'th model out of ' + str(len(models)) + ' models.')
             # Load Performances dataframes
@@ -2439,7 +2449,7 @@ class PerformancesSurvival(Metrics):
                 PERFS[''].loc['all', 'C-Index'] = ci_model
                 PERFS[''].loc['all', 'C-Index-difference'] = ci_diff
                 self.PERFORMANCES.loc[model, 'C-Index_all'] = ci_model
-                self.PERFORMANCES.loc[model, 'C-Index-difference_all'] = ci_model
+                self.PERFORMANCES.loc[model, 'C-Index-difference_all'] = ci_diff
                 _, ci_sd = self._bootstrap_c_index(df_model)
                 PERFS['_sd'].loc['all', 'C-Index'] = ci_sd
                 PERFS['_sd'].loc['all', 'C-Index-difference'] = ci_sd
@@ -2478,7 +2488,6 @@ class PerformancesSurvival(Metrics):
                 # Fill global performances matrix
                 self.PERFORMANCES.loc[model, cols] = ci_str[col].values[1:]
                 self.PERFORMANCES.loc[model, col + '_str_all'] = ci_std_str
-            print(PERFS['_str'])
             # Save new performances
             for mode in self.modes:
                 PERFS[mode].to_csv('../data/Performances_' + self.pred_type + '_withCI_' + model + '_' + self.fold +
@@ -2491,16 +2500,13 @@ class PerformancesSurvival(Metrics):
         # Ranking, printing and saving
         # Sort by alphabetical order
         Performances_alphabetical = self.PERFORMANCES.sort_values(by='version')
-        cols_to_print = ['version', 'C-Index-difference_str_all']
-        print('Performances of the models ranked by models\'names:')
-        print(Performances_alphabetical[cols_to_print])
         Performances_alphabetical.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_alphabetical_' +
-                                              self.pred_type + '_' + self.target + '_' + self.fold + '.csv',
-                                              index=False)
+                                         self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
         # Sort by C-Index difference, to print
+        cols_to_print = ['version', 'C-Index-difference_str_all']
+        Performances_ranked = self.PERFORMANCES.sort_values(by='C-Index-difference_all', ascending=False)
         print('Performances of the models ranked by C-Index difference with C-Index based on age only,'
               ' on all the samples:')
-        Performances_ranked = self.PERFORMANCES.sort_values(by='C-Index-difference_all', ascending=False)
         print(Performances_ranked[cols_to_print])
         # Sort by main metric, to save
         sort_by = self.dict_main_metrics_names[self.target] + '_all'
@@ -2509,7 +2515,7 @@ class PerformancesSurvival(Metrics):
         Performances_ranked.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_withEnsembles_ranked_' +
                                         self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
         # Save with ensembles
-        models_nonensembles = [idx for idx in self.Performances_alphabetical.index if '*' not in idx]
+        models_nonensembles = [idx for idx in Performances_alphabetical.index if '*' not in idx]
         path_save = self.path_data + 'PERFORMANCES_withoutEnsembles_withCI_alphabetical_' + self.pred_type + '_' + \
                     self.target + '_' + self.fold + '.csv'
         Performances_alphabetical.loc[models_nonensembles, :].to_csv(path_save, index=False)
