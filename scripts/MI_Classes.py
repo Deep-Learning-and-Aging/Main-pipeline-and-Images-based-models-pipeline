@@ -28,8 +28,8 @@ import timeit
 # sklearn
 from sklearn.utils import resample
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, log_loss, roc_auc_score, accuracy_score, \
-    f1_score, precision_score, recall_score, confusion_matrix, average_precision_score
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, log_loss, roc_auc_score, \
+    accuracy_score, f1_score, precision_score, recall_score, confusion_matrix, average_precision_score
 from sklearn.utils.validation import check_is_fitted
 from sklearn.model_selection import KFold, PredefinedSplit, cross_validate
 from sklearn.pipeline import Pipeline
@@ -37,8 +37,9 @@ from sklearn.linear_model import LinearRegression, ElasticNet
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
-# other metrics
-from scipy.stats import pearsonr
+
+# Statistics
+from scipy.stats import pearsonr, ttest_rel, norm
 
 # Other tools for ensemble models building (Samuel Diai's InnerCV class)
 from hyperopt import fmin, tpe, space_eval, Trials, hp, STATUS_OK
@@ -49,6 +50,7 @@ from lightgbm import LGBMRegressor
 from multiprocessing import Pool
 # GPUs
 from GPUtil import GPUtil
+
 # tensorflow
 import tensorflow as tf
 # keras
@@ -93,6 +95,10 @@ pd.set_option('display.max_rows', 200)
 
 # CLASSES
 class Basics:
+    
+    """
+    Root class herited by most other class. Includes handy helper functions
+    """
     
     def __init__(self):
         # seeds for reproducibility
@@ -204,6 +210,10 @@ class Basics:
 
 class Metrics(Basics):
     
+    """
+    Helper class defining dictionaries of metrics and custom metrics
+    """
+    
     def __init__(self):
         # Parameters
         Basics.__init__(self)
@@ -285,6 +295,17 @@ class Metrics(Basics):
 
 
 class PreprocessingMain(Basics):
+    
+    """
+    This class executes the code for step 01. It preprocesses the main dataframe by:
+    - reformating the rows and columns
+    - splitting the dataset into folds for the future cross validations
+    - imputing key missing data
+    - adding a new UKB instance for physical activity data
+    - formating the demographics columns (age, sex and ethnicity)
+    - reformating the dataframe so that different instances of the same participant are treated as different rows
+    - saving the dataframe
+    """
     
     def __init__(self):
         Basics.__init__(self)
@@ -450,6 +471,10 @@ class PreprocessingMain(Basics):
 
 class PreprocessingImagesIDs(Basics):
     
+    """
+    Splits the different images datasets into folds for the future cross validation
+    """
+    
     def __init__(self):
         Basics.__init__(self)
         # Instances 2 and 3 datasets (most medical images, mostly medical images)
@@ -506,9 +531,11 @@ class PreprocessingImagesIDs(Basics):
 
 
 class PreprocessingFolds(Metrics):
+    
     """
-    Gather all the hyperparameters of the algorithm
+    Splits the data into training, validation and testing sets for all CV folds
     """
+    
     def __init__(self, target, organ, regenerate_data):
         Metrics.__init__(self)
         self.target = target
@@ -643,6 +670,11 @@ class PreprocessingFolds(Metrics):
 
 class PreprocessingSurvival(Basics):
     
+    """
+    Preprocesses the main dataframe for survival purposes.
+    Mirrors the PreprocessingMain class, but computes Death time and FollowTime for the future survival analysis
+    """
+    
     def __init__(self):
         Basics.__init__(self)
         self.data_raw = None
@@ -737,6 +769,15 @@ class PreprocessingSurvival(Basics):
 
 
 class MyImageDataGenerator(Basics, Sequence, ImageDataGenerator):
+    
+    """
+    Helper class: custom data generator for images.
+    It handles several custom features such as:
+    - provides batches of not only images, but also the scalar data (e.g demographics) that correspond to it
+    - it performs random shuffling while making sure that no leftover data (the remainder of the modulo batch size)
+        is being unused
+    - it can handle paired data for paired organs (e.g left/right eyes)
+    """
     
     def __init__(self, target=None, organ=None, view=None, data_features=None, n_samples_per_subepoch=None,
                  batch_size=None, training_mode=None, side_predictors=None, dir_images=None, images_width=None,
@@ -882,6 +923,11 @@ class MyImageDataGenerator(Basics, Sequence, ImageDataGenerator):
 
 class MyCSVLogger(Callback):
     
+    """
+    Custom CSV Logger callback class for Keras training: append to existing file if can be found. Allows to keep track
+    of training over several jobs.
+    """
+    
     def __init__(self, filename, separator=',', append=False):
         self.sep = separator
         self.filename = filename
@@ -954,6 +1000,11 @@ class MyCSVLogger(Callback):
 
 
 class MyModelCheckpoint(ModelCheckpoint):
+    
+    """
+    Custom checkpoint callback class for Keras training. Handles a baseline performance.
+    """
+    
     def __init__(self, filepath, monitor='val_loss', baseline=-np.Inf, verbose=0, save_best_only=False,
                  save_weights_only=False, mode='auto', save_freq='epoch'):
         # Parameters
@@ -971,8 +1022,12 @@ class MyModelCheckpoint(ModelCheckpoint):
 
 
 class DeepLearning(Metrics):
+    
     """
-    Train models
+    Core helper class to train models. Used to:
+    - build the data generators
+    - generate the CNN architectures
+    - load the weights
     """
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
@@ -1326,9 +1381,16 @@ class DeepLearning(Metrics):
 
 
 class Training(DeepLearning):
+    
     """
-    Train models
+    Class to train CNN models:
+    - Generates the architecture
+    - Loads the best last weights so that a model can be trained over several jobs
+    - Generates the callbacks
+    - Compiles the model
+    - Trains the model
     """
+    
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
                  n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
                  data_augmentation_factor=None, outer_fold=None, debug_mode=False, transfer_learning=None,
@@ -1567,6 +1629,11 @@ class Training(DeepLearning):
 
 class PredictionsGenerate(DeepLearning):
     
+    """
+    Generates the predictions for each model.
+    Unscales the predictions.
+    """
+    
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
                  n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
                  data_augmentation_factor=None, outer_fold=None, debug_mode=False):
@@ -1663,6 +1730,10 @@ class PredictionsGenerate(DeepLearning):
 
 class PredictionsConcatenate(Basics):
     
+    """
+    Concatenates the predictions coming from the different cross validation folds.
+    """
+    
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
                  n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
                  data_augmentation_factor=None):
@@ -1691,6 +1762,10 @@ class PredictionsConcatenate(Basics):
 
 
 class PredictionsMerge(Basics):
+    
+    """
+    Merges the predictions from all models into a unified dataframe.
+    """
     
     def __init__(self, target=None, fold=None):
         
@@ -1854,6 +1929,11 @@ class PredictionsMerge(Basics):
 
 class PredictionsEids(Basics):
     
+    """
+    Computes the average age prediction across samples from different instances for every participant.
+    (Scaled back to instance 0)
+    """
+    
     def __init__(self, target=None, fold=None, debug_mode=None):
         Basics.__init__(self)
         
@@ -1983,6 +2063,10 @@ class PredictionsEids(Basics):
 
 
 class PerformancesGenerate(Metrics):
+    
+    """
+    Computes the performances for each model.
+    """
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, architecture=None, n_fc_layers=None,
                  n_fc_nodes=None, optimizer=None, learning_rate=None, weight_decay=None, dropout_rate=None,
@@ -2146,6 +2230,10 @@ class PerformancesGenerate(Metrics):
 
 class PerformancesMerge(Metrics):
     
+    """
+    Merges the performances of the different models into a unified dataframe.
+    """
+    
     def __init__(self, target=None, fold=None, pred_type=None, ensemble_models=None):
         
         # Parameters
@@ -2298,6 +2386,10 @@ class PerformancesMerge(Metrics):
 
 class PerformancesTuning(Metrics):
     
+    """
+    For each model, selects the best hyperparameter combination.
+    """
+    
     def __init__(self, target=None, pred_type=None):
         
         Metrics.__init__(self)
@@ -2367,163 +2459,13 @@ class PerformancesTuning(Metrics):
             Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
 
 
-class PerformancesSurvival(Metrics):
-    
-    def __init__(self, target=None, fold=None, pred_type=None, debug_mode=None):
-        Metrics.__init__(self)
-        
-        self.target = target
-        self.fold = fold
-        self.pred_type = pred_type
-        if debug_mode:
-            self.n_bootstrap_iterations = 3
-        else:
-            self.n_bootstrap_iterations = 1000
-        self.PERFORMANCES = None
-        self.Survival = None
-        self.SURV = None
-    
-    def _bootstrap_c_index(self, data):
-        results = []
-        for i in range(self.n_bootstrap_iterations):
-            data_i = resample(data, replace=True, n_samples=len(data.index))
-            if len(data_i['Death'].unique()) == 2:
-                try:
-                    results.append(concordance_index(data_i['Age'], -data_i['pred'], data_i['Death']))
-                except: #TODO remove
-                    print('WEIRD, should not happen! Printing the df')
-                    print(data_i)
-                    self.data_i_debug = data_i
-                    break
-        if len(results) > 0:
-            results_mean = np.mean(results)
-            results_std = np.std(results)
-        else:
-            results_mean = np.nan
-            results_std = np.nan
-        return results_mean, results_std
-    
-    def load_data(self):
-        # Load and preprocess PERFORMANCES
-        self.PERFORMANCES = pd.read_csv(self.path_data + 'PERFORMANCES_withEnsembles_alphabetical_' +
-                                        self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
-        self.PERFORMANCES.set_index('version', drop=False, inplace=True)
-        self.PERFORMANCES.index.name = 'index'
-        for inner_fold in ['all'] + [str(i) for i in range(10)]:
-            for metric in ['C-Index', 'C-Index-difference']:
-                for mode in self.modes:
-                    self.PERFORMANCES[metric + mode + '_' + inner_fold] = np.nan
-        
-        Residuals = pd.read_csv(
-            self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
-        Survival = pd.read_csv(self.path_data + 'data_survival.csv')
-        self.Survival = pd.merge(Survival[['id', 'FollowUpTime', 'Death']], Residuals, on='id')
-        data_folds = pd.read_csv(self.path_data + 'data-features_eids.csv', usecols=['eid', 'outer_fold'])
-        self.SURV = {}
-        for i in range(10):
-            self.SURV[i] = \
-                self.Survival[self.Survival['eid'].isin(data_folds['eid'][data_folds['outer_fold'] == i].values)]
-    
-    def compute_c_index_and_save_data(self):
-        models = [col.replace('res_' + self.target, self.target) for col in self.Survival.columns if 'res_' in col]
-        for k, model in enumerate(models):
-            print(model) #TODO remove
-            if k % 30 == 0:
-                print('Computing CI for the ' + str(k) + 'th model out of ' + str(len(models)) + ' models.')
-            # Load Performances dataframes
-            PERFS = {}
-            for mode in self.modes:
-                PERFS[mode] = pd.read_csv('../data/Performances_' + self.pred_type + '_' + model + '_' + self.fold +
-                                          mode + '.csv')
-                PERFS[mode].set_index('outer_fold', drop=False, inplace=True)
-                PERFS[mode]['C-Index'] = np.nan
-                PERFS[mode]['C-Index-difference'] = np.nan
-            df_model = self.Survival[['FollowUpTime', 'Death', 'Age', 'res_' + model]].dropna()
-            df_model.rename(columns={'res_' + model: 'pred'}, inplace=True)
-            # Compute CI over all samples
-            if len(df_model['Death'].unique()) == 2:
-                ci_model = concordance_index(df_model['FollowUpTime'], -(df_model['Age'] - df_model['pred']),
-                                             df_model['Death'])
-                ci_age = concordance_index(df_model['FollowUpTime'], -df_model['Age'], df_model['Death'])
-                ci_diff = ci_model - ci_age
-                PERFS[''].loc['all', 'C-Index'] = ci_model
-                PERFS[''].loc['all', 'C-Index-difference'] = ci_diff
-                self.PERFORMANCES.loc[model, 'C-Index_all'] = ci_model
-                self.PERFORMANCES.loc[model, 'C-Index-difference_all'] = ci_diff
-                _, ci_sd = self._bootstrap_c_index(df_model)
-                PERFS['_sd'].loc['all', 'C-Index'] = ci_sd
-                PERFS['_sd'].loc['all', 'C-Index-difference'] = ci_sd
-                self.PERFORMANCES.loc[model, 'C-Index_sd_all'] = ci_sd
-                self.PERFORMANCES.loc[model, 'C-Index-difference_sd_all'] = ci_sd
-            # Compute CI over each fold
-            for i in range(10):
-                df_model_i = self.SURV[i][['FollowUpTime', 'Death', 'Age', 'res_' + model]].dropna()
-                df_model_i.rename(columns={'res_' + model: 'pred'}, inplace=True)
-                if len(df_model_i['Death'].unique()) == 2:
-                    ci_model_i = concordance_index(df_model_i['FollowUpTime'],
-                                                   -(df_model_i['Age'] - df_model_i['pred']),
-                                                   df_model_i['Death'])
-                    ci_age_i = concordance_index(df_model_i['FollowUpTime'], -df_model_i['Age'], df_model_i['Death'])
-                    ci_diff_i = ci_model_i - ci_age_i
-                    PERFS[''].loc[str(i), 'C-Index'] = ci_model_i
-                    PERFS[''].loc[str(i), 'C-Index-difference'] = ci_diff_i
-                    self.PERFORMANCES.loc[model, 'C-Index_' + str(i)] = ci_model_i
-                    self.PERFORMANCES.loc[model, 'C-Index-difference_' + str(i)] = ci_diff_i
-                    _, ci_i_sd = self._bootstrap_c_index(df_model_i)
-                    PERFS['_sd'].loc[str(i), 'C-Index'] = ci_i_sd
-                    PERFS['_sd'].loc[str(i), 'C-Index-difference'] = ci_i_sd
-                    self.PERFORMANCES.loc[model, 'C-Index_sd_' + str(i)] = ci_i_sd
-                    self.PERFORMANCES.loc[model, 'C-Index-difference_sd_' + str(i)] = ci_i_sd
-            # Compute sd using all folds
-            ci_str = round(PERFS[''][['C-Index', 'C-Index-difference']], 3).astype(str) + '+-' + \
-                     round(PERFS['_sd'][['C-Index', 'C-Index-difference']], 3).astype(str)
-            PERFS['_str'][['C-Index', 'C-Index-difference']] = ci_str
-            for col in ['C-Index', 'C-Index-difference']:
-                cols = [col + '_str_' + str(i) for i in range(10)]
-                # Fill model's performance matrix
-                ci_std_lst = PERFS['_str'].loc['all', col].split('+-')
-                ci_std_lst.insert(1, str(round(PERFS[''][col].iloc[1:].std(), 3)))
-                ci_std_str = '+-'.join(ci_std_lst)
-                PERFS['_str'].loc['all', col] = ci_std_str
-                # Fill global performances matrix
-                self.PERFORMANCES.loc[model, cols] = ci_str[col].values[1:]
-                self.PERFORMANCES.loc[model, col + '_str_all'] = ci_std_str
-            # Save new performances
-            for mode in self.modes:
-                PERFS[mode].to_csv('../data/Performances_' + self.pred_type + '_withCI_' + model + '_' + self.fold +
-                                   mode + '.csv')
-        
-        # Save PERFORMANCES dataframes
-        self.PERFORMANCES.to_csv(self.path_data + 'PERFORMANCES_withCI_withEnsembles_alphabetical_' +
-                                 self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
-        
-        # Ranking, printing and saving
-        # Sort by alphabetical order
-        Performances_alphabetical = self.PERFORMANCES.sort_values(by='version')
-        Performances_alphabetical.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_alphabetical_' +
-                                         self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
-        # Sort by C-Index difference, to print
-        cols_to_print = ['version', 'C-Index-difference_str_all']
-        Performances_ranked = self.PERFORMANCES.sort_values(by='C-Index-difference_all', ascending=False)
-        print('Performances of the models ranked by C-Index difference with C-Index based on age only,'
-              ' on all the samples:')
-        print(Performances_ranked[cols_to_print])
-        # Sort by main metric, to save
-        sort_by = self.dict_main_metrics_names[self.target] + '_all'
-        sort_ascending = self.main_metrics_modes[self.dict_main_metrics_names[self.target]] == 'min'
-        Performances_ranked = self.PERFORMANCES.sort_values(by=sort_by, ascending=sort_ascending)
-        Performances_ranked.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_withEnsembles_ranked_' +
-                                        self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
-        # Save with ensembles
-        models_nonensembles = [idx for idx in Performances_alphabetical.index if '*' not in idx]
-        path_save = self.path_data + 'PERFORMANCES_withoutEnsembles_withCI_alphabetical_' + self.pred_type + '_' + \
-                    self.target + '_' + self.fold + '.csv'
-        Performances_alphabetical.loc[models_nonensembles, :].to_csv(path_save, index=False)
-        Performances_ranked.loc[models_nonensembles, :].to_csv(path_save.replace('alphabetical', 'ranked'))
-
-
 # This class was coded by Samuel Diai.
 class InnerCV:
+    
+    """
+    Helper class to perform an inner cross validation to tune the hyperparameters of models trained on scalar predictors
+    """
+    
     def __init__(self, models, inner_splits, n_iter):
         self.inner_splits = inner_splits
         self.n_iter = n_iter
@@ -2663,7 +2605,9 @@ class InnerCV:
         return pipeline_best
 
 
-# Useful for EnsemblesPredictions. This function needs to be global to allow pool to pickle it.
+"""
+Useful for EnsemblesPredictions. This function needs to be global to allow pool to pickle it.
+"""
 def compute_ensemble_folds(ensemble_inputs):
     if len(ensemble_inputs[1]) < 100:
         print('Small sample size:' + str(len(ensemble_inputs[1])))
@@ -2677,6 +2621,10 @@ def compute_ensemble_folds(ensemble_inputs):
 
 
 class EnsemblesPredictions(Metrics):
+    
+    """
+    Hierarchically builds ensemble models from the already existing predictions.
+    """
     
     def __init__(self, target=None, pred_type=None, regenerate_models=False):
         # Parameters
@@ -3010,6 +2958,10 @@ class EnsemblesPredictions(Metrics):
 
 class ResidualsGenerate(Basics):
     
+    """
+    Computes accelerated aging phenotypes (Residuals, corrected for residuals bias with respect to age)
+    """
+    
     def __init__(self, target=None, fold=None, pred_type=None, debug_mode=False):
         # Parameters
         Basics.__init__(self)
@@ -3054,6 +3006,10 @@ class ResidualsGenerate(Basics):
 
 
 class ResidualsCorrelations(Basics):
+    
+    """
+    Computes the phenotypic correlation between aging dimensions.
+    """
     
     def __init__(self, target=None, fold=None, pred_type=None, debug_mode=False):
         Basics.__init__(self)
@@ -3124,7 +3080,317 @@ class ResidualsCorrelations(Basics):
                                            '_' + self.target + '_' + self.fold + '.csv', index=True)
 
 
+class PerformancesSurvival(Metrics):
+    
+    """
+    Computes the performances in terms of survival prediction using biological age phenotypes as survival predictors.
+    """
+    
+    def __init__(self, target=None, fold=None, pred_type=None, debug_mode=None):
+        Metrics.__init__(self)
+        
+        self.target = target
+        self.fold = fold
+        self.pred_type = pred_type
+        if debug_mode:
+            self.n_bootstrap_iterations = 3
+        else:
+            self.n_bootstrap_iterations = 1000
+        self.PERFORMANCES = None
+        self.Survival = None
+        self.SURV = None
+    
+    def _bootstrap_c_index(self, data):
+        results = []
+        for i in range(self.n_bootstrap_iterations):
+            data_i = resample(data, replace=True, n_samples=len(data.index))
+            if len(data_i['Death'].unique()) == 2:
+                results.append(concordance_index(data_i['Age'], -data_i['pred'], data_i['Death']))
+                '''
+                To debug if this part fails again
+                try:
+                    results.append(concordance_index(data_i['Age'], -data_i['pred'], data_i['Death']))
+                except:
+                    print('WEIRD, should not happen! Printing the df')
+                    print(data_i)
+                    self.data_i_debug = data_i
+                    break
+                '''
+        if len(results) > 0:
+            results_mean = np.mean(results)
+            results_std = np.std(results)
+        else:
+            results_mean = np.nan
+            results_std = np.nan
+        return results_mean, results_std
+    
+    def load_data(self):
+        # Load and preprocess PERFORMANCES
+        self.PERFORMANCES = pd.read_csv(self.path_data + 'PERFORMANCES_withEnsembles_alphabetical_' +
+                                        self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
+        self.PERFORMANCES.set_index('version', drop=False, inplace=True)
+        self.PERFORMANCES.index.name = 'index'
+        for inner_fold in ['all'] + [str(i) for i in range(10)]:
+            for metric in ['C-Index', 'C-Index-difference']:
+                for mode in self.modes:
+                    self.PERFORMANCES[metric + mode + '_' + inner_fold] = np.nan
+        
+        Residuals = pd.read_csv(
+            self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
+        Survival = pd.read_csv(self.path_data + 'data_survival.csv')
+        self.Survival = pd.merge(Survival[['id', 'FollowUpTime', 'Death']], Residuals, on='id')
+        data_folds = pd.read_csv(self.path_data + 'data-features_eids.csv', usecols=['eid', 'outer_fold'])
+        self.SURV = {}
+        for i in range(10):
+            self.SURV[i] = \
+                self.Survival[self.Survival['eid'].isin(data_folds['eid'][data_folds['outer_fold'] == i].values)]
+    
+    def compute_c_index_and_save_data(self):
+        models = [col.replace('res_' + self.target, self.target) for col in self.Survival.columns if 'res_' in col]
+        for k, model in enumerate(models):
+            if k % 30 == 0:
+                print('Computing CI for the ' + str(k) + 'th model out of ' + str(len(models)) + ' models.')
+            # Load Performances dataframes
+            PERFS = {}
+            for mode in self.modes:
+                PERFS[mode] = pd.read_csv('../data/Performances_' + self.pred_type + '_' + model + '_' + self.fold +
+                                          mode + '.csv')
+                PERFS[mode].set_index('outer_fold', drop=False, inplace=True)
+                PERFS[mode]['C-Index'] = np.nan
+                PERFS[mode]['C-Index-difference'] = np.nan
+            df_model = self.Survival[['FollowUpTime', 'Death', 'Age', 'res_' + model]].dropna()
+            df_model.rename(columns={'res_' + model: 'pred'}, inplace=True)
+            # Compute CI over all samples
+            if len(df_model['Death'].unique()) == 2:
+                ci_model = concordance_index(df_model['FollowUpTime'], -(df_model['Age'] - df_model['pred']),
+                                             df_model['Death'])
+                ci_age = concordance_index(df_model['FollowUpTime'], -df_model['Age'], df_model['Death'])
+                ci_diff = ci_model - ci_age
+                PERFS[''].loc['all', 'C-Index'] = ci_model
+                PERFS[''].loc['all', 'C-Index-difference'] = ci_diff
+                self.PERFORMANCES.loc[model, 'C-Index_all'] = ci_model
+                self.PERFORMANCES.loc[model, 'C-Index-difference_all'] = ci_diff
+                _, ci_sd = self._bootstrap_c_index(df_model)
+                PERFS['_sd'].loc['all', 'C-Index'] = ci_sd
+                PERFS['_sd'].loc['all', 'C-Index-difference'] = ci_sd
+                self.PERFORMANCES.loc[model, 'C-Index_sd_all'] = ci_sd
+                self.PERFORMANCES.loc[model, 'C-Index-difference_sd_all'] = ci_sd
+            # Compute CI over each fold
+            for i in range(10):
+                df_model_i = self.SURV[i][['FollowUpTime', 'Death', 'Age', 'res_' + model]].dropna()
+                df_model_i.rename(columns={'res_' + model: 'pred'}, inplace=True)
+                if len(df_model_i['Death'].unique()) == 2:
+                    ci_model_i = concordance_index(df_model_i['FollowUpTime'],
+                                                   -(df_model_i['Age'] - df_model_i['pred']),
+                                                   df_model_i['Death'])
+                    ci_age_i = concordance_index(df_model_i['FollowUpTime'], -df_model_i['Age'], df_model_i['Death'])
+                    ci_diff_i = ci_model_i - ci_age_i
+                    PERFS[''].loc[str(i), 'C-Index'] = ci_model_i
+                    PERFS[''].loc[str(i), 'C-Index-difference'] = ci_diff_i
+                    self.PERFORMANCES.loc[model, 'C-Index_' + str(i)] = ci_model_i
+                    self.PERFORMANCES.loc[model, 'C-Index-difference_' + str(i)] = ci_diff_i
+                    _, ci_i_sd = self._bootstrap_c_index(df_model_i)
+                    PERFS['_sd'].loc[str(i), 'C-Index'] = ci_i_sd
+                    PERFS['_sd'].loc[str(i), 'C-Index-difference'] = ci_i_sd
+                    self.PERFORMANCES.loc[model, 'C-Index_sd_' + str(i)] = ci_i_sd
+                    self.PERFORMANCES.loc[model, 'C-Index-difference_sd_' + str(i)] = ci_i_sd
+            # Compute sd using all folds
+            ci_str = round(PERFS[''][['C-Index', 'C-Index-difference']], 3).astype(str) + '+-' + \
+                     round(PERFS['_sd'][['C-Index', 'C-Index-difference']], 3).astype(str)
+            PERFS['_str'][['C-Index', 'C-Index-difference']] = ci_str
+            for col in ['C-Index', 'C-Index-difference']:
+                cols = [col + '_str_' + str(i) for i in range(10)]
+                # Fill model's performance matrix
+                ci_std_lst = PERFS['_str'].loc['all', col].split('+-')
+                ci_std_lst.insert(1, str(round(PERFS[''][col].iloc[1:].std(), 3)))
+                ci_std_str = '+-'.join(ci_std_lst)
+                PERFS['_str'].loc['all', col] = ci_std_str
+                # Fill global performances matrix
+                self.PERFORMANCES.loc[model, cols] = ci_str[col].values[1:]
+                self.PERFORMANCES.loc[model, col + '_str_all'] = ci_std_str
+            # Save new performances
+            for mode in self.modes:
+                PERFS[mode].to_csv('../data/Performances_' + self.pred_type + '_withCI_' + model + '_' + self.fold +
+                                   mode + '.csv')
+        
+        # Ranking, printing and saving
+        # Sort by alphabetical order
+        Performances_alphabetical = self.PERFORMANCES.sort_values(by='version')
+        Performances_alphabetical.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_alphabetical_' +
+                                         self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
+        # Sort by C-Index difference, to print
+        cols_to_print = ['version', 'C-Index-difference_str_all']
+        Performances_ranked = self.PERFORMANCES.sort_values(by='C-Index-difference_all', ascending=False)
+        print('Performances of the models ranked by C-Index difference with C-Index based on age only,'
+              ' on all the samples:')
+        print(Performances_ranked[cols_to_print])
+        # Sort by main metric, to save
+        sort_by = self.dict_main_metrics_names[self.target] + '_all'
+        sort_ascending = self.main_metrics_modes[self.dict_main_metrics_names[self.target]] == 'min'
+        Performances_ranked = self.PERFORMANCES.sort_values(by=sort_by, ascending=sort_ascending)
+        Performances_ranked.to_csv(self.path_data + 'PERFORMANCES_withEnsembles_withCI_withEnsembles_ranked_' +
+                                   self.pred_type + '_' + self.target + '_' + self.fold + '.csv', index=False)
+        # Save with ensembles
+        models_nonensembles = [idx for idx in Performances_alphabetical.index if '*' not in idx]
+        path_save = self.path_data + 'PERFORMANCES_withoutEnsembles_withCI_alphabetical_' + self.pred_type + '_' + \
+                    self.target + '_' + self.fold + '.csv'
+        Performances_alphabetical.loc[models_nonensembles, :].to_csv(path_save, index=False)
+        Performances_ranked.loc[models_nonensembles, :].to_csv(path_save.replace('alphabetical', 'ranked'))
+    
+    def print_key_results(self):
+        # Helper function
+        def compute_p_value(row):
+            sd = float(row['C-Index-difference_str_all'].split('+-')[1])
+            z = np.abs(row['C-Index-difference_all']) / sd
+            pv = norm.sf(abs(z)) * 2
+            return pv
+        
+        # Preprocess the data
+        Performances = pd.read_csv(
+            self.path_data + 'PERFORMANCES_withEnsembles_withCI_alphabetical_' + self.pred_type + '_' +
+            self.target + '_' + self.fold + '.csv')
+        Performances.set_index('version', drop=False, inplace=True)
+        Perfs_CI = Performances[['version', 'C-Index_all', 'C-Index-difference_all',
+                                 'C-Index-difference_str_all']].sort_values(by='C-Index-difference_all')
+        Perfs_CI['C-Index_CA'] = Perfs_CI['C-Index_all'] - Perfs_CI['C-Index-difference_all']
+        Perfs_CI['p-value'] = Perfs_CI.apply(compute_p_value, axis=1)
+        # Select only models for which difference between biological age's CI and chronological age's CI is significant
+        Perfs_CI_significant = Perfs_CI[Perfs_CI['p-value'] < 0.05]
+        Perfs_CI_significant_FDR = Perfs_CI[Perfs_CI['p-value'] * len(Perfs_CI.index) < 0.05]
+        
+        # Take the subset corresponding to the 11 main dimensions
+        main_dims = ['Brain', 'Eyes', 'Hearing', 'Lungs', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal',
+                     'PhysicalActivity', 'Biochemistry', 'ImmuneSystem']
+        main_rows = ['Age_' + dim + '_*' * 10 for dim in main_dims]
+        Perfs_CI_main = Perfs_CI.loc[main_rows, :]
+        Perfs_CI_main.sort_values(by='C-Index-difference_all', inplace=True)
+        # Select only models for which difference between biological age's CI and chronological age's CI is significant
+        Perfs_CI_main_significant = Perfs_CI_main[Perfs_CI_main['p-value'] < 0.05]
+        Perfs_CI_main_significant_FDR = Perfs_CI_main[Perfs_CI_main['p-value'] * len(Perfs_CI_main.index) < 0.05]
+        
+        # Compute the statistics to compare biological ages and chronological age on all the dimensions
+        CI_diff_mean = Perfs_CI['C-Index-difference_all'].mean()
+        CI_diff_std = Perfs_CI['C-Index-difference_all'].std()
+        _t_stat_all, pv_all = ttest_rel(Perfs_CI['C-Index_all'], Perfs_CI['C-Index_CA'])
+        # Number of dimensions outperforming and underperforming compared to chronological age
+        n_CI_diff_positives = (Perfs_CI['C-Index-difference_all'] > 0).sum()
+        n_CI_diff_negatives = (Perfs_CI['C-Index-difference_all'] < 0).sum()
+        n_CI_diff_positives_significant = (Perfs_CI_significant['C-Index-difference_all'] > 0).sum()
+        n_CI_diff_negatives_significant = (Perfs_CI_significant['C-Index-difference_all'] < 0).sum()
+        n_CI_diff_positives_significant_FDR = (Perfs_CI_significant_FDR['C-Index-difference_all'] > 0).sum()
+        n_CI_diff_negatives_significant_FDR = (Perfs_CI_significant_FDR['C-Index-difference_all'] < 0).sum()
+        
+        # print results
+        print('The mean CI difference over the ' + str(len(Perfs_CI.index)) + ' biological ages = ' +
+              str(round(CI_diff_mean, 3)) + '; standard deviation = ' + str(round(CI_diff_std, 3)) +
+              '; paired t-test p-value = ' + str(pv_all))
+        print('Out of the ' + str(len(Perfs_CI.index)) + ' dimensions, ' + str(n_CI_diff_positives) +
+              ' dimensions outperform CA as survival predictors, and ' + str(n_CI_diff_negatives) +
+              ' dimensions underperform.')
+        
+        # Compute the statistics to compare biological ages and chronological age on the 11 main dimensions
+        CI_diff_main_mean = Perfs_CI_main['C-Index-difference_all'].mean()
+        CI_diff_main_std = Perfs_CI_main['C-Index-difference_all'].std()
+        _t_stat_main, pv_main = ttest_rel(Perfs_CI_main['C-Index_all'], Perfs_CI_main['C-Index_CA'])
+        # Number of dimensions outperforming and underperforming compared to chronological age
+        n_CI_diff_main_positives = (Perfs_CI_main['C-Index-difference_all'] > 0).sum()
+        n_CI_diff_main_negatives = (Perfs_CI_main['C-Index-difference_all'] < 0).sum()
+        n_CI_diff_main_positives_significant = (Perfs_CI_main_significant['C-Index-difference_all'] > 0).sum()
+        n_CI_diff_main_negatives_significant = (Perfs_CI_main_significant['C-Index-difference_all'] < 0).sum()
+        n_CI_diff_main_positives_significant_FDR = (Perfs_CI_main_significant_FDR['C-Index-difference_all'] > 0).sum()
+        n_CI_diff_main_negatives_significant_FDR = (Perfs_CI_main_significant_FDR['C-Index-difference_all'] < 0).sum()
+        
+        # print results
+        print('The mean CI difference over the ' + str(len(Perfs_CI_main.index)) + ' biological ages = ' +
+              str(round(CI_diff_main_mean, 3)) + '; standard deviation = ' + str(round(CI_diff_main_std, 3)) +
+              '; paired t-test p-value = ' + str(pv_main))
+        print('Out of the ' + str(len(Perfs_CI_main.index)) + ' main biological dimensions, ' + str(
+            n_CI_diff_main_positives) +
+              ' dimensions outperform CA as survival predictors, and ' + str(n_CI_diff_main_negatives) +
+              ' dimensions underperform.')
+        Perfs_CI_main[['version', 'C-Index-difference_all',
+                       'C-Index-difference_str_all', 'C-Index_all', 'C-Index_CA']].sort_values(
+            by='C-Index-difference_all')
+        
+        row_names = ['All', 'significant', 'FDR_significant']
+        col_names = ['All', '+', '-']
+        n_models = pd.DataFrame(np.empty((len(row_names), len(col_names),)))
+        n_models.index = row_names
+        n_models.columns = col_names
+        N_MODELS = {'All_dims': n_models.copy(), 'Main_dims': n_models.copy()}
+        best_models = n_models.drop(columns=['All'])
+        BEST_MODELS = {'All_dims': best_models.copy(), 'Main_dims': best_models.copy()}
+        BEST_CI_DIFFS = {'All_dims': best_models.copy(), 'Main_dims': best_models.copy()}
+        N_MODELS['All_dims'].loc[:, '+'] = \
+            [n_CI_diff_positives, n_CI_diff_positives_significant, n_CI_diff_positives_significant_FDR]
+        BEST_MODELS['All_dims'].loc[:, '+'] = [Perfs_CI['version'][len(Perfs_CI.index) - 1],
+                                               Perfs_CI_significant['version'][len(Perfs_CI_significant.index) - 1],
+                                               Perfs_CI_significant_FDR['version'][
+                                                   len(Perfs_CI_significant_FDR.index) - 1]]
+        BEST_CI_DIFFS['All_dims'].loc[:, '+'] = \
+            [Perfs_CI['C-Index-difference_str_all'][len(Perfs_CI.index) - 1],
+             Perfs_CI_significant['C-Index-difference_str_all'][len(Perfs_CI_significant.index) - 1],
+             Perfs_CI_significant_FDR['C-Index-difference_str_all'][len(Perfs_CI_significant_FDR.index) - 1]]
+        N_MODELS['All_dims'].loc[:, '-'] = \
+            [n_CI_diff_negatives, n_CI_diff_negatives_significant, n_CI_diff_negatives_significant_FDR]
+        BEST_MODELS['All_dims'].loc[:, '-'] = [Perfs_CI['version'][0],
+                                               Perfs_CI_significant['version'][0],
+                                               Perfs_CI_significant_FDR['version'][0]]
+        BEST_CI_DIFFS['All_dims'].loc[:, '-'] = [Perfs_CI['C-Index-difference_str_all'][0],
+                                                 Perfs_CI_significant['C-Index-difference_str_all'][0],
+                                                 Perfs_CI_significant_FDR['C-Index-difference_str_all'][0]]
+        N_MODELS['All_dims']['All'] = N_MODELS['All_dims']['+'] + N_MODELS['All_dims']['-']
+        N_MODELS['Main_dims'].loc[:, '+'] = \
+            [n_CI_diff_main_positives, n_CI_diff_main_positives_significant, n_CI_diff_main_positives_significant_FDR]
+        BEST_MODELS['Main_dims'].loc[:, '+'] = \
+            [Perfs_CI_main['version'][len(Perfs_CI_main.index) - 1],
+             Perfs_CI_main_significant['version'][len(Perfs_CI_main_significant.index) - 1],
+             Perfs_CI_main_significant_FDR['version'][len(Perfs_CI_main_significant_FDR.index) - 1]]
+        BEST_CI_DIFFS['Main_dims'].loc[:, '+'] = \
+            [Perfs_CI_main['C-Index-difference_str_all'][len(Perfs_CI_main.index) - 1],
+             Perfs_CI_main_significant['C-Index-difference_str_all'][len(Perfs_CI_main_significant.index) - 1],
+             Perfs_CI_main_significant_FDR['C-Index-difference_str_all'][len(Perfs_CI_main_significant_FDR.index) - 1]]
+        N_MODELS['Main_dims'].loc[:, '-'] = \
+            [n_CI_diff_main_negatives, n_CI_diff_main_negatives_significant, n_CI_diff_main_negatives_significant_FDR]
+        BEST_MODELS['Main_dims'].loc[:, '-'] = [Perfs_CI_main['version'][0],
+                                                Perfs_CI_main_significant['version'][0],
+                                                Perfs_CI_main_significant_FDR['version'][0]]
+        BEST_CI_DIFFS['Main_dims'].loc[:, '-'] = [Perfs_CI_main['C-Index-difference_str_all'][0],
+                                                  Perfs_CI_main_significant['C-Index-difference_str_all'][0],
+                                                  Perfs_CI_main_significant_FDR['C-Index-difference_str_all'][0]]
+        N_MODELS['Main_dims']['All'] = N_MODELS['Main_dims']['+'] + N_MODELS['Main_dims']['-']
+        
+        # Reformat to take into account that sometimes no model fits the criteria
+        for dims in ['All_dims', 'Main_dims']:
+            for sign in ['+', '-']:
+                for models in ['All', 'significant', 'FDR_significant']:
+                    if N_MODELS[dims].loc[models, sign] == 0:
+                        BEST_MODELS[dims].loc[models, sign] = ''
+                        BEST_CI_DIFFS[dims].loc[models, sign] = ''
+        
+        # Print results
+        # All dims
+        print('Number of aging dimensions, best models and associated CI differences for All dims: ')
+        print(N_MODELS['All_dims'])
+        print(BEST_MODELS['All_dims'])
+        print(BEST_CI_DIFFS['All_dims'])
+        print('Best model between All dims: ')
+        print(Perfs_CI_significant_FDR[['C-Index-difference_str_all', 'C-Index_all', 'C-Index_CA']].iloc[-1, :])
+        
+        # Main dims
+        print('Number of aging dimensions, best models and associated CI differences for Main dims: ')
+        print(N_MODELS['Main_dims'])
+        print(BEST_MODELS['Main_dims'])
+        print(BEST_CI_DIFFS['Main_dims'])
+        print('Best model between Main dims: ')
+        print(Perfs_CI_main_significant_FDR[['C-Index-difference_str_all', 'C-Index_all', 'C-Index_CA']].iloc[-1, :])
+
+
 class SelectBest(Metrics):
+    
+    """
+    For each aging main dimension and selected subdimensions, select the best performing model.
+    """
     
     def __init__(self, target=None, pred_type=None):
         Metrics.__init__(self)
@@ -3229,9 +3495,40 @@ class SelectBest(Metrics):
             Performances_alphabetical.to_csv(path_perf.replace('ranked', 'alphabetical'), index=False)
             for mode in self.modes:
                 self.CORRELATIONS[fold][mode].to_csv(path_corr.replace('_str', mode), index=True)
+    
+        # Handy draft to print some key results
+        Perfs = pd.read_csv('../data/PERFORMANCES_withEnsembles_alphabetical_instances_Age_test.csv')
+        Perfs.set_index('version', drop=False, inplace=True)
+        # Take the subset corresponding to the 11 main dimensions
+        main_dims = ['Brain', 'Eyes', 'Hearing', 'Lungs', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal',
+                     'PhysicalActivity',
+                     'Biochemistry', 'ImmuneSystem']
+        main_rows = ['Age_' + dim + '_*' * 10 for dim in main_dims]
+        Perfs_main = Perfs.loc[main_rows, :]
+
+        print('R-Squared for all dimensions = ' + str(round(Perfs['R-Squared_all'].mean(), 3)) + '; std = ' +
+              str(round(Perfs['R-Squared_all'].std(), 3)) + '; min = ' + str(round(Perfs['R-Squared_all'].min(), 3)) +
+              '; max = ' + str(round(Perfs['R-Squared_all'].max(), 3)))
+        print('RMSEs for all dimensions = ' + str(round(Perfs['RMSE_all'].mean(), 3)) + '; std = ' +
+              str(round(Perfs['RMSE_all'].std(), 3)) + '; min = ' + str(
+            round(Perfs['RMSE_all'].min(), 3)) + '; max = ' +
+              str(round(Perfs['RMSE_all'].max(), 3)))
+        print('R-Squared for main dimensions = ' + str(round(Perfs_main['R-Squared_all'].mean(), 3)) + '; std = ' +
+              str(round(Perfs_main['R-Squared_all'].std(), 3)) + '; min = ' + str(
+            round(Perfs_main['R-Squared_all'].min(), 3)) +
+              '; max = ' + str(round(Perfs_main['R-Squared_all'].max(), 3)))
+        print('RMSEs for main dimensions = ' + str(round(Perfs_main['RMSE_all'].mean(), 3)) + '; std = ' +
+              str(round(Perfs_main['RMSE_all'].std(), 3)) + '; min = ' + str(round(Perfs_main['RMSE_all'].min(), 3)) +
+              '; max = ' + str(round(Perfs_main['RMSE_all'].max(), 3)))
 
 
 class SelectCorrelationsNAs(Basics):
+    
+    """
+    Build a summary correlation matrix: when a correlation cannot be computed in terms of samples ("instances") because
+    the intersection has a small sample size, fill the NA with the correlation computed at the participant's level
+    ("eids").
+    """
     
     def __init__(self, target=None):
         Basics.__init__(self)
@@ -3277,6 +3574,10 @@ class SelectCorrelationsNAs(Basics):
 
 
 class CorrelationsAverages:
+    
+    """
+    Computes average correlation at different levels, to summarize the results.
+    """
     
     def __init__(self):
         self.Performances = pd.read_csv("../data/PERFORMANCES_withEnsembles_ranked_eids_Age_test.csv")
@@ -3509,6 +3810,10 @@ class CorrelationsAverages:
 
 
 class AttentionMaps(DeepLearning):
+    
+    """
+    Computes the attention maps (saliency maps and Grad_RAM maps) for all images
+    """
     
     def __init__(self, target=None, organ=None, view=None, transformation=None, debug_mode=False):
         # Partial initialization with placeholders to get access to parameters and functions
@@ -3790,6 +4095,10 @@ class AttentionMaps(DeepLearning):
 
 class GWASPreprocessing(Basics):
     
+    """
+    Preprocesses the data for the GWASs.
+    """
+    
     def __init__(self, target=None):
         Basics.__init__(self)
         self.target = target
@@ -3906,6 +4215,9 @@ class GWASPreprocessing(Basics):
 
 
 class GWASPostprocessing(Basics):
+    """
+    Postprocesses the GWAS results and stores the results in summary files.
+    """
     
     def __init__(self, target=None):
         Basics.__init__(self)
@@ -4170,6 +4482,12 @@ class GWASPostprocessing(Basics):
 
 class GWASAnnotate(Basics):
     
+    """
+    /!\ This class corresponds to a step in the pipeline that should be performed on local machine, since it must be
+    complemented with researches on the internet for different steps. /!\
+    Annotates the hits from the GWAS: names of the genes and gene types.
+    """
+    
     def __init__(self, target=None):
         Basics.__init__(self)
         self.target = target
@@ -4382,7 +4700,7 @@ class GWASAnnotate(Basics):
         # Save data
         print('GWAS summary:')
         print(GWAS_summary)
-        GWAS_summary.to_csv(self.path_data + 'GWAS_summary' + self.target + '.csv')
+        GWAS_summary.to_csv(self.path_data + 'GWAS_summary' + self.target + '.csv', index=False)
         
         # Report the correlation between R2s and h2_gs:
         GWAS_summary.dropna(subset=['Heritability', 'CA_prediction_R2'], inplace=True)
@@ -4410,6 +4728,7 @@ class GWASAnnotate(Basics):
 
 
 class GWASPlots(Basics):
+    """Generates Manhattan and QQ plots to summarize the GWASs results."""
     
     def __init__(self, target=None):
         Basics.__init__(self)
