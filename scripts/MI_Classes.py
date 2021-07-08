@@ -512,7 +512,7 @@ class PreprocessingImagesIDs(Basics):
             # Important: The i's data fold is used as *validation* fold for outer fold i.
             if ABDOMEN:
                 data_i = pd.read_csv(
-                    "../data/FoldsAugmented/data-features_Heart_20208_Augmented_Age_val_" + str(
+                    "../data/FoldsAugmented/fake_data-features_Heart_20208_Augmented_Age_val_" + str(
                         i) + ".csv")
             else:
                 data_i = pd.read_csv(
@@ -541,7 +541,7 @@ class PreprocessingImagesIDs(Basics):
     
     def _save_23_eids_folds(self):
         for outer_fold in self.outer_folds:
-            with open(self.path_data + 'instances23_eids_' + outer_fold + '.csv', 'w', newline='') as myfile:
+            with open(self.path_data + 'MI01B_Preprocessing_imagesIDs/instances23_eids_' + outer_fold + '.csv', 'w', newline='') as myfile:
                 wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
                 wr.writerow(self.FOLDS_23_EIDS[outer_fold])
     

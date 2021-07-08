@@ -5,20 +5,20 @@ Files to have :
 
 MI01A_Preprocessing_main:
 Inputs:
-    short_ukb41230.csv
-    All_eids.csv
-    missing_samples.csv
-    PA_visit_data.csv
+    data/fake_short_ukb41230.csv
+    data/fake_all_eids.csv
+    data/missing_samples.csv
+    data/fake_PA_visit_data.csv
 Outputs:
-    data-features_eids.csv
-    data-features_instances.csv
+    data/data-features_eids.csv
+    data/data-features_instances.csv
 
 
 MI01B_Preprocessing_imagesIDs:
 Inputs:
-    FoldsAugmented/*
+    data/FoldsAugmented/*
 Outputs:
-    instances23_eids_{0..9}.csv
+    data/MI01B_Preprocessing_imagesIDs/instances23_eids_{0..9}.csv
 
 MI01C_Preprocessing_folds:
 Inputs:
