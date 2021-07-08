@@ -92,6 +92,7 @@ from tensorflow.keras.backend import eval
 # Set display parameters
 pd.set_option('display.max_rows', 200)
 
+ABDOMEN = True
 
 # CLASSES
 class Basics:
@@ -178,6 +179,8 @@ class Basics:
         # Others
         if '/Users/Alan/' in os.getcwd():
             os.chdir('/Users/Alan/Desktop/Aging/Medical_Images/scripts/')
+        elif ABDOMEN:
+            os.chdir("scripts/")
         else:
             os.chdir('/n/groups/patel/Alan/Aging/Medical_Images/scripts/')
         gc.enable()  # garbage collector
@@ -322,15 +325,22 @@ class PreprocessingMain(Basics):
         self.data_raw = self.data_raw.join(outer_folds_split)
     
     def _impute_missing_ecg_instances(self):
-        data_ecgs = pd.read_csv('/n/groups/patel/Alan/Aging/TimeSeries/scripts/age_analysis/missing_samples.csv')
+        if ABDOMEN:
+            data_ecgs = pd.read_csv('../data/missing_samples.csv')
+        else:
+            data_ecgs = pd.read_csv('/n/groups/patel/Alan/Aging/TimeSeries/scripts/age_analysis/missing_samples.csv')
         data_ecgs['eid'] = data_ecgs['eid'].astype(str)
         data_ecgs['instance'] = data_ecgs['instance'].astype(str)
         for _, row in data_ecgs.iterrows():
             self.data_raw.loc[row['eid'], 'Date_attended_center_' + row['instance']] = row['observation_date']
     
     def _add_physicalactivity_instances(self):
-        data_pa = pd.read_csv(
-            '/n/groups/patel/Alan/Aging/TimeSeries/series/PhysicalActivity/90001/features/PA_visit_date.csv')
+        if ABDOMEN:
+            data_pa = pd.read_csv(
+                '../data/PA_visit_date.csv')
+        else:
+            data_pa = pd.read_csv(
+                '/n/groups/patel/Alan/Aging/TimeSeries/series/PhysicalActivity/90001/features/PA_visit_date.csv')
         data_pa['eid'] = data_pa['eid'].astype(str)
         data_pa.set_index('eid', drop=False, inplace=True)
         data_pa.index.name = 'column_names'
@@ -418,10 +428,13 @@ class PreprocessingMain(Basics):
                                     '31-0.0': 'Sex', '22001-0.0': 'Sex_genetic', '21000-0.0': 'Ethnicity',
                                     '21000-1.0': 'Ethnicity_1', '21000-2.0': 'Ethnicity_2',
                                     '22414-2.0': 'Abdominal_images_quality'}
-        self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
-                                    usecols=['eid', '31-0.0', '22001-0.0', '21000-0.0', '21000-1.0', '21000-2.0',
-                                             '34-0.0', '52-0.0', '53-0.0', '53-1.0', '53-2.0', '53-3.0', '22414-2.0'])
-        
+        if ABDOMEN: 
+            self.data_raw = pd.read_csv(self.path_data + 'short_ukb41230.csv')
+        else:
+            self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
+                            usecols=['eid', '31-0.0', '22001-0.0', '21000-0.0', '21000-1.0', '21000-2.0',
+                                        '34-0.0', '52-0.0', '53-0.0', '53-1.0', '53-2.0', '53-3.0', '22414-2.0'])
+
         # Formatting
         self.data_raw.rename(columns=dict_UKB_fields_to_names, inplace=True)
         self.data_raw['eid'] = self.data_raw['eid'].astype(str)
