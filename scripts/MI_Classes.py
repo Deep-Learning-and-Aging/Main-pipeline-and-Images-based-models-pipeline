@@ -317,7 +317,10 @@ class PreprocessingMain(Basics):
         self.data_features_eids = None
     
     def _add_outer_folds(self):
-        outer_folds_split = pd.read_csv(self.path_data + 'All_eids.csv')
+        if ABDOMEN:
+            outer_folds_split = pd.read_csv(self.path_data + 'fake_all_eids.csv')
+        else:
+            outer_folds_split = pd.read_csv(self.path_data + 'All_eids.csv')
         outer_folds_split.rename(columns={'fold': 'outer_fold'}, inplace=True)
         outer_folds_split['eid'] = outer_folds_split['eid'].astype('str')
         outer_folds_split['outer_fold'] = outer_folds_split['outer_fold'].astype('str')
@@ -337,7 +340,7 @@ class PreprocessingMain(Basics):
     def _add_physicalactivity_instances(self):
         if ABDOMEN:
             data_pa = pd.read_csv(
-                '../data/PA_visit_date.csv')
+                '../data/fake_PA_visit_date.csv')
         else:
             data_pa = pd.read_csv(
                 '/n/groups/patel/Alan/Aging/TimeSeries/series/PhysicalActivity/90001/features/PA_visit_date.csv')
@@ -429,7 +432,7 @@ class PreprocessingMain(Basics):
                                     '21000-1.0': 'Ethnicity_1', '21000-2.0': 'Ethnicity_2',
                                     '22414-2.0': 'Abdominal_images_quality'}
         if ABDOMEN: 
-            self.data_raw = pd.read_csv(self.path_data + 'short_ukb41230.csv')
+            self.data_raw = pd.read_csv(self.path_data + 'fake_short_ukb41230.csv')
         else:
             self.data_raw = pd.read_csv('/n/groups/patel/uk_biobank/project_52887_41230/ukb41230.csv',
                             usecols=['eid', '31-0.0', '22001-0.0', '21000-0.0', '21000-1.0', '21000-2.0',
@@ -592,7 +595,10 @@ class PreprocessingFolds(Metrics):
             self.list_ids_per_view_transformation[view] = {}
             for transformation in self.dict_organsviews_to_transformations[self.organ + '_' + view]:
                 list_ids_transformation = []
-                path = '../images/' + self.organ + '/' + view + '/' + transformation + '/'
+                if ABDOMEN:
+                    path = "../data/images/" + self.organ + '/' + view + '/' + transformation + '/'
+                else:
+                    path = '../images/' + self.organ + '/' + view + '/' + transformation + '/'
                 # for paired organs, take the unions of the ids available on the right and the left sides
                 if self.organ + '_' + view in self.left_right_organs_views:
                     for side in ['right', 'left']:
