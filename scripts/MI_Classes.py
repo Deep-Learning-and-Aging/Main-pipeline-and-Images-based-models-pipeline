@@ -507,9 +507,14 @@ class PreprocessingImagesIDs(Basics):
         heart_eids = []
         for i in range(10):
             # Important: The i's data fold is used as *validation* fold for outer fold i.
-            data_i = pd.read_csv(
-                "/n/groups/patel/JbProst/Heart/Data/FoldsAugmented/data-features_Heart_20208_Augmented_Age_val_" + str(
-                    i) + ".csv")
+            if ABDOMEN:
+                data_i = pd.read_csv(
+                    "../data/FoldsAugmented/data-features_Heart_20208_Augmented_Age_val_" + str(
+                        i) + ".csv")
+            else:
+                data_i = pd.read_csv(
+                    "/n/groups/patel/JbProst/Heart/Data/FoldsAugmented/data-features_Heart_20208_Augmented_Age_val_" + str(
+                        i) + ".csv")
             HEART_EIDS[i] = list(set([int(str(ID)[:7]) for ID in data_i['eid']]))
             heart_eids = heart_eids + HEART_EIDS[i]
         self.HEART_EIDS = HEART_EIDS
