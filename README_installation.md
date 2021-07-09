@@ -41,12 +41,24 @@ MI03A_Predictions_generate_parallel
 Inputs:
     Arguments: Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0 9
                The last argument is the outer_fold.
+    data/MI02_Training/trained_model-weights_Age_Abdomen_*
 Outputs:
     data/MI03A_Predictions_generate/Predictions_instances_Age_Abdomen_*
     Prediction of the specified outer_fold. <- They are already given with the suffix *short_*
 
+
 MI03B_Predictions_concatenate
 Inputs:
     Arguments: Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0
+    data/MI03A_Predictions_generate/Predictions_instances_Age_Abdomen_*
 Outputs:
     data/MI03B_Predictions_concatenate/Predictions_instances_Age_Abdomen_*
+
+
+MI03C_Predictions_merge_parallel
+Inputs:
+    Arguments: Age val
+               The last argument has to be changed to *val* and *test* too.
+    data/MI03B_Predictions_concatenate/Predictions_instances_Age_Abdomen_*
+Outputs:
+    data/MI03C_Predictions_merge/Predictions_instances_Age_Abdomen_*

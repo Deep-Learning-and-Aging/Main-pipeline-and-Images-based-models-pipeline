@@ -1832,7 +1832,7 @@ class PredictionsConcatenate(Basics):
     def save_predictions(self):
         for fold in self.folds:
             if ABDOMEN:
-                self.PREDICTIONS[fold].to_csv(self.path_data + 'MI03A_Predictions_generate/Predictions_instances_' + self.version + '_' + fold +
+                self.PREDICTIONS[fold].to_csv(self.path_data + 'MI03B_Predictions_concatenate/Predictions_instances_' + self.version + '_' + fold +
                                             '.csv', index=False)
             else:
                 self.PREDICTIONS[fold].to_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold +
@@ -1858,8 +1858,12 @@ class PredictionsMerge(Basics):
         self.Predictions_df = None
     
     def _load_data_features(self):
-        self.data_features = pd.read_csv(self.path_data + 'data-features_instances.csv',
-                                         usecols=self.id_vars + self.demographic_vars)
+        if ABDOMEN:
+            self.data_features = pd.read_csv(self.path_data + 'MI01A_Preprocessing_main/data-features_instances.csv',
+                                            usecols=self.id_vars + self.demographic_vars)
+        else:
+            self.data_features = pd.read_csv(self.path_data + 'data-features_instances.csv',
+                                            usecols=self.id_vars + self.demographic_vars)
         for var in self.id_vars:
             self.data_features[var] = self.data_features[var].astype(str)
         self.data_features.set_index('id', drop=False, inplace=True)
@@ -1884,7 +1888,7 @@ class PredictionsMerge(Basics):
     def _list_models(self):
         # generate list of predictions that will be integrated in the Predictions dataframe
         if ABDOMEN:
-            self.list_models = glob.glob(self.path_data + 'MI03A_Predictions_generate/Predictions_instances_' + self.target + '_*_' + self.fold +
+            self.list_models = glob.glob(self.path_data + 'MI03B_Predictions_concatenate/Predictions_instances_' + self.target + '_*_' + self.fold +
                                         '.csv')
         else:
             self.list_models = glob.glob(self.path_data + 'Predictions_instances_' + self.target + '_*_' + self.fold +
@@ -2005,7 +2009,7 @@ class PredictionsMerge(Basics):
     
     def save_merged_predictions(self):
         print('Writing the merged predictions...')
-        self.Predictions_df.to_csv(self.path_data + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' +
+        self.Predictions_df.to_csv(self.path_data + 'MI03C_Predictions_merge/PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' +
                                    self.fold + '.csv', index=False)
 
 
