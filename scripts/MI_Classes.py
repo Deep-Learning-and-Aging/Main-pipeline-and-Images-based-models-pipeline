@@ -1818,7 +1818,7 @@ class PredictionsConcatenate(Basics):
         for fold in self.folds:
             for outer_fold in self.outer_folds:
                 if ABDOMEN:
-                    Predictions_fold = pd.read_csv(self.path_data + 'MI03A_Predictions_generate/Predictions_instances_' + self.version + '_' + fold +
+                    Predictions_fold = pd.read_csv(self.path_data + 'MI03A_Predictions_generate/short_Predictions_instances_' + self.version + '_' + fold +
                                                 '_' + outer_fold + '.csv')
                 else:
                     Predictions_fold = pd.read_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold +
