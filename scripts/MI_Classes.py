@@ -180,7 +180,8 @@ class Basics:
         if '/Users/Alan/' in os.getcwd():
             os.chdir('/Users/Alan/Desktop/Aging/Medical_Images/scripts/')
         elif ABDOMEN:
-            os.chdir("scripts/")
+            if 'MI_Classes.py' not in os.listdir("."):
+                os.chdir("scripts/")
         else:
             os.chdir('/n/groups/patel/Alan/Aging/Medical_Images/scripts/')
         gc.enable()  # garbage collector
@@ -1114,7 +1115,10 @@ class DeepLearning(Metrics):
         self.DATA_FEATURES = {}
         self.mode = None
         self.n_cpus = len(os.sched_getaffinity(0))
-        self.dir_images = '../images/' + organ + '/' + view + '/' + transformation + '/'
+        if ABDOMEN:
+            self.dir_images = '../data/' + organ + '/' + view + '/' + transformation + '/'
+        else:
+            self.dir_images = '../images/' + organ + '/' + view + '/' + transformation + '/'
         
         # define dictionary to fit the architecture's input size to the images sizes (take min (height, width))
         self.dict_organ_view_transformation_to_image_size = {
@@ -1208,6 +1212,8 @@ class DeepLearning(Metrics):
                                'False-Positives': FalsePositives(name='False-Positives'),
                                'False-Negatives': FalseNegatives(name='False-Negatives'),
                                'True-Negatives': TrueNegatives(name='True-Negatives')}
+        if ABDOMEN:
+            self.dict_metrics_K["MAE"] = MeanAbsoluteError(name="MAE")
         
         # Metrics
         self.prediction_type = self.dict_prediction_types[target]
@@ -1232,7 +1238,7 @@ class DeepLearning(Metrics):
     def _load_data_features(self):
         for fold in self.folds:
             self.DATA_FEATURES[fold] = pd.read_csv(
-                self.path_data + 'data-features_' + self.organ + '_' + self.view + '_' + self.transformation + '_' +
+                self.path_data + 'MI01C_Preprocessing_folds/data-features_' + self.organ + '_' + self.view + '_' + self.transformation + '_' +
                 self.dict_target_to_ids[self.target] + '_' + fold + '_' + self.outer_fold + '.csv')
             for col_name in self.id_vars:
                 self.DATA_FEATURES[fold][col_name] = self.DATA_FEATURES[fold][col_name].astype(str)
@@ -1410,18 +1416,19 @@ class DeepLearning(Metrics):
     @staticmethod
     def clean_exit():
         # exit
-        print('\nDone.\n')
-        print('Killing JOB PID with kill...')
-        os.system('touch ../eo/' + os.environ['SLURM_JOBID'])
-        os.system('kill ' + str(os.getpid()))
-        time.sleep(60)
-        print('Escalating to kill JOB PID with kill -9...')
-        os.system('kill -9 ' + str(os.getpid()))
-        time.sleep(60)
-        print('Escalating to kill JOB ID')
-        os.system('scancel ' + os.environ['SLURM_JOBID'])
-        time.sleep(60)
-        print('Everything failed to kill the job. Hanging there until hitting walltime...')
+        if not ABDOMEN:
+            print('\nDone.\n')
+            print('Killing JOB PID with kill...')
+            os.system('touch ../eo/' + os.environ['SLURM_JOBID'])
+            os.system('kill ' + str(os.getpid()))
+            time.sleep(60)
+            print('Escalating to kill JOB PID with kill -9...')
+            os.system('kill -9 ' + str(os.getpid()))
+            time.sleep(60)
+            print('Escalating to kill JOB ID')
+            os.system('scancel ' + os.environ['SLURM_JOBID'])
+            time.sleep(60)
+            print('Everything failed to kill the job. Hanging there until hitting walltime...')
 
 
 class Training(DeepLearning):
@@ -1464,12 +1471,22 @@ class Training(DeepLearning):
             self.metrics_names = self.dict_metrics_names_K[self.prediction_type]
         
         # Model
-        self.path_load_weights = self.path_data + 'model-weights_' + self.version + '.h5'
+        if ABDOMEN:
+            self.path_load_weights = self.path_data + 'MI02_Training/model-weights_' + self.version + '.h5'
+        else:
+            self.path_load_weights = self.path_data + 'model-weights_' + self.version + '.h5'
+
         if debug_mode:
             self.path_save_weights = self.path_data + 'model-weights-debug.h5'
         else:
-            self.path_save_weights = self.path_data + 'model-weights_' + self.version + '.h5'
-        self.n_epochs_max = 100000
+            if ABDOMEN:
+                self.path_save_weights = self.path_data + 'MI02_Training/model-weights_' + self.version + '.h5'
+            else:
+                self.path_save_weights = self.path_data + 'model-weights_' + self.version + '.h5'
+        if ABDOMEN:
+            self.n_epochs_max = 1
+        else:
+            self.n_epochs_max = 100000
         self.callbacks = None
     
     # Load and preprocess the data, build the generators
@@ -1565,7 +1582,10 @@ class Training(DeepLearning):
                         Performances = Performances[Performances[parameter] == parameters_to_match[parameter]]
                     # if at least one model is similar enough, load weights from the best of them
                     if len(Performances.index) != 0:
-                        self.path_load_weights = self.path_data + 'model-weights_' + Performances['version'][0] + '.h5'
+                        if ABDOMEN:
+                            self.path_load_weights = self.path_data + 'MI02_Training/model-weights_' + Performances['version'][0] + '.h5'
+                        else:
+                            self.path_load_weights = self.path_data + 'model-weights_' + Performances['version'][0] + '.h5'
                         self.keras_weights = None
                         print('transfering the weights from: ' + self.path_load_weights)
                         return
@@ -1740,7 +1760,10 @@ class PredictionsGenerate(DeepLearning):
             self.PREDICTIONS[fold]['id'] = [ID.replace('.jpg', '') for ID in self.PREDICTIONS[fold]['id']]
     
     def _generate_predictions(self):
-        self.path_load_weights = self.path_data + 'model-weights_' + self.version + '_' + self.outer_fold + '.h5'
+        if ABDOMEN:
+            self.path_load_weights = self.path_data + 'MI02_Training/trained_model-weights_' + self.version + '_' + self.outer_fold + '.h5'
+        else:
+            self.path_load_weights = self.path_data + 'model-weights_' + self.version + '_' + self.outer_fold + '.h5'
         self._load_data_features()
         if self.debug_mode:
             self._take_subset_to_debug()
@@ -1768,10 +1791,12 @@ class PredictionsGenerate(DeepLearning):
     
     def save_predictions(self):
         for fold in self.folds:
-            self.PREDICTIONS[fold].to_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold + '_'
-                                          + self.outer_fold + '.csv', index=False)
-
-
+            if ABDOMEN:
+                self.PREDICTIONS[fold].to_csv(self.path_data + 'MI03A_Predictions_generate/Predictions_instances_' + self.version + '_' + fold + '_'
+                                            + self.outer_fold + '.csv', index=False)
+            else:
+                self.PREDICTIONS[fold].to_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold + '_'
+                                            + self.outer_fold + '.csv', index=False)
 class PredictionsConcatenate(Basics):
     
     """
@@ -1792,8 +1817,13 @@ class PredictionsConcatenate(Basics):
     def concatenate_predictions(self):
         for fold in self.folds:
             for outer_fold in self.outer_folds:
-                Predictions_fold = pd.read_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold +
-                                               '_' + outer_fold + '.csv')
+                if ABDOMEN:
+                    Predictions_fold = pd.read_csv(self.path_data + 'MI03A_Predictions_generate/Predictions_instances_' + self.version + '_' + fold +
+                                                '_' + outer_fold + '.csv')
+                else:
+                    Predictions_fold = pd.read_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold +
+                                                '_' + outer_fold + '.csv')
+
                 if fold in self.PREDICTIONS.keys():
                     self.PREDICTIONS[fold] = pd.concat([self.PREDICTIONS[fold], Predictions_fold])
                 else:
@@ -1801,8 +1831,12 @@ class PredictionsConcatenate(Basics):
     
     def save_predictions(self):
         for fold in self.folds:
-            self.PREDICTIONS[fold].to_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold +
-                                          '.csv', index=False)
+            if ABDOMEN:
+                self.PREDICTIONS[fold].to_csv(self.path_data + 'MI03A_Predictions_generate/Predictions_instances_' + self.version + '_' + fold +
+                                            '.csv', index=False)
+            else:
+                self.PREDICTIONS[fold].to_csv(self.path_data + 'Predictions_instances_' + self.version + '_' + fold +
+                                            '.csv', index=False)
 
 
 class PredictionsMerge(Basics):
@@ -1849,8 +1883,12 @@ class PredictionsMerge(Basics):
     
     def _list_models(self):
         # generate list of predictions that will be integrated in the Predictions dataframe
-        self.list_models = glob.glob(self.path_data + 'Predictions_instances_' + self.target + '_*_' + self.fold +
-                                     '.csv')
+        if ABDOMEN:
+            self.list_models = glob.glob(self.path_data + 'MI03A_Predictions_generate/Predictions_instances_' + self.target + '_*_' + self.fold +
+                                        '.csv')
+        else:
+            self.list_models = glob.glob(self.path_data + 'Predictions_instances_' + self.target + '_*_' + self.fold +
+                                        '.csv')
         # get rid of ensemble models and models already merged
         self.list_models = [model for model in self.list_models if ('*' not in model)]
         if self.Predictions_df_previous is not None:
@@ -4035,7 +4073,10 @@ class AttentionMaps(DeepLearning):
         
         # load the weights for the fold (for test images in fold i, load the corresponding model: (i-1)%N_CV_folds
         outer_fold_model = str((int(outer_fold) - 1) % self.n_CV_outer_folds)
-        self.model.load_weights(self.path_data + 'model-weights_' + self.version + '_' + outer_fold_model + '.h5')
+        if ABDOMEN:
+            self.model.load_weights(self.path_data + 'MI02_Training/model-weights_' + self.version + '_' + outer_fold_model + '.h5')
+        else:
+            self.model.load_weights(self.path_data + 'model-weights_' + self.version + '_' + outer_fold_model + '.h5')
     
     @staticmethod
     def _process_saliency(saliency):

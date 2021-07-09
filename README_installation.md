@@ -26,3 +26,21 @@ Inputs:
     Arguments: Age Abdomen
 Outputs:
     data/MI01C_Preprocessing_folds/data-features_*
+
+# TO SKIP BECAUSE A GPU IS NEEDED TO TRAIN THE ALGORITHMS
+MI02_Training_parallel:
+Inputs:
+    Arguments: Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0 9
+               The last argument is the outer_fold.
+Outputs:
+    data/MI02_Training/model-weights_Age_Abdomen_*
+    Weights of the neural network from the training. <- They are already given with the suffix *trained_* for all the outer folds of Pancreas Contrast so that you don't need to train the algorithm by your self
+
+# YOU CAN TRY BY YOUR SELF, AS IT MIGHT TAKE SOME TIME, WE PROVIDE THE OUTPUTS OF PANCREAS CONTRAST
+MI03A_Predictions_generate_parallel
+Inputs:
+    Arguments: Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0 9
+               The last argument is the outer_fold.
+Outputs:
+    data/MI03A_Predictions_generate/Predictions_instances_Age_Abdomen_*
+    Prediction of the specified outer_fold. <- They are already given with the suffix *short_*

@@ -1,12 +1,16 @@
 import sys
 from MI_Classes import Training
+from MI_Classes import ABDOMEN
 
 # Options
 # Use a small subset of the data VS. run the actual full data pipeline to get accurate results
 # /!\ if True, path to save weights will be automatically modified to avoid rewriting them
 debug_mode = False
 # Load weights from previous best training results, VS. start from scratch
-continue_training = True
+if ABDOMEN:
+    continue_training = False
+else:
+    continue_training = True
 # Try to find a similar model among those already trained and evaluated to perform transfer learning
 transfer_learning = None  # None, hyperparameters (same dataset, other hyperparameters), datasets (other datasets).
 # Compute all the metrics during training VS. only compute loss and main metric (faster)
