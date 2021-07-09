@@ -2038,15 +2038,22 @@ class PredictionsEids(Basics):
     
     def preprocessing(self):
         # Load predictions
-        self.Predictions = pd.read_csv(
-            self.path_data + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
+        if ABDOMEN:
+            self.Predictions = pd.read_csv(
+                self.path_data + 'MI03C_Predictions_merge/PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
+        else:
+            self.Predictions = pd.read_csv(
+                self.path_data + 'PREDICTIONS_withoutEnsembles_instances_' + self.target + '_' + self.fold + '.csv')
         self.Predictions.drop(columns=['id'], inplace=True)
         self.Predictions['eid'] = self.Predictions['eid'].astype(str)
         self.Predictions.index.name = 'column_names'
         self.pred_versions = [col for col in self.Predictions.columns.values if 'pred_' in col]
         
         # Prepare target values on instance 0 as a reference
-        target_0s = pd.read_csv(self.path_data + 'data-features_eids.csv', usecols=['eid', self.target])
+        if ABDOMEN:
+            target_0s = pd.read_csv(self.path_data + 'MI01A_Preprocessing_main/data-features_eids.csv', usecols=['eid', self.target])
+        else:
+            target_0s = pd.read_csv(self.path_data + 'data-features_eids.csv', usecols=['eid', self.target])
         target_0s['eid'] = target_0s['eid'].astype(str)
         target_0s.set_index('eid', inplace=True)
         target_0s = target_0s[self.target]
@@ -2132,8 +2139,12 @@ class PredictionsEids(Basics):
     
     def _generate_single_model_predictions(self):
         for pred_version in self.pred_versions:
-            path_save = \
-                self.path_data + 'Predictions_eids_' + '_'.join(pred_version.split('_')[1:]) + '_' + self.fold + '.csv'
+            if ABDOMEN:
+                path_save = \
+                    self.path_data + 'MI03D_Predictions_eids/Predictions_eids_' + '_'.join(pred_version.split('_')[1:]) + '_' + self.fold + '.csv'
+            else:
+                path_save = \
+                    self.path_data + 'Predictions_eids_' + '_'.join(pred_version.split('_')[1:]) + '_' + self.fold + '.csv'
             # Generate only if does not exist already.
             if not os.path.exists(path_save):
                 Predictions_version = self.Predictions_eids[['id', 'outer_fold', pred_version]]
@@ -2142,8 +2153,12 @@ class PredictionsEids(Basics):
                 Predictions_version.to_csv(path_save, index=False)
     
     def save_predictions(self):
-        self.Predictions_eids.to_csv(self.path_data + 'PREDICTIONS_withoutEnsembles_eids_' + self.target + '_' +
-                                     self.fold + '.csv', index=False)
+        if ABDOMEN:
+            self.Predictions_eids.to_csv(self.path_data + 'MI03D_Predictions_eids/PREDICTIONS_withoutEnsembles_eids_' + self.target + '_' +
+                                        self.fold + '.csv', index=False)
+        else:
+            self.Predictions_eids.to_csv(self.path_data + 'PREDICTIONS_withoutEnsembles_eids_' + self.target + '_' +
+                                        self.fold + '.csv', index=False)
         # Generate and save files for every single model
         self._generate_single_model_predictions()
 

@@ -55,10 +55,20 @@ Outputs:
     data/MI03B_Predictions_concatenate/Predictions_instances_Age_Abdomen_*
 
 
-MI03C_Predictions_merge_parallel
+MI03C_Predictions_merge
 Inputs:
     Arguments: Age val
-               The last argument has to be changed to *val* and *test* too.
+               The last argument has to be changed to *test* too.
     data/MI03B_Predictions_concatenate/Predictions_instances_Age_Abdomen_*
 Outputs:
-    data/MI03C_Predictions_merge/Predictions_instances_Age_Abdomen_*
+    data/MI03C_Predictions_merge/PREDICTIONS_withoutEnsembles_instances_Age_*
+
+MI03D_Predictions_eids
+Inputs:
+    Arguments: Age val
+               The last argument has to be changed to *test* too.
+    data/MI03C_Predictions_merge/PREDICTIONS_withoutEnsembles_instances_Age_*
+Outputs:
+    data/MI03D_Predictions_eids/Predictions_eids_concatenate/Predictions_instances_Age_Abdomen_*
+    data/MI03D_Predictions_eids/PREDICTIONS_withoutEnsembles_eids_Age_*
+
