@@ -481,8 +481,12 @@ class PreprocessingMain(Basics):
         self.data_features_eids['id'] = [ID.replace('_0', '_*') for ID in self.data_features_eids['id'].values]
     
     def save_data(self):
-        self.data_features.to_csv(self.path_data + 'data-features_instances.csv', index=False)
-        self.data_features_eids.to_csv(self.path_data + 'data-features_eids.csv', index=False)
+        if ABDOMEN:
+            self.data_features.to_csv(self.path_data + 'MI01A_Preprocessing_main/data-features_instances.csv', index=False)
+            self.data_features_eids.to_csv(self.path_data + 'MI01A_Preprocessing_main/data-features_eids.csv', index=False)
+        else:
+            self.data_features.to_csv(self.path_data + 'data-features_instances.csv', index=False)
+            self.data_features_eids.to_csv(self.path_data + 'data-features_eids.csv', index=False)
 
 
 class PreprocessingImagesIDs(Basics):
@@ -596,7 +600,7 @@ class PreprocessingFolds(Metrics):
             for transformation in self.dict_organsviews_to_transformations[self.organ + '_' + view]:
                 list_ids_transformation = []
                 if ABDOMEN:
-                    path = "../data/images/" + self.organ + '/' + view + '/' + transformation + '/'
+                    path = "../data/" + self.organ + '/' + view + '/' + transformation + '/'
                 else:
                     path = '../images/' + self.organ + '/' + view + '/' + transformation + '/'
                 # for paired organs, take the unions of the ids available on the right and the left sides
@@ -619,7 +623,10 @@ class PreprocessingFolds(Metrics):
         cols_data = self.id_vars + self.demographic_vars
         if self.image_quality_col is not None:
             cols_data.append(self.dict_image_quality_col[self.organ])
-        data = pd.read_csv(self.path_data + 'data-features_instances.csv', usecols=cols_data)
+        if ABDOMEN:
+            data = pd.read_csv(self.path_data + 'MI01A_Preprocessing_main/data-features_instances.csv', usecols=cols_data)
+        else:
+            data = pd.read_csv(self.path_data + 'data-features_instances.csv', usecols=cols_data)
         data.rename(columns={self.dict_image_quality_col[self.organ]: 'Data_quality'}, inplace=True)
         for col_name in self.id_vars:
             data[col_name] = data[col_name].astype(str)
@@ -634,10 +641,18 @@ class PreprocessingFolds(Metrics):
         self.data = data
     
     def _split_data(self):
-        # Generate the data for each outer_fold
+        if ABDOMEN:
+            self.data['outer_fold'] = self.data['outer_fold'].astype(float, copy=False) 
+
+        # Generate the data for each outer_fold   
         for i, outer_fold in enumerate(self.outer_folds):
             of_val = outer_fold
             of_test = str((int(outer_fold) + 1) % len(self.outer_folds))
+            
+            if ABDOMEN:
+                of_val = float(of_val)
+                of_test = float(of_test)
+
             DATA = {
                 'train': self.data[~self.data['outer_fold'].isin([of_val, of_test])],
                 'val': self.data[self.data['outer_fold'] == of_val],
@@ -680,9 +695,14 @@ class PreprocessingFolds(Metrics):
                                   str(len(DF[fold].index)) + ' did not match the dataframe!')
                         
                         # save the data
-                        DF[fold].to_csv(self.path_data + 'data-features_' + self.organ + '_' + view + '_' +
-                                         transformation + '_' + self.target + '_' + fold + '_' + outer_fold + '.csv',
-                                         index=False)
+                        if ABDOMEN:
+                            DF[fold].to_csv(self.path_data + 'MI01C_Preprocessing_folds/data-features_' + self.organ + '_' + view + '_' +
+                                            transformation + '_' + self.target + '_' + fold + '_' + outer_fold + '.csv',
+                                            index=False)
+                        else:
+                            DF[fold].to_csv(self.path_data + 'data-features_' + self.organ + '_' + view + '_' +
+                                            transformation + '_' + self.target + '_' + fold + '_' + outer_fold + '.csv',
+                                            index=False)
                         print('For outer_fold ' + outer_fold + ', the ' + fold + ' fold has a sample size of ' +
                               str(len(DF[fold].index)))
     

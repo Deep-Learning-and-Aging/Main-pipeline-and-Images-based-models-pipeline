@@ -10,8 +10,8 @@ Inputs:
     data/missing_samples.csv
     data/fake_PA_visit_data.csv
 Outputs:
-    data/data-features_eids.csv
-    data/data-features_instances.csv
+    data/MI01A_Preprocessing_main/data-features_eids.csv
+    data/MI01A_Preprocessing_main/data-features_instances.csv
 
 
 MI01B_Preprocessing_imagesIDs:
@@ -22,4 +22,7 @@ Outputs:
 
 MI01C_Preprocessing_folds:
 Inputs:
+    data/Abdomen/*
     Arguments: Age Abdomen
+Outputs:
+    data/MI01C_Preprocessing_folds/data-features_*
