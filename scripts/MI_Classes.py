@@ -3647,29 +3647,53 @@ class SelectBest(Metrics):
     
     def _load_data(self):
         for fold in self.folds:
-            path_pred = self.path_data + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' + self.target + '_' + \
-                        fold + '.csv'
-            path_res = self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + fold + '.csv'
-            path_perf = self.path_data + 'PERFORMANCES_withEnsembles_withCI_ranked_' + self.pred_type + '_' + \
-                        self.target + '_' + fold + '.csv'
-            path_corr = self.path_data + 'ResidualsCorrelations_str_' + self.pred_type + '_' + self.target + '_' + \
-                        fold + '.csv'
+            if ABDOMEN:
+                path_pred = self.path_data + 'MI05A_Ensembles_predictions/PREDICTIONS_withEnsembles_' + self.pred_type + '_' + self.target + '_' + \
+                            fold + '.csv'
+                path_res = self.path_data + 'MI06A_Residuals_generate/RESIDUALS_' + self.pred_type + '_' + self.target + '_' + fold + '.csv'
+                path_perf = self.path_data + 'MI05C_Performances_merge/PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + \
+                            self.target + '_' + fold + '.csv'
+                path_corr = self.path_data + 'MI06B_Residuals_correlations/ResidualsCorrelations_str_' + self.pred_type + '_' + self.target + '_' + \
+                            fold + '.csv'
+            else:
+                path_pred = self.path_data + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' + self.target + '_' + \
+                            fold + '.csv'
+                path_res = self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + fold + '.csv'
+                path_perf = self.path_data + 'PERFORMANCES_withEnsembles_withCI_ranked_' + self.pred_type + '_' + \
+                            self.target + '_' + fold + '.csv'
+                path_corr = self.path_data + 'ResidualsCorrelations_str_' + self.pred_type + '_' + self.target + '_' + \
+                            fold + '.csv'
             self.PREDICTIONS[fold] = pd.read_csv(path_pred)
             self.RESIDUALS[fold] = pd.read_csv(path_res)
             self.PERFORMANCES[fold] = pd.read_csv(path_perf)
+            if ABDOMEN:
+                self.PERFORMANCES[fold]["version"] = list(map(lambda version: version.split("generate/Performances_instances_")[1], self.PERFORMANCES[fold]["version"]))
             self.PERFORMANCES[fold].set_index('version', drop=False, inplace=True)
-            self.CORRELATIONS_SAMPLESIZES[fold] = pd.read_csv(self.path_data + 'ResidualsCorrelations_samplesizes_' +
-                                                              self.pred_type + '_' + self.target + '_' + fold + '.csv',
-                                                              index_col=0)
+
+            if ABDOMEN:
+                self.CORRELATIONS_SAMPLESIZES[fold] = pd.read_csv(self.path_data + 'MI06B_Residuals_correlations/ResidualsCorrelations_samplesizes_' +
+                                                                self.pred_type + '_' + self.target + '_' + fold + '.csv',
+                                                                index_col=0)
+            else:
+                self.CORRELATIONS_SAMPLESIZES[fold] = pd.read_csv(self.path_data + 'ResidualsCorrelations_samplesizes_' +
+                                                                self.pred_type + '_' + self.target + '_' + fold + '.csv',
+                                                                index_col=0)
             self.CORRELATIONS[fold] = {}
             for mode in self.modes:
                 self.CORRELATIONS[fold][mode] = pd.read_csv(path_corr.replace('_str', mode), index_col=0)
     
     def _select_versions(self):
         # Load val performances
-        path_perf = self.path_data + 'PERFORMANCES_withEnsembles_withCI_ranked_' + self.pred_type + '_' + \
-                    self.target + '_test.csv'
+        if ABDOMEN:
+            path_perf = self.path_data + 'MI05C_Performances_merge/PERFORMANCES_withEnsembles_ranked_' + self.pred_type + '_' + \
+                        self.target + '_test.csv'
+        else:
+            path_perf = self.path_data + 'PERFORMANCES_withEnsembles_withCI_ranked_' + self.pred_type + '_' + \
+                        self.target + '_test.csv'
         Performances = pd.read_csv(path_perf)
+        if ABDOMEN:
+            Performances["version"] = list(map(lambda version: version.split("generate/Performances_instances_")[1], Performances["version"]))
+
         Performances.set_index('version', drop=False, inplace=True)
         list_organs = Performances['organ'].unique()
         list_organs.sort()
@@ -3684,6 +3708,7 @@ class SelectBest(Metrics):
                     Perf_organview = Performances[(Performances['organ'] == organ) & (Performances['view'] == view)]
                     self.organs.append(organ + view)
                     self.best_models.append(Perf_organview['version'].values[0])
+
     
     def _take_subsets(self):
         base_cols = self.id_vars + self.demographic_vars
@@ -3713,14 +3738,25 @@ class SelectBest(Metrics):
     
     def save_data(self):
         for fold in self.folds:
-            path_pred = self.path_data + 'PREDICTIONS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold \
-                        + '.csv'
-            path_res = self.path_data + 'RESIDUALS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold + \
-                       '.csv'
-            path_corr = self.path_data + 'ResidualsCorrelations_bestmodels_str_' + self.pred_type + '_' + self.target \
-                        + '_' + fold + '.csv'
-            path_perf = self.path_data + 'PERFORMANCES_bestmodels_ranked_' + self.pred_type + '_' + self.target + '_' \
-                        + fold + '.csv'
+            if ABDOMEN:
+                path_pred = self.path_data + 'MI07A_Select_best/PREDICTIONS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold \
+                            + '.csv'
+                path_res = self.path_data + 'MI07A_Select_best/RESIDUALS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold + \
+                        '.csv'
+                path_corr = self.path_data + 'MI07A_Select_best/ResidualsCorrelations_bestmodels_str_' + self.pred_type + '_' + self.target \
+                            + '_' + fold + '.csv'
+                path_perf = self.path_data + 'MI07A_Select_best/PERFORMANCES_bestmodels_ranked_' + self.pred_type + '_' + self.target + '_' \
+                            + fold + '.csv'
+            else:
+                path_pred = self.path_data + 'PREDICTIONS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold \
+                            + '.csv'
+                path_res = self.path_data + 'RESIDUALS_bestmodels_' + self.pred_type + '_' + self.target + '_' + fold + \
+                        '.csv'
+                path_corr = self.path_data + 'ResidualsCorrelations_bestmodels_str_' + self.pred_type + '_' + self.target \
+                            + '_' + fold + '.csv'
+                path_perf = self.path_data + 'PERFORMANCES_bestmodels_ranked_' + self.pred_type + '_' + self.target + '_' \
+                            + fold + '.csv'
+
             self.PREDICTIONS[fold].to_csv(path_pred, index=False)
             self.RESIDUALS[fold].to_csv(path_res, index=False)
             self.PERFORMANCES[fold].sort_values(by=self.dict_main_metrics_names[self.target] + '_all', ascending=False,
@@ -3732,12 +3768,16 @@ class SelectBest(Metrics):
                 self.CORRELATIONS[fold][mode].to_csv(path_corr.replace('_str', mode), index=True)
     
         # Handy draft to print some key results
-        Perfs = pd.read_csv('../data/PERFORMANCES_withEnsembles_alphabetical_instances_Age_test.csv')
+        if ABDOMEN:
+            return None
+        else:
+            Perfs = pd.read_csv('../data/PERFORMANCES_withEnsembles_alphabetical_instances_Age_test.csv')
+
         Perfs.set_index('version', drop=False, inplace=True)
         # Take the subset corresponding to the 11 main dimensions
         main_dims = ['Brain', 'Eyes', 'Hearing', 'Lungs', 'Arterial', 'Heart', 'Abdomen', 'Musculoskeletal',
-                     'PhysicalActivity',
-                     'Biochemistry', 'ImmuneSystem']
+                        'PhysicalActivity',
+                        'Biochemistry', 'ImmuneSystem']
         main_rows = ['Age_' + dim + '_*' * 10 for dim in main_dims]
         Perfs_main = Perfs.loc[main_rows, :]
 

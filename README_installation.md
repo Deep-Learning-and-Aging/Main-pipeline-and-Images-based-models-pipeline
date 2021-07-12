@@ -147,3 +147,18 @@ Inputs:
 Outputs:
     data/MI06B_Residuals_correlations/RESIDUALS_instances_Age_test.csv
 
+
+MI07A_Select_best
+Inputs:
+    Arguments: Age instances
+    data/MI05A_Ensembles_predictions/PREDICTIONS_withEnsembles_*
+    data/MI06A_Residuals_generate/RESIDUALS_*
+    data/MI05C_Performances_merge/PERFORMANCES_withEnsembles_ranked_*
+    data/MI06B_Residuals_correlations/ResidualsCorrelations_str_*
+    data/MI06B_Residuals_correlations/ResidualsCorrelations_samplesizes_*
+Outputs:
+    data/MI07A_Select_best/PERFORMANCES_bestmodels_*
+    data/MI07A_Select_best/PREDICTIONS_bestmodels_instances_Age_test.csv
+    data/MI07A_Select_best/RESIDUALS_bestmodels_instances_Age_test.csv
+    data/MI07A_Select_best/ResidualsCorrelations_bestmodels_*
+    
