@@ -122,10 +122,13 @@ Outputs:
     data/MI05B_Performances_generate/Predictions_instances_Age_*
 
 
-<!-- MI05C_Performances_merge
+MI05C_Performances_merge
 Inputs:
     Arguments: Age val instances True
                The second argument has to be changed to *test* too.
+    data/MI04A_Performances_generate/Predictions_instances_Age_Abdomen_*
     data/MI05B_Performances_generate/Predictions_instances_Age_*
 Outputs:
-    data/MI05C_Performances_merge/PERFORMANCES_withoutEnsembles_*_instances_Age_* -->
+    data/MI05C_Performances_merge/PERFORMANCES_withoutEnsembles_*_instances_Age_*
+
+

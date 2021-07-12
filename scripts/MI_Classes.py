@@ -2384,6 +2384,9 @@ class PerformancesMerge(Metrics):
         if ABDOMEN:
             self.list_models = glob.glob(self.path_data + 'MI04A_Performances_generate/Performances_' + pred_type + '_' + target + '_*_' + fold +
                                         '_str.csv')
+            if self.ensemble_models:
+                self.list_models += glob.glob(self.path_data + 'MI05B_Performances_generate/Performances_' + pred_type + '_' + target + '_*_' + fold +
+                                            '_str.csv')
         else:
             self.list_models = glob.glob(self.path_data + 'Performances_' + pred_type + '_' + target + '_*_' + fold +
                                         '_str.csv')
@@ -2500,8 +2503,12 @@ class PerformancesMerge(Metrics):
         
         # For ensemble models, merge the new performances with the previously computed performances
         if self.ensemble_models:
-            Performances_withoutEnsembles = pd.read_csv(self.path_data + 'PERFORMANCES_tuned_alphabetical_' +
-                                                        self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
+            if ABDOMEN:
+                Performances_withoutEnsembles = pd.read_csv(self.path_data + 'MI04C_Performances_tuning/PERFORMANCES_tuned_alphabetical_' +
+                                                            self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
+            else:
+                Performances_withoutEnsembles = pd.read_csv(self.path_data + 'PERFORMANCES_tuned_alphabetical_' +
+                                                            self.pred_type + '_' + self.target + '_' + self.fold + '.csv')
             self.Performances = Performances_withoutEnsembles.append(self.Performances)
             # reorder the columns (weird: automatic alphabetical re-ordering happened when append was called for 'val')
             self.Performances = self.Performances[Performances_withoutEnsembles.columns]
@@ -2520,8 +2527,12 @@ class PerformancesMerge(Metrics):
     def save_performances(self):
         name_extension = 'withEnsembles' if self.ensemble_models else 'withoutEnsembles'
         if ABDOMEN:
-            path = self.path_data + 'MI04B_Performances_merge/PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
-                self.target + '_' + self.fold + '.csv'
+            if self.ensemble_models:
+                path = self.path_data + 'MI05C_Performances_merge/PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
+                    self.target + '_' + self.fold + '.csv'
+            else:
+                path = self.path_data + 'MI04B_Performances_merge/PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
+                    self.target + '_' + self.fold + '.csv'
         else:
             path = self.path_data + 'PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
                 self.target + '_' + self.fold + '.csv'
