@@ -138,3 +138,12 @@ Inputs:
     data/MI05A_Ensembles_predictions/PREDICTIONS_withEnsembles_instances_Age_*
 Outputs:
     data/MI06A_Residuals_generate/RESIDUALS_instances_Age_test.csv
+
+
+MI06B_Residuals_correlations
+Inputs:
+    Arguments: Age test instances
+    data/MI06A_Residuals_generate/RESIDUALS_instances_Age_test.csv
+Outputs:
+    data/MI06B_Residuals_correlations/RESIDUALS_instances_Age_test.csv
+

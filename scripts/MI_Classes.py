@@ -3249,8 +3249,12 @@ class ResidualsCorrelations(Basics):
     
     def preprocessing(self):
         # load data
-        Residuals = pd.read_csv(self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
-                                '.csv')
+        if ABDOMEN:
+            Residuals = pd.read_csv(self.path_data + 'MI06A_Residuals_generate/RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
+                                    '.csv')
+        else:
+            Residuals = pd.read_csv(self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
+                                    '.csv')
         # Format the dataframe
         Residuals_only = Residuals[[col_name for col_name in Residuals.columns.values if 'res_' in col_name]]
         Residuals_only.rename(columns=lambda x: x.replace('res_' + self.target + '_', ''), inplace=True)
@@ -3295,11 +3299,20 @@ class ResidualsCorrelations(Basics):
         self.Correlation_sample_sizes = self.Residuals.transpose() @ self.Residuals
     
     def save_correlations(self):
-        self.Correlation_sample_sizes.to_csv(self.path_data + 'ResidualsCorrelations_samplesizes_' + self.pred_type +
-                                             '_' + self.target + '_' + self.fold + '.csv', index=True)
+        if ABDOMEN:
+            self.Correlation_sample_sizes.to_csv(self.path_data + 'MI06B_Residuals_correlations/ResidualsCorrelations_samplesizes_' + self.pred_type +
+                                                '_' + self.target + '_' + self.fold + '.csv', index=True)
+        else:
+            self.Correlation_sample_sizes.to_csv(self.path_data + 'ResidualsCorrelations_samplesizes_' + self.pred_type +
+                                                '_' + self.target + '_' + self.fold + '.csv', index=True)
+
         for mode in self.modes:
-            self.CORRELATIONS[mode].to_csv(self.path_data + 'ResidualsCorrelations' + mode + '_' + self.pred_type +
-                                           '_' + self.target + '_' + self.fold + '.csv', index=True)
+            if ABDOMEN:
+                self.CORRELATIONS[mode].to_csv(self.path_data + 'MI06B_Residuals_correlations/ResidualsCorrelations' + mode + '_' + self.pred_type +
+                                            '_' + self.target + '_' + self.fold + '.csv', index=True)
+            else:
+                self.CORRELATIONS[mode].to_csv(self.path_data + 'ResidualsCorrelations' + mode + '_' + self.pred_type +
+                                            '_' + self.target + '_' + self.fold + '.csv', index=True)
 
 
 class PerformancesSurvival(Metrics):
