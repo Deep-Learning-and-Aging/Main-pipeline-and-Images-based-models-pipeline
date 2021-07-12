@@ -2370,8 +2370,13 @@ class PerformancesMerge(Metrics):
         self.names_metrics = self.dict_metrics_names[self.dict_prediction_types[target]]
         self.main_metric_name = self.dict_main_metrics_names[target]
         # list the models that need to be merged
-        self.list_models = glob.glob(self.path_data + 'Performances_' + pred_type + '_' + target + '_*_' + fold +
-                                     '_str.csv')
+        if ABDOMEN:
+            self.list_models = glob.glob(self.path_data + 'MI04A05B_Performances_generate/Performances_' + pred_type + '_' + target + '_*_' + fold +
+                                        '_str.csv')
+        else:
+            self.list_models = glob.glob(self.path_data + 'Performances_' + pred_type + '_' + target + '_*_' + fold +
+                                        '_str.csv')
+
         # get rid of ensemble models
         if self.ensemble_models:
             self.list_models = [model for model in self.list_models if '*' in model]
@@ -2503,8 +2508,13 @@ class PerformancesMerge(Metrics):
     
     def save_performances(self):
         name_extension = 'withEnsembles' if self.ensemble_models else 'withoutEnsembles'
-        path = self.path_data + 'PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
-               self.target + '_' + self.fold + '.csv'
+        if ABDOMEN:
+            path = self.path_data + 'MI04B05C_Performances_merge/PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
+                self.target + '_' + self.fold + '.csv'
+        else:
+            path = self.path_data + 'PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
+                self.target + '_' + self.fold + '.csv'
+      
         self.Performances_alphabetical.to_csv(path, index=False)
         self.Performances_ranked.to_csv(path.replace('_alphabetical_', '_ranked_'), index=False)
 

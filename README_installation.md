@@ -83,3 +83,12 @@ Inputs:
     data/MI03B_Predictions_concatenate/Predictions_instances_Age_Abdomen_*
 Outputs:
     data/MI04A_Performances_generate/Predictions_instances_Age_Abdomen_*
+
+
+MI04B05C_Performances_merge
+Inputs:
+    Arguments: Age val instances False
+               The second argument has to be changed to *test* too.
+    data/MI04A5B_Performances_generate/Predictions_instances_Age_Abdomen_*
+Outputs:
+    data/MI04B05C_Performances_merge/
