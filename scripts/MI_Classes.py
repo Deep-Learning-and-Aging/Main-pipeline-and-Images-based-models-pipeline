@@ -3187,8 +3187,12 @@ class ResidualsGenerate(Basics):
         self.fold = fold
         self.pred_type = pred_type
         self.debug_mode = debug_mode
-        self.Residuals = pd.read_csv(self.path_data + 'PREDICTIONS_withEnsembles_' + pred_type + '_' + target + '_' +
-                                     fold + '.csv')
+        if ABDOMEN:
+            self.Residuals = pd.read_csv(self.path_data + 'MI05A_Ensembles_predictions/PREDICTIONS_withEnsembles_' + pred_type + '_' + target + '_' +
+                                        fold + '.csv')
+        else:
+            self.Residuals = pd.read_csv(self.path_data + 'PREDICTIONS_withEnsembles_' + pred_type + '_' + target + '_' +
+                                        fold + '.csv')
         self.list_models = [col_name.replace('pred_', '') for col_name in self.Residuals.columns.values
                             if 'pred_' in col_name]
     
@@ -3219,7 +3223,7 @@ class ResidualsGenerate(Basics):
         self.Residuals.rename(columns=lambda x: x.replace('pred_', 'res_'), inplace=True)
     
     def save_residuals(self):
-        self.Residuals.to_csv(self.path_data + 'RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
+        self.Residuals.to_csv(self.path_data + 'MI06A_Residuals_generate/RESIDUALS_' + self.pred_type + '_' + self.target + '_' + self.fold +
                               '.csv', index=False)
 
 

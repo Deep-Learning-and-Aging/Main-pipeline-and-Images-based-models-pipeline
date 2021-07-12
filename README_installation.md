@@ -132,3 +132,9 @@ Outputs:
     data/MI05C_Performances_merge/PERFORMANCES_withoutEnsembles_*_instances_Age_*
 
 
+MI06A_Residuals_generate
+Inputs:
+    Arguments: Age test instances
+    data/MI05A_Ensembles_predictions/PREDICTIONS_withEnsembles_instances_Age_*
+Outputs:
+    data/MI06A_Residuals_generate/RESIDUALS_instances_Age_test.csv
