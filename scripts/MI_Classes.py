@@ -2203,8 +2203,12 @@ class PerformancesGenerate(Metrics):
     
     def _preprocess_data_features_predictions_for_performances(self):
         # load dataset
-        data_features = pd.read_csv(self.path_data + 'data-features_' + self.pred_type + '.csv',
-                                    usecols=['id', 'Sex', 'Age'])
+        if ABDOMEN:
+            data_features = pd.read_csv(self.path_data + 'MI01A_Preprocessing_main/data-features_' + self.pred_type + '.csv',
+                                        usecols=['id', 'Sex', 'Age'])
+        else:
+            data_features = pd.read_csv(self.path_data + 'data-features_' + self.pred_type + '.csv',
+                                        usecols=['id', 'Sex', 'Age'])
         # format data_features to extract y
         data_features.rename(columns={self.target: 'y'}, inplace=True)
         data_features = data_features[['id', 'y']]
@@ -2215,8 +2219,13 @@ class PerformancesGenerate(Metrics):
         self.data_features = data_features
     
     def _preprocess_predictions_for_performances(self):
-        Predictions = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' + self.version + '_' +
-                                  self.fold + '.csv')
+        if ABDOMEN:
+            Predictions = pd.read_csv(self.path_data + 'MI03B_Predictions_concatenate/Predictions_' + self.pred_type + '_' + self.version + '_' +
+                                    self.fold + '.csv')
+        else:
+            Predictions = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' + self.version + '_' +
+                        self.fold + '.csv')
+
         Predictions['id'] = Predictions['id'].astype(str)
         self.Predictions = Predictions.merge(self.data_features, how='inner', on=['id'])
     
@@ -2302,7 +2311,18 @@ class PerformancesGenerate(Metrics):
                         predictions_metric = predictions_fold_class
                     else:
                         predictions_metric = predictions_fold
+                    if ABDOMEN:
+                        if name_metric == "MAE":
+                            name_metric = "mean_absolute_error"
                     metric_function = self.dict_metrics_sklearn[name_metric]
+
+                    if ABDOMEN:
+                        if name_metric == "mean_absolute_error":
+                            name_metric = "MAE"
+                        if name_metric == "Pearson-Correlation":
+                            former_metric_function = metric_function
+                            metric_function = lambda y, pred: former_metric_function(y, pred)[0]
+
                     self.PERFORMANCES[''].loc[outer_fold, name_metric] = metric_function(predictions_metric['y'],
                                                                                          predictions_metric['pred'])
                     self.PERFORMANCES['_sd'].loc[outer_fold, name_metric] = \
@@ -2324,8 +2344,12 @@ class PerformancesGenerate(Metrics):
     
     def save_performances(self):
         for mode in self.modes:
-            path_save = self.path_data + 'Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
-                        mode + '.csv'
+            if ABDOMEN:
+                path_save = self.path_data + 'MI04A05B_Performances_generate/Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
+                            mode + '.csv'
+            else:
+                path_save = self.path_data + 'Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
+                            mode + '.csv'
             self.PERFORMANCES[mode].to_csv(path_save, index=False)
 
 
