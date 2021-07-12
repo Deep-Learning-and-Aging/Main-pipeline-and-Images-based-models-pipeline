@@ -100,4 +100,17 @@ Inputs:
     data/MI04B05C_Performances_merge/PERFORMANCES_withoutEnsembles_ranked_instances_Age_*
     data/MI03C_Predictions_merge/PREDICTIONS_withoutEnsembles_instances_Age_*
 Outputs:
-    data/MI04C_Performances_tuning
+    data/MI04C_Performances_tuning/PERFORMANCES_tuned_*
+
+
+MI05A_Ensembles_predictions
+Inputs:
+    Arguments: Age instances
+    data/MI04C_Performances_tuning/PERFORMANCES_tuned_*
+Outputs:
+    data/MI05A_Ensembles_predictions/Predictions_instances_Age_*
+    data/MI05A_Ensembles_predictions/PREDICTIONS_withEnsembles_instances_Age_*
+
+
+
+

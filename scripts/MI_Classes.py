@@ -1,6 +1,7 @@
 # LIBRARIES
 # set up backend for ssh -x11 figures
 import matplotlib
+from sklearn import ensemble
 
 matplotlib.use('Agg')
 
@@ -2718,7 +2719,7 @@ class InnerCV:
         list_test_folds_id = self.create_folds(X, y)
         X = X.drop(columns=['eid'])
         y = y.drop(columns=['eid'])
-        
+
         # Create custom Splits
         list_test_folds_id_index = [np.array([X.index.get_loc(elem) for elem in list_test_folds_id[fold_num]])
                                     for fold_num in range(len(list_test_folds_id))]
@@ -2733,8 +2734,10 @@ class InnerCV:
         for model_name in self.models:
             def objective(hyperparameters):
                 estimator_ = self.get_model(model_name, hyperparameters)
+                print(X.values)
                 pipeline = Pipeline([('scaler', StandardScaler()), ('estimator', estimator_)])
                 scores = cross_validate(pipeline, X.values, y, scoring=scoring, cv=inner_cv, n_jobs=self.inner_splits)
+                print(scores)
                 return {'status': STATUS_OK, 'loss': -scores['test_score'].mean(),
                         'attachments': {'split_test_scores_and_params': (scores['test_score'], hyperparameters)}}
             space = self.get_hyper_distribution(model_name)
@@ -2790,7 +2793,11 @@ class EnsemblesPredictions(Metrics):
         self.version = self._parameters_to_version(self.parameters)
         self.main_metric_name = self.dict_main_metrics_names[target]
         self.init_perf = -np.Inf if self.main_metrics_modes[self.main_metric_name] == 'max' else np.Inf
-        path_perf = self.path_data + 'PERFORMANCES_tuned_ranked_' + pred_type + '_' + target + '_val.csv'
+        if ABDOMEN:
+            path_perf = self.path_data + 'MI04C_Performances_tuning/PERFORMANCES_tuned_ranked_' + pred_type + '_' + target + '_val.csv'
+        else:
+            path_perf = self.path_data + 'PERFORMANCES_tuned_ranked_' + pred_type + '_' + target + '_val.csv'
+
         self.Performances = pd.read_csv(path_perf).set_index('version', drop=False)
         self.Performances['organ'] = self.Performances['organ'].astype(str)
         self.list_ensemble_levels = ['transformation', 'view', 'organ']
@@ -2829,9 +2836,14 @@ class EnsemblesPredictions(Metrics):
     
     def load_data(self):
         for fold in self.folds:
-            self.PREDICTIONS[fold] = pd.read_csv(
-                self.path_data + 'PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + '.csv')
-    
+            if ABDOMEN:
+                self.PREDICTIONS[fold] = pd.read_csv(
+                    self.path_data + 'MI04C_Performances_tuning/PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + '.csv')
+                self.PREDICTIONS[fold].columns = list(map(lambda col: col.replace("pred_concatenate/Predictions_instances_", "pred_"), self.PREDICTIONS[fold].columns))
+            else:
+                self.PREDICTIONS[fold] = pd.read_csv(
+                    self.path_data + 'PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + '.csv')
+
     def _build_single_ensemble(self, PREDICTIONS, version):
         # Drop columns that are exclusively NaNs
         all_nan = PREDICTIONS['val'].isna().all() | PREDICTIONS['test'].isna().all()
@@ -2842,6 +2854,7 @@ class EnsemblesPredictions(Metrics):
         # Select the columns for the model
         ensemble_preds_cols = [col for col in Predictions.columns.values if
                                     bool(re.compile('pred_' + version).match(col))]
+
         
         # If only one model in the ensemble, just copy the column. Otherwise build the ensemble model
         if len(ensemble_preds_cols) == 1:
@@ -2921,7 +2934,7 @@ class EnsemblesPredictions(Metrics):
                         pv = 'pred_' + version.split('_')[0] + '_*instances' + instances_names + '_' + \
                              '_'.join(version.split('_')[2:])
                         self.PREDICTIONS[fold][pv] = np.nan
-            
+
             for instances_names in self.instancesS[self.pred_type]:
                 print('Building final ensemble model for samples in the instances: ' + instances_names)
                 # Take subset of rows and columns
@@ -2932,11 +2945,16 @@ class EnsemblesPredictions(Metrics):
                 instances_versions = [version for version in versions
                                       if any(dataset in version for dataset in instances_datasets)]
                 cols_to_keep = self.id_vars + self.demographic_vars + \
-                               ['pred_' + version for version in instances_versions]
+                            ['pred_' + version for version in instances_versions]
+
                 PREDICTIONS = {}
                 for fold in self.folds:
                     PREDICTIONS[fold] = self.PREDICTIONS[fold][self.PREDICTIONS[fold].instance.isin(instances)]
                     PREDICTIONS[fold] = PREDICTIONS[fold][cols_to_keep]
+                
+                if ABDOMEN and len(instances_versions) == 0:
+                    continue
+
                 self._build_single_ensemble(PREDICTIONS, version)
 
                 # Print a quick performance estimation for each instance(s)
@@ -2997,8 +3015,12 @@ class EnsemblesPredictions(Metrics):
             df_single_ensemble = self.PREDICTIONS[fold][['id', 'outer_fold', pred_version]]
             df_single_ensemble.rename(columns={pred_version: 'pred'}, inplace=True)
             df_single_ensemble.dropna(inplace=True, subset=['pred'])
-            df_single_ensemble.to_csv(self.path_data + 'Predictions_' + self.pred_type + '_' + version + '_' + fold +
-                                      '.csv', index=False)
+            if ABDOMEN:
+                df_single_ensemble.to_csv(self.path_data + 'MI05A_Ensembles_predictions/Predictions_' + self.pred_type + '_' + version + '_' + fold +
+                                        '.csv', index=False)
+            else:
+                df_single_ensemble.to_csv(self.path_data + 'Predictions_' + self.pred_type + '_' + version + '_' + fold +
+                                        '.csv', index=False)
             # Add extra ensembles at organ level
             if ensemble_level == 'organ':
                 for instances_names in ['01', '1.5x', '23']:
@@ -3009,8 +3031,13 @@ class EnsemblesPredictions(Metrics):
                     df_single_ensemble = self.PREDICTIONS[fold][['id', 'outer_fold', pv]]
                     df_single_ensemble.rename(columns={pv: 'pred'}, inplace=True)
                     df_single_ensemble.dropna(inplace=True, subset=['pred'])
-                    df_single_ensemble.to_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
-                                              version_instances + '_' + fold + '.csv', index=False)
+                    if ABDOMEN:
+                        df_single_ensemble.to_csv(self.path_data + 'MI05A_Ensembles_predictions/Predictions_' + self.pred_type + '_' +
+                                                version_instances + '_' + fold + '.csv', index=False)
+                    else:
+                        df_single_ensemble.to_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
+                                                version_instances + '_' + fold + '.csv', index=False)
+
     
     def _recursive_ensemble_builder(self, Performances_grandparent, parameters_parent, version_parent,
                                     list_ensemble_levels_parent):
@@ -3036,12 +3063,21 @@ class EnsemblesPredictions(Metrics):
         
         # compute the ensemble model for the parent
         # Check if ensemble model has already been computed. If it has, load the predictions. If it has not, compute it.
+        if ABDOMEN:
+            path_already_exist = self.path_data + 'MI05A_Ensembles_predictions/Predictions_' + self.pred_type + '_' + version_parent + '_test.csv'
+        else:
+            path_already_exist = self.path_data + 'Predictions_' + self.pred_type + '_' + version_parent + '_test.csv'
+
         if not self.regenerate_models and \
-                os.path.exists(self.path_data + 'Predictions_' + self.pred_type + '_' + version_parent + '_test.csv'):
+                os.path.exists(path_already_exist):
             print('The model ' + version_parent + ' has already been computed. Loading it...')
             for fold in self.folds:
-                df_single_ensemble = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
-                                                 version_parent + '_' + fold + '.csv')
+                if ABDOMEN:
+                    df_single_ensemble = pd.read_csv(self.path_data + 'MI05A_Ensembles_predictions/Predictions_' + self.pred_type + '_' +
+                                                    version_parent + '_' + fold + '.csv')
+                else:
+                    df_single_ensemble = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
+                                                    version_parent + '_' + fold + '.csv')
                 df_single_ensemble.rename(columns={'pred': 'pred_' + version_parent}, inplace=True)
                 # Add the ensemble predictions to the dataframe
                 if fold == 'train':
@@ -3061,8 +3097,12 @@ class EnsemblesPredictions(Metrics):
                              '_'.join(version_parent.split('_')[2:])
                         version_instances = version_parent.split('_')[0] + '_*instances' + instances_names + '_' + \
                                             '_'.join(version_parent.split('_')[2:])
-                        df_single_ensemble = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
-                                                         version_instances + '_' + fold + '.csv')
+                        if ABDOMEN:
+                            df_single_ensemble = pd.read_csv(self.path_data + 'MI05A_Ensembles_predictions/Predictions_' + self.pred_type + '_' +
+                                                            version_instances + '_' + fold + '.csv')
+                        else:
+                            df_single_ensemble = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' +
+                                                            version_instances + '_' + fold + '.csv')
                         df_single_ensemble.rename(columns={'pred': pv}, inplace=True)
                         if fold == 'train':
                             self.PREDICTIONS[fold] = self.PREDICTIONS[fold].merge(df_single_ensemble, how='outer',
@@ -3094,6 +3134,9 @@ class EnsemblesPredictions(Metrics):
             r2s = []
             for version in versions:
                 df = self.PREDICTIONS[fold][[self.target, 'pred_' + version]].dropna()
+                if ABDOMEN and len(df[self.target]) == 0:
+                    r2s.append(np.nan)
+                    continue
                 r2s.append(r2_score(df[self.target], df['pred_' + version]))
             R2S = pd.DataFrame({'version': versions, 'R2': r2s})
             R2S.sort_values(by='R2', ascending=False, inplace=True)
@@ -3102,8 +3145,12 @@ class EnsemblesPredictions(Metrics):
     
     def save_predictions(self):
         for fold in self.folds:
-            self.PREDICTIONS[fold].to_csv(self.path_data + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' +
-                                          self.target + '_' + fold + '.csv', index=False)
+            if ABDOMEN:
+                self.PREDICTIONS[fold].to_csv(self.path_data + 'MI05A_Ensembles_predictions/PREDICTIONS_withEnsembles_' + self.pred_type + '_' +
+                                            self.target + '_' + fold + '.csv', index=False)
+            else:
+                self.PREDICTIONS[fold].to_csv(self.path_data + 'PREDICTIONS_withEnsembles_' + self.pred_type + '_' +
+                                            self.target + '_' + fold + '.csv', index=False)
 
 
 class ResidualsGenerate(Basics):
