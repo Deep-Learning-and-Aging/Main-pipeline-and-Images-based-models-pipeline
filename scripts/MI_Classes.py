@@ -2221,8 +2221,13 @@ class PerformancesGenerate(Metrics):
     
     def _preprocess_predictions_for_performances(self):
         if ABDOMEN:
-            Predictions = pd.read_csv(self.path_data + 'MI03B_Predictions_concatenate/Predictions_' + self.pred_type + '_' + self.version + '_' +
-                                    self.fold + '.csv')
+            print(self.version)
+            if "*" in self.version:
+                Predictions = pd.read_csv(self.path_data + 'MI05A_Ensembles_predictions/Predictions_' + self.pred_type + '_' + self.version + '_' +
+                                        self.fold + '.csv')
+            else:
+                Predictions = pd.read_csv(self.path_data + 'MI03B_Predictions_concatenate/Predictions_' + self.pred_type + '_' + self.version + '_' +
+                                        self.fold + '.csv')
         else:
             Predictions = pd.read_csv(self.path_data + 'Predictions_' + self.pred_type + '_' + self.version + '_' +
                         self.fold + '.csv')
@@ -2346,8 +2351,13 @@ class PerformancesGenerate(Metrics):
     def save_performances(self):
         for mode in self.modes:
             if ABDOMEN:
-                path_save = self.path_data + 'MI04A05B_Performances_generate/Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
-                            mode + '.csv'
+                if "*" in self.version:
+                    path_save = self.path_data + 'MI05B_Performances_generate/Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
+                                mode + '.csv'
+                else:
+                    path_save = self.path_data + 'MI04A_Performances_generate/Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
+                                mode + '.csv'
+
             else:
                 path_save = self.path_data + 'Performances_' + self.pred_type + '_' + self.version + '_' + self.fold + \
                             mode + '.csv'
@@ -2372,7 +2382,7 @@ class PerformancesMerge(Metrics):
         self.main_metric_name = self.dict_main_metrics_names[target]
         # list the models that need to be merged
         if ABDOMEN:
-            self.list_models = glob.glob(self.path_data + 'MI04A05B_Performances_generate/Performances_' + pred_type + '_' + target + '_*_' + fold +
+            self.list_models = glob.glob(self.path_data + 'MI04A_Performances_generate/Performances_' + pred_type + '_' + target + '_*_' + fold +
                                         '_str.csv')
         else:
             self.list_models = glob.glob(self.path_data + 'Performances_' + pred_type + '_' + target + '_*_' + fold +
@@ -2510,7 +2520,7 @@ class PerformancesMerge(Metrics):
     def save_performances(self):
         name_extension = 'withEnsembles' if self.ensemble_models else 'withoutEnsembles'
         if ABDOMEN:
-            path = self.path_data + 'MI04B05C_Performances_merge/PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
+            path = self.path_data + 'MI04B_Performances_merge/PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
                 self.target + '_' + self.fold + '.csv'
         else:
             path = self.path_data + 'PERFORMANCES_' + name_extension + '_alphabetical_' + self.pred_type + '_' + \
@@ -2540,7 +2550,7 @@ class PerformancesTuning(Metrics):
     def load_data(self):
         for fold in self.folds:
             if ABDOMEN:
-                path = self.path_data + 'MI04B05C_Performances_merge/PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+                path = self.path_data + 'MI04B_Performances_merge/PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
                     '_' + fold + '.csv'
             else:
                 path = self.path_data + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
@@ -2551,7 +2561,7 @@ class PerformancesTuning(Metrics):
             
             path_predictions = path.replace('PERFORMANCES', 'PREDICTIONS').replace('_ranked', '')
             if ABDOMEN:
-                path_predictions = path_predictions.replace("MI04B05C_Performances_merge", "MI03C_Predictions_merge")
+                path_predictions = path_predictions.replace("MI04B_Performances_merge", "MI03C_Predictions_merge")
             self.PREDICTIONS[fold] = pd.read_csv(path_predictions)
     
     def preprocess_data(self):

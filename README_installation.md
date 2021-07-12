@@ -85,19 +85,19 @@ Outputs:
     data/MI04A_Performances_generate/Predictions_instances_Age_Abdomen_*
 
 
-MI04B05C_Performances_merge
+MI04B_Performances_merge
 Inputs:
     Arguments: Age val instances False
                The second argument has to be changed to *test* too.
-    data/MI04A5B_Performances_generate/Predictions_instances_Age_Abdomen_*
+    data/MI04A_Performances_generate/Predictions_instances_Age_Abdomen_*
 Outputs:
-    data/MI04B05C_Performances_merge/PERFORMANCES_withoutEnsembles_*_instances_Age_*
+    data/MI04B_Performances_merge/PERFORMANCES_withoutEnsembles_*_instances_Age_*
 
 
 MI04C_Performances_tuning
 Inputs:
     Arguments: Age instances
-    data/MI04B05C_Performances_merge/PERFORMANCES_withoutEnsembles_ranked_instances_Age_*
+    data/MI04B_Performances_merge/PERFORMANCES_withoutEnsembles_ranked_instances_Age_*
     data/MI03C_Predictions_merge/PREDICTIONS_withoutEnsembles_instances_Age_*
 Outputs:
     data/MI04C_Performances_tuning/PERFORMANCES_tuned_*
@@ -112,5 +112,20 @@ Outputs:
     data/MI05A_Ensembles_predictions/PREDICTIONS_withEnsembles_instances_Age_*
 
 
+MI05B_Performances_generate
+Inputs:
+    Arguments: Age "\*" "\*" "\*" "\*" "\*" "\*" "\*" "\*" "\*" "\*" "\*" val instances
+               The second argument has to be changed to *"\*instances23"* too.
+               The second last argument has to be changed to *test* too.
+    data/MI05A_Ensembles_predictions/Predictions_instances_Age_*
+Outputs:
+    data/MI05B_Performances_generate/Predictions_instances_Age_*
 
 
+<!-- MI05C_Performances_merge
+Inputs:
+    Arguments: Age val instances True
+               The second argument has to be changed to *test* too.
+    data/MI05B_Performances_generate/Predictions_instances_Age_*
+Outputs:
+    data/MI05C_Performances_merge/PERFORMANCES_withoutEnsembles_*_instances_Age_* -->
