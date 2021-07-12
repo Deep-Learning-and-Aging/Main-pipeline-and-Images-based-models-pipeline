@@ -91,4 +91,13 @@ Inputs:
                The second argument has to be changed to *test* too.
     data/MI04A5B_Performances_generate/Predictions_instances_Age_Abdomen_*
 Outputs:
-    data/MI04B05C_Performances_merge/
+    data/MI04B05C_Performances_merge/PERFORMANCES_withoutEnsembles_*_instances_Age_*
+
+
+MI04C_Performances_tuning
+Inputs:
+    Arguments: Age instances
+    data/MI04B05C_Performances_merge/PERFORMANCES_withoutEnsembles_ranked_instances_Age_*
+    data/MI03C_Predictions_merge/PREDICTIONS_withoutEnsembles_instances_Age_*
+Outputs:
+    data/MI04C_Performances_tuning

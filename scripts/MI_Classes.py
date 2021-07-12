@@ -2538,12 +2538,20 @@ class PerformancesTuning(Metrics):
     
     def load_data(self):
         for fold in self.folds:
-            path = self.path_data + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
-                   '_' + fold + '.csv'
+            if ABDOMEN:
+                path = self.path_data + 'MI04B05C_Performances_merge/PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+                    '_' + fold + '.csv'
+            else:
+                path = self.path_data + 'PERFORMANCES_withoutEnsembles_ranked_' + self.pred_type + '_' + self.target + \
+                    '_' + fold + '.csv'
             self.PERFORMANCES[fold] = pd.read_csv(path).set_index('version', drop=False)
             self.PERFORMANCES[fold]['organ'] = self.PERFORMANCES[fold]['organ'].astype(str)
             self.PERFORMANCES[fold].index.name = 'columns_names'
-            self.PREDICTIONS[fold] = pd.read_csv(path.replace('PERFORMANCES', 'PREDICTIONS').replace('_ranked', ''))
+            
+            path_predictions = path.replace('PERFORMANCES', 'PREDICTIONS').replace('_ranked', '')
+            if ABDOMEN:
+                path_predictions = path_predictions.replace("MI04B05C_Performances_merge", "MI03C_Predictions_merge")
+            self.PREDICTIONS[fold] = pd.read_csv(path_predictions)
     
     def preprocess_data(self):
         # Get list of distinct models without taking into account hyperparameters tuning
@@ -2584,10 +2592,17 @@ class PerformancesTuning(Metrics):
     def save_data(self):
         # Save the files
         for fold in self.folds:
-            path_pred = self.path_data + 'PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + \
-                        '.csv'
-            path_perf = self.path_data + 'PERFORMANCES_tuned_ranked_' + self.pred_type + '_' + self.target + '_' + \
-                        fold + '.csv'
+            if ABDOMEN:
+                path_pred = self.path_data + 'MI04C_Performances_tuning/PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + \
+                            '.csv'
+                path_perf = self.path_data + 'MI04C_Performances_tuning/PERFORMANCES_tuned_ranked_' + self.pred_type + '_' + self.target + '_' + \
+                            fold + '.csv'
+            else:
+                path_pred = self.path_data + 'PREDICTIONS_tuned_' + self.pred_type + '_' + self.target + '_' + fold + \
+                            '.csv'
+                path_perf = self.path_data + 'PERFORMANCES_tuned_ranked_' + self.pred_type + '_' + self.target + '_' + \
+                            fold + '.csv'
+
             self.PREDICTIONS[fold].to_csv(path_pred, index=False)
             self.PERFORMANCES[fold].to_csv(path_perf, index=False)
             Performances_alphabetical = self.PERFORMANCES[fold].sort_values(by='version')
