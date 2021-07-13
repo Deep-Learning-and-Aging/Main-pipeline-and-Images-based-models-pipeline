@@ -17,7 +17,11 @@ An exact list of all the important files to have at the begining of the tutorial
 
 ## Working environment
 The project has been developped with Python 3.6.14, using a Debian Buster distribution. Please choose from the three different ways to setup your environment:
-- using the docker image ?? [TO DO] | __tested__.
+- using the docker image made for this tutorial [TO DO] | __tested__:
+```bash
+docker pull theovincent/abdomen_tutorial
+docker run -it theovincent/abdomen_tutorial bash
+```
 - using VS Code with Remote-Containers. The files to setup the container are stored [here](./.devcontainer) | __tested__.
 - downloading python 3.6.14 from the website with this [link](https://www.python.org/downloads/release/python-3614/) | __not tested__.
 
@@ -25,7 +29,10 @@ Only a CPU is required for this tutorial with 2 Gb of RAM. All the results needi
 
 
 ## Install packages
-If you use the docker image created for this tutorial, you don't need to do anything.
+If you use the docker image created for this tutorial, you only need to activate the environment like that:
+```bash
+source env_tutorial/bin/activate
+```
 
 Otherwise, please type those four lines of code in your terminal being at the top directory: (Expected time 6 min)
 ```bash
