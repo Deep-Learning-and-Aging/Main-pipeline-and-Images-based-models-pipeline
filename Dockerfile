@@ -27,7 +27,7 @@ RUN python3 -m venv env_container && . env_container/bin/activate && pip install
 
 USER $USERNAME
 
-CMD source env_container/bin/activate
+RUN sudo chown developer data && sudo chown developer data/MI0* && sudo chown developer data/MI03D_Predictions_eids/Predictions_eids_concatenate/
 
 # docker build -t abdomen_tutorial .
 # docker run -it abdomen_tutorial bash
