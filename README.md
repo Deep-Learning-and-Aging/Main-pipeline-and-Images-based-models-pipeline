@@ -61,10 +61,10 @@ Command line:
 > When in doubt, you can refer to the [bash](./abdomen_tutorial.sh) script that gathers all the command lines to execute.
 
 Inputs:
-> List of the inputs to have to make the step working. Normally, they should come along when you clone the repository.
+> List of the input files to have to make the step working. Normally, they should come along when you clone the repository.
 
 Outputs:
-> List of the outputs that you should get from the command line.
+> List of the output file that you should get from executing the command line.
 
 <br/>
 <br/>
