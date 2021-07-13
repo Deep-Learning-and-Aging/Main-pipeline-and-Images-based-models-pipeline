@@ -134,7 +134,8 @@ Outputs:
 <br/>
 
 #### YOU CAN TRY BY YOUR SELF, AS IT MIGHT TAKE SOME TIME, WE PROVIDE THE OUTPUTS OF PANCREAS CONTRAST
-In order to keep the size of the repository small, we only pushed the weights for the outer fold 0. If you want to have the weights for all the outer folds, you need to use the docker image pushed to DockerHub. 
+If you are using the docker image made for this repository, you will have all weights included in the image.
+If you have cloned the repository, in order to keep the size of the repository small, we only pushed the weights for the outer fold 0.
 - MI03A_Predictions_generate: Generates the predictions from all models (Expected time 6 min 30 sec for each outer fold).
 
 Command line:
