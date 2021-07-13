@@ -129,6 +129,5 @@ dmypy.json
 .pyre/
 
 data/
-old_data/
 full_data/
 

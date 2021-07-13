@@ -21,11 +21,13 @@ RUN groupadd --gid $USER_GID $USERNAME \
 RUN mkdir /home/developer/Age_Sex_and_Medical_Images/ 
 WORKDIR /home/developer/Age_Sex_and_Medical_Images/
 
-USER $USERNAME
-
 COPY . .
 
-# RUN pip install --upgrade "pip==21.1.3" && pip install -r requirements.txt
+RUN python3 -m venv env_container && . env_container/bin/activate && pip install --upgrade "pip==21.1.3" && pip install -r requirements.txt
+
+USER $USERNAME
+
+CMD source env_container/bin/activate
 
 # docker build -t abdomen_tutorial .
 # docker run -it abdomen_tutorial bash

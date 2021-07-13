@@ -10,3 +10,4 @@ Dockerfile
 
 # Local specific
 full_data/
+create_folders.sh
