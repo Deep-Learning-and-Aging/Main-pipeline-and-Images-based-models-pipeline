@@ -1,0 +1,7 @@
+data/FoldsAugmented/* filter=lfs diff=lfs merge=lfs -text
+data/MI02_Training/trained_model-weights_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_0.h5 filter=lfs diff=lfs merge=lfs -text
+data/MI03A_Predictions_generate/* filter=lfs diff=lfs merge=lfs -text
+data/fake_* filter=lfs diff=lfs merge=lfs -text
+data/missing_samples.csv filter=lfs diff=lfs merge=lfs -text
+data/Abdomen/image_model.jpg filter=lfs diff=lfs merge=lfs -text
+data/Abdomen/list_image_names.npy filter=lfs diff=lfs merge=lfs -text

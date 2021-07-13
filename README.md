@@ -34,12 +34,14 @@ If you use the docker image created for this tutorial, you only need to activate
 source env_container/bin/activate
 ```
 
-Otherwise, please type those four lines of code in your terminal being at the top directory: (Expected time 6 min)
+Otherwise, please type those five lines of code in your terminal being at the top directory: (Expected time 6 min)
 ```bash
 python3 -m venv env_tutorial
 source env_tutorial/bin/activate
 pip install --upgrade "pip==21.1.3"
 pip install -r requirements.txt
+source ./create_folders.sh
+python scripts/create_fake_images.py
 ```
 
 ##  Step by step
@@ -114,7 +116,7 @@ Outputs:
 <br/>
 
 #### TO SKIP BECAUSE A GPU IS NEEDED TO TRAIN THE ALGORITHMS
-MI02_Training: This step should be repeated until all models have converged (Expected time depends on your computer).
+- MI02_Training: This step should be repeated until all models have converged (Expected time depends on your computer).
 
 Command line:
 > python scripts/MI02_Training.py Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0 9\
@@ -126,20 +128,22 @@ Inputs:
 
 Outputs:
 > data/MI02_Training/model-weights_Age_Abdomen_*\
-> Weights of the neural network from the training. <- They are already given with the suffix *trained_* for all the outer folds of Pancreas Contrast so that you don't need to train the algorithm by your self
+> Weights of the neural network from the training. <- They are already given with the suffix *trained_* for all the outer folds of Pancreas Contrast so that you don't need to train the algorithm by your self.
 
 <br/>
 <br/>
 
 #### YOU CAN TRY BY YOUR SELF, AS IT MIGHT TAKE SOME TIME, WE PROVIDE THE OUTPUTS OF PANCREAS CONTRAST
+In order to keep the size of the repository small, we only pushed the weights for the outer fold 0. If you want to have the weights for all the outer folds, you need to use the docker image pushed to DockerHub. 
 - MI03A_Predictions_generate: Generates the predictions from all models (Expected time 6 min 30 sec for each outer fold).
 
 Command line:
-> python scripts/MI03A_Predictions_generate.py Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0 9\
+> python scripts/MI03A_Predictions_generate.py Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0 0\
 > The last argument is the outer_fold.
 
 Inputs:
 > data/Abdomen/*
+> data/MI01C_Preprocessing_folds/data-features_Abdomen_Pancreas_Contrast_Age_*
 > data/MI02_Training/trained_model-weights_Age_Abdomen_*
 
 Outputs:

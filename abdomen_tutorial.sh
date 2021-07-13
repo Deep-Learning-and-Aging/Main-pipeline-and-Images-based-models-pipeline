@@ -6,7 +6,7 @@ python scripts/MI01B_Preprocessing_imagesIDs.py
 
 python scripts/MI01C_Preprocessing_folds.py Age Abdomen
 
-# python scripts/MI03A_Predictions_generate.py Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0 9
+# python scripts/MI03A_Predictions_generate.py Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0 0
 
 python scripts/MI03B_Predictions_concatenate.py Age Abdomen Pancreas Contrast InceptionResNetV2 1 1024 Adam 0.0001 0.1 0.5 1.0
 
