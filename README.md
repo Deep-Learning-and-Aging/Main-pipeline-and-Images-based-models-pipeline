@@ -17,7 +17,7 @@ An exact list of all the important files to have at the begining of the tutorial
 
 ## Working environment
 The project has been developped with Python 3.6.14, using a Debian Buster distribution. Please choose from the three different ways to setup your environment:
-- using the [docker image](https://hub.docker.com/r/theovincent/abdomen_tutorial) made for this tutorial | __tested__:
+- using the [docker image](https://hub.docker.com/r/theovincent/abdomen_tutorial) of 4 Gb made for this tutorial | __tested__:
 ```bash
 docker pull theovincent/abdomen_tutorial
 docker run -it theovincent/abdomen_tutorial bash
