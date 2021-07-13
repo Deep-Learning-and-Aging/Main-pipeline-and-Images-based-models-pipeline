@@ -34,7 +34,7 @@ If you use the docker image created for this tutorial, you only need to activate
 source env_container/bin/activate
 ```
 
-Otherwise, please type those five lines of code in your terminal being at the top directory: (Expected time 6 min)
+Otherwise, please type those six lines of code in your terminal being at the top directory: (Expected time 6 min)
 ```bash
 python3 -m venv env_tutorial
 source env_tutorial/bin/activate
