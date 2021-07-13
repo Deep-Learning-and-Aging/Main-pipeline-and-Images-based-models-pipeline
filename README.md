@@ -15,7 +15,7 @@ Throught this tutorial you will use two directories:
 An exact list of all the important files can be seen [here](##Structure:).
 
 ## Working environment
-The project has been developped with Python 3.6.14. Please choose from the three different ways to setup your environment:
+The project has been developped with Python 3.6.14, using a Debian Buster distribution. Please choose from the three different ways to setup your environment:
 - using the docker image ?? [TO DO] | __tested__.
 - using VS Code with Remote-Containers. The files to setup the container are stored [here](./.devcontainer) | __tested__.
 - downloading python from the website with this [link](https://www.python.org/downloads/release/python-3614/) | __not tested__.
@@ -316,8 +316,10 @@ Outputs:
 > data/MI07A_Select_best/RESIDUALS_bestmodels_instances_Age_test.csv\
 > data/MI07A_Select_best/ResidualsCorrelations_bestmodels_*
 
+<br/>
+<br/>
 
-## Structure :
+## Structure at the begin of the tutorial:
 ```
  📦Age_Sex_and_Medical_Images
  ┣ 📂.devcontainer
@@ -348,23 +350,8 @@ Outputs:
  ┃ ┃ ┣ 📜fake_data-features_Heart_20208_Augmented_Age_train_{0... 9}.csv
  ┃ ┃ ┗ 📜fake_data-features_Heart_20208_Augmented_Age_val_{0... 9}.csv
  ┃ ┣ 📂MI01A_Preprocessing_main
- ┃ ┃ ┣ 📜data-features_eids.csv
- ┃ ┃ ┗ 📜data-features_instances.csv
  ┃ ┣ 📂MI01B_Preprocessing_imagesIDs
- ┃ ┃ ┗ 📜instances23_eids_{0... 9}.csv
  ┃ ┣ 📂MI01C_Preprocessing_folds
- ┃ ┃ ┣ 📜data-features_Abdomen_Liver_Contrast_Age_test_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Liver_Contrast_Age_train_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Liver_Contrast_Age_val_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Liver_Raw_Age_test_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Liver_Raw_Age_train_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Liver_Raw_Age_val_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Pancreas_Contrast_Age_test_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Pancreas_Contrast_Age_train_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Pancreas_Contrast_Age_val_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Pancreas_Raw_Age_test_{0... 9}.csv
- ┃ ┃ ┣ 📜data-features_Abdomen_Pancreas_Raw_Age_train_{0... 9}.csv
- ┃ ┃ ┗ 📜data-features_Abdomen_Pancreas_Raw_Age_val_{0... 9}.csv
  ┃ ┣ 📂MI02_Training
  ┃ ┃ ┣ 📜trained_model-weights_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_{0... 9}.h5
  ┃ ┣ 📂MI03A_Predictions_generate
@@ -372,81 +359,18 @@ Outputs:
  ┃ ┃ ┣ 📜short_Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_train_{0... 9}.csv
  ┃ ┃ ┗ 📜short_Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val_{0... 9}.csv
  ┃ ┣ 📂MI03B_Predictions_concatenate
- ┃ ┃ ┣ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test.csv
- ┃ ┃ ┣ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_train.csv
- ┃ ┃ ┗ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val.csv
  ┃ ┣ 📂MI03C_Predictions_merge
- ┃ ┃ ┣ 📜PREDICTIONS_withoutEnsembles_instances_Age_test.csv
- ┃ ┃ ┗ 📜PREDICTIONS_withoutEnsembles_instances_Age_val.csv
  ┃ ┣ 📂MI03D_Predictions_eids
- ┃ ┃ ┣ 📂Predictions_eids_concatenate
- ┃ ┃ ┃ ┣ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test.csv
- ┃ ┃ ┃ ┗ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val.csv
- ┃ ┃ ┣ 📜PREDICTIONS_withoutEnsembles_eids_Age_test.csv
- ┃ ┃ ┗ 📜PREDICTIONS_withoutEnsembles_eids_Age_val.csv
+ ┃ ┃ ┗ 📂Predictions_eids_concatenate
  ┃ ┣ 📂MI04A_Performances_generate
- ┃ ┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test_sd.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test_str.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val_sd.csv
- ┃ ┃ ┗ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val_str.csv
  ┃ ┣ 📂MI04B_Performances_merge
- ┃ ┃ ┣ 📜PERFORMANCES_withoutEnsembles_alphabetical_instances_Age_test.csv
- ┃ ┃ ┣ 📜PERFORMANCES_withoutEnsembles_alphabetical_instances_Age_val.csv
- ┃ ┃ ┣ 📜PERFORMANCES_withoutEnsembles_ranked_instances_Age_test.csv
- ┃ ┃ ┗ 📜PERFORMANCES_withoutEnsembles_ranked_instances_Age_val.csv
  ┃ ┣ 📂MI04C_Performances_tuning
- ┃ ┃ ┣ 📜PERFORMANCES_tuned_alphabetical_instances_Age_test.csv
- ┃ ┃ ┣ 📜PERFORMANCES_tuned_alphabetical_instances_Age_val.csv
- ┃ ┃ ┣ 📜PERFORMANCES_tuned_ranked_instances_Age_test.csv
- ┃ ┃ ┣ 📜PERFORMANCES_tuned_ranked_instances_Age_val.csv
- ┃ ┃ ┣ 📜PREDICTIONS_tuned_instances_Age_test.csv
- ┃ ┃ ┗ 📜PREDICTIONS_tuned_instances_Age_val.csv
  ┃ ┣ 📂MI05A_Ensembles_predictions
- ┃ ┃ ┣ 📜PREDICTIONS_withEnsembles_instances_Age_test.csv
- ┃ ┃ ┣ 📜PREDICTIONS_withEnsembles_instances_Age_val.csv
- ┃ ┃ ┣ 📜Predictions_instances_Age_*_*_*_*_*_*_*_*_*_*_*_test.csv
- ┃ ┃ ┣ 📜Predictions_instances_Age_*_*_*_*_*_*_*_*_*_*_*_val.csv
- ┃ ┃ ┣ 📜Predictions_instances_Age_*instances01_*_*_*_*_*_*_*_*_*_*_test.csv
- ┃ ┃ ┣ 📜Predictions_instances_Age_*instances01_*_*_*_*_*_*_*_*_*_*_val.csv
- ┃ ┃ ┣ 📜Predictions_instances_Age_*instances1.5x_*_*_*_*_*_*_*_*_*_*_test.csv
- ┃ ┃ ┣ 📜Predictions_instances_Age_*instances1.5x_*_*_*_*_*_*_*_*_*_*_val.csv
- ┃ ┃ ┣ 📜Predictions_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_test.csv
- ┃ ┃ ┗ 📜Predictions_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_val.csv
  ┃ ┣ 📂MI05B_Performances_generate
- ┃ ┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_test.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_test_sd.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_test_str.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_val.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_val_sd.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_val_str.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_test.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_test_sd.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_test_str.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_val.csv
- ┃ ┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_val_sd.csv
- ┃ ┃ ┗ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_val_str.csv
  ┃ ┣ 📂MI05C_Performances_merge
- ┃ ┃ ┣ 📜PERFORMANCES_withEnsembles_alphabetical_instances_Age_test.csv
- ┃ ┃ ┣ 📜PERFORMANCES_withEnsembles_alphabetical_instances_Age_val.csv
- ┃ ┃ ┣ 📜PERFORMANCES_withEnsembles_ranked_instances_Age_test.csv
- ┃ ┃ ┗ 📜PERFORMANCES_withEnsembles_ranked_instances_Age_val.csv
  ┃ ┣ 📂MI06A_Residuals_generate
- ┃ ┃ ┗ 📜RESIDUALS_instances_Age_test.csv
  ┃ ┣ 📂MI06B_Residuals_correlations
- ┃ ┃ ┣ 📜ResidualsCorrelations_instances_Age_test.csv
- ┃ ┃ ┣ 📜ResidualsCorrelations_samplesizes_instances_Age_test.csv
- ┃ ┃ ┣ 📜ResidualsCorrelations_sd_instances_Age_test.csv
- ┃ ┃ ┗ 📜ResidualsCorrelations_str_instances_Age_test.csv
  ┃ ┣ 📂MI07A_Select_best
- ┃ ┃ ┣ 📜PERFORMANCES_bestmodels_alphabetical_instances_Age_test.csv
- ┃ ┃ ┣ 📜PERFORMANCES_bestmodels_ranked_instances_Age_test.csv
- ┃ ┃ ┣ 📜PREDICTIONS_bestmodels_instances_Age_test.csv
- ┃ ┃ ┣ 📜RESIDUALS_bestmodels_instances_Age_test.csv
- ┃ ┃ ┣ 📜ResidualsCorrelations_bestmodels_instances_Age_test.csv
- ┃ ┃ ┣ 📜ResidualsCorrelations_bestmodels_sd_instances_Age_test.csv
- ┃ ┃ ┗ 📜ResidualsCorrelations_bestmodels_str_instances_Age_test.csv
  ┃ ┣ 📜fake_PA_visit_date.csv
  ┃ ┣ 📜fake_all_eids.csv
  ┃ ┣ 📜fake_short_ukb41230.csv
@@ -471,4 +395,139 @@ Outputs:
  ┣ 📜.gitignore
  ┣ 📜README.md
  ┗ 📜requirements.txt
+```
+
+<br/>
+<br/>
+
+## Structure of the data folder at the end of the tutorial:
+```
+📂data
+┣ 📂Abdomen
+┃ ┣ 📂Liver
+┃ ┃ ┣ 📂Contrast
+┃ ┃ ┃ ┣ 📜1006879_2.jpg
+┃ ┃ ┃ ┣ 📜1008016_2.jpg
+┃ ┃ ┃ ┗ 📜*.jpg
+┃ ┃ ┗ 📂Raw
+┃ ┃   ┣ 📜1006879_2.jpg
+┃ ┃   ┣ 📜1008016_2.jpg
+┃ ┃   ┗ 📜*.jpg
+┃ ┗ 📂Pancreas
+┃   ┣ 📂Contrast
+┃   ┃ ┣ 📜1013920_2.jpg
+┃   ┃ ┣ 📜1023499_2.jpg
+┃   ┃ ┣ 📜*.jpg
+┃   ┗ 📂Raw
+┃     ┣ 📜1013920_2.jpg
+┃     ┣ 📜1023499_2.jpg
+┃     ┗ 📜*.jpg
+┣ 📂FoldsAugmented
+┃ ┣ 📜fake_data-features_Heart_20208_Augmented_Age_test_{0... 9}.csv
+┃ ┣ 📜fake_data-features_Heart_20208_Augmented_Age_train_{0... 9}.csv
+┃ ┗ 📜fake_data-features_Heart_20208_Augmented_Age_val_{0... 9}.csv
+┣ 📂MI01A_Preprocessing_main
+┃ ┣ 📜data-features_eids.csv
+┃ ┗ 📜data-features_instances.csv
+┣ 📂MI01B_Preprocessing_imagesIDs
+┃ ┗ 📜instances23_eids_{0... 9}.csv
+┣ 📂MI01C_Preprocessing_folds
+┃ ┣ 📜data-features_Abdomen_Liver_Contrast_Age_test_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Liver_Contrast_Age_train_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Liver_Contrast_Age_val_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Liver_Raw_Age_test_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Liver_Raw_Age_train_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Liver_Raw_Age_val_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Pancreas_Contrast_Age_test_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Pancreas_Contrast_Age_train_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Pancreas_Contrast_Age_val_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Pancreas_Raw_Age_test_{0... 9}.csv
+┃ ┣ 📜data-features_Abdomen_Pancreas_Raw_Age_train_{0... 9}.csv
+┃ ┗ 📜data-features_Abdomen_Pancreas_Raw_Age_val_{0... 9}.csv
+┣ 📂MI02_Training
+┃ ┣ 📜trained_model-weights_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_{0... 9}.h5
+┣ 📂MI03A_Predictions_generate
+┃ ┣ 📜short_Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test_{0... 9}.csv
+┃ ┣ 📜short_Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_train_{0... 9}.csv
+┃ ┗ 📜short_Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val_{0... 9}.csv
+┣ 📂MI03B_Predictions_concatenate
+┃ ┣ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test.csv
+┃ ┣ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_train.csv
+┃ ┗ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val.csv
+┣ 📂MI03C_Predictions_merge
+┃ ┣ 📜PREDICTIONS_withoutEnsembles_instances_Age_test.csv
+┃ ┗ 📜PREDICTIONS_withoutEnsembles_instances_Age_val.csv
+┣ 📂MI03D_Predictions_eids
+┃ ┣ 📂Predictions_eids_concatenate
+┃ ┃ ┣ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test.csv
+┃ ┃ ┗ 📜Predictions_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val.csv
+┃ ┣ 📜PREDICTIONS_withoutEnsembles_eids_Age_test.csv
+┃ ┗ 📜PREDICTIONS_withoutEnsembles_eids_Age_val.csv
+┣ 📂MI04A_Performances_generate
+┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test.csv
+┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test_sd.csv
+┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_test_str.csv
+┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val.csv
+┃ ┣ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val_sd.csv
+┃ ┗ 📜Performances_instances_Age_Abdomen_Pancreas_Contrast_InceptionResNetV2_1_1024_Adam_0.0001_0.1_0.5_1.0_val_str.csv
+┣ 📂MI04B_Performances_merge
+┃ ┣ 📜PERFORMANCES_withoutEnsembles_alphabetical_instances_Age_test.csv
+┃ ┣ 📜PERFORMANCES_withoutEnsembles_alphabetical_instances_Age_val.csv
+┃ ┣ 📜PERFORMANCES_withoutEnsembles_ranked_instances_Age_test.csv
+┃ ┗ 📜PERFORMANCES_withoutEnsembles_ranked_instances_Age_val.csv
+┣ 📂MI04C_Performances_tuning
+┃ ┣ 📜PERFORMANCES_tuned_alphabetical_instances_Age_test.csv
+┃ ┣ 📜PERFORMANCES_tuned_alphabetical_instances_Age_val.csv
+┃ ┣ 📜PERFORMANCES_tuned_ranked_instances_Age_test.csv
+┃ ┣ 📜PERFORMANCES_tuned_ranked_instances_Age_val.csv
+┃ ┣ 📜PREDICTIONS_tuned_instances_Age_test.csv
+┃ ┗ 📜PREDICTIONS_tuned_instances_Age_val.csv
+┣ 📂MI05A_Ensembles_predictions
+┃ ┣ 📜PREDICTIONS_withEnsembles_instances_Age_test.csv
+┃ ┣ 📜PREDICTIONS_withEnsembles_instances_Age_val.csv
+┃ ┣ 📜Predictions_instances_Age_*_*_*_*_*_*_*_*_*_*_*_test.csv
+┃ ┣ 📜Predictions_instances_Age_*_*_*_*_*_*_*_*_*_*_*_val.csv
+┃ ┣ 📜Predictions_instances_Age_*instances01_*_*_*_*_*_*_*_*_*_*_test.csv
+┃ ┣ 📜Predictions_instances_Age_*instances01_*_*_*_*_*_*_*_*_*_*_val.csv
+┃ ┣ 📜Predictions_instances_Age_*instances1.5x_*_*_*_*_*_*_*_*_*_*_test.csv
+┃ ┣ 📜Predictions_instances_Age_*instances1.5x_*_*_*_*_*_*_*_*_*_*_val.csv
+┃ ┣ 📜Predictions_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_test.csv
+┃ ┗ 📜Predictions_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_val.csv
+┣ 📂MI05B_Performances_generate
+┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_test.csv
+┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_test_sd.csv
+┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_test_str.csv
+┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_val.csv
+┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_val_sd.csv
+┃ ┣ 📜Performances_instances_Age_*_*_*_*_*_*_*_*_*_*_*_val_str.csv
+┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_test.csv
+┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_test_sd.csv
+┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_test_str.csv
+┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_val.csv
+┃ ┣ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_val_sd.csv
+┃ ┗ 📜Performances_instances_Age_*instances23_*_*_*_*_*_*_*_*_*_*_val_str.csv
+┣ 📂MI05C_Performances_merge
+┃ ┣ 📜PERFORMANCES_withEnsembles_alphabetical_instances_Age_test.csv
+┃ ┣ 📜PERFORMANCES_withEnsembles_alphabetical_instances_Age_val.csv
+┃ ┣ 📜PERFORMANCES_withEnsembles_ranked_instances_Age_test.csv
+┃ ┗ 📜PERFORMANCES_withEnsembles_ranked_instances_Age_val.csv
+┣ 📂MI06A_Residuals_generate
+┃ ┗ 📜RESIDUALS_instances_Age_test.csv
+┣ 📂MI06B_Residuals_correlations
+┃ ┣ 📜ResidualsCorrelations_instances_Age_test.csv
+┃ ┣ 📜ResidualsCorrelations_samplesizes_instances_Age_test.csv
+┃ ┣ 📜ResidualsCorrelations_sd_instances_Age_test.csv
+┃ ┗ 📜ResidualsCorrelations_str_instances_Age_test.csv
+┣ 📂MI07A_Select_best
+┃ ┣ 📜PERFORMANCES_bestmodels_alphabetical_instances_Age_test.csv
+┃ ┣ 📜PERFORMANCES_bestmodels_ranked_instances_Age_test.csv
+┃ ┣ 📜PREDICTIONS_bestmodels_instances_Age_test.csv
+┃ ┣ 📜RESIDUALS_bestmodels_instances_Age_test.csv
+┃ ┣ 📜ResidualsCorrelations_bestmodels_instances_Age_test.csv
+┃ ┣ 📜ResidualsCorrelations_bestmodels_sd_instances_Age_test.csv
+┃ ┗ 📜ResidualsCorrelations_bestmodels_str_instances_Age_test.csv
+┣ 📜fake_PA_visit_date.csv
+┣ 📜fake_all_eids.csv
+┣ 📜fake_short_ukb41230.csv
+┗ 📜missing_samples.csv
 ```
