@@ -29,5 +29,7 @@ USER $USERNAME
 
 RUN sudo chown developer data && sudo chown developer data/MI0* && sudo chown developer data/MI03D_Predictions_eids/Predictions_eids_concatenate/
 
+CMD sh -c "source env_container/bin/activate"
+
 # docker build -t abdomen_tutorial .
 # docker run -it abdomen_tutorial bash
