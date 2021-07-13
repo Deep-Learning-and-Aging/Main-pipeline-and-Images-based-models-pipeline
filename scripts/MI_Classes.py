@@ -506,7 +506,11 @@ class PreprocessingImagesIDs(Basics):
         self.FOLDS_23_EIDS = None
     
     def _load_23_eids(self):
-        data_features = pd.read_csv(self.path_data + 'data-features_instances.csv')
+        if ABDOMEN:
+            data_features = pd.read_csv(self.path_data + 'MI01A_Preprocessing_main/data-features_instances.csv')
+        else:
+            data_features = pd.read_csv(self.path_data + 'data-features_instances.csv')
+
         images_eids = data_features['eid'][data_features['instance'].isin([2, 3])]
         self.images_eids = list(set(images_eids))
     
@@ -547,7 +551,12 @@ class PreprocessingImagesIDs(Basics):
     
     def _save_23_eids_folds(self):
         for outer_fold in self.outer_folds:
-            with open(self.path_data + 'MI01B_Preprocessing_imagesIDs/instances23_eids_' + outer_fold + '.csv', 'w', newline='') as myfile:
+            if ABDOMEN:
+                save_path = self.path_data + 'MI01B_Preprocessing_imagesIDs/instances23_eids_' + outer_fold + '.csv'
+            else:
+                save_path = self.path_data + 'instances23_eids_' + outer_fold + '.csv'
+
+            with open(save_path, 'w', newline='') as myfile:
                 wr = csv.writer(myfile, quoting=csv.QUOTE_ALL)
                 wr.writerow(self.FOLDS_23_EIDS[outer_fold])
     
