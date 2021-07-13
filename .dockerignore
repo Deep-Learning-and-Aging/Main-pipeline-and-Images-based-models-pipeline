@@ -1,0 +1,12 @@
+.git/
+*__pycache__
+.devcontainer/
+.vscode/
+env*/
+*.egg-info/
+.dockerignore
+.gitignore
+Dockerfile
+
+# Local specific
+full_data/
