@@ -38,8 +38,11 @@ If you use the docker image for __DockerHub__ created for this tutorial, you onl
 source env_container/bin/activate
 ```
 
-Otherwise, if you use the cloned repository from __GitHub__, please type those six lines of code in your terminal being at the top directory: (Expected time 6 min)
+Otherwise, if you use the cloned repository from __GitHub__, please type those nine lines of code in your terminal being at the top directory: (Expected time 6 min)
 ```bash
+sudo apt-get install git-lfs  # On Debian / Ubuntu || brew install git-lfs  # On Mac OSX
+git lfs install
+git lfs pull
 python3 -m venv env_tutorial
 source env_tutorial/bin/activate
 pip install --upgrade "pip==21.1.3"
