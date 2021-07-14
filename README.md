@@ -16,25 +16,29 @@ An exact list of all the important files to have at the begining of the tutorial
 
 
 ## Working environment
-The project has been developped with Python 3.6.14, using a Debian Buster distribution. Please choose from the three different ways to setup your environment:
-- using the [docker image](https://hub.docker.com/r/theovincent/abdomen_tutorial) of 4 Gb made for this tutorial | __tested__:
+The project has been developped with Python 3.6.14, using a Debian Buster distribution. Please choose from the two different ways to setup your environment:
+- using __DockerHub__ [RECOMMENDED] - a [docker image](https://hub.docker.com/r/theovincent/abdomen_tutorial) of 4 Gb has been made for this tutorial | __tested__:
 ```bash
 docker pull theovincent/abdomen_tutorial
 docker run -it theovincent/abdomen_tutorial bash
 ```
-- using VS Code with Remote-Containers. The files to setup the container are stored [here](./.devcontainer) | __tested__.
-- downloading python 3.6.14 from the website with this [link](https://www.python.org/downloads/release/python-3614/) | __not tested__.
+- using __GitHub__ - clone the branch *Abdomen*. For this method you need to have python 3.6.14 installed on your personal computer. You can download it [here](https://www.python.org/downloads/release/python-3614/) | __tested__:
+```bash
+git clone --single-branch --branch Abdomen https://github.com/Deep-Learning-and-Aging/Main-pipeline-and-Images-based-models-pipeline.git
+```
 
-Only a CPU is required for this tutorial with 2 Gb of RAM. All the results needing heavy and long lasting computations are given. To host the project on your local computer, 7 Gb of memory is needed: 2.5 Gb for the dependencies and 3 Gb for the data.
+If you are using VS Code, setup files for Remote-Containers are available [here](./.devcontainer).
+
+Only a CPU is required for this tutorial with 2 Gb of RAM. All the results needing heavy and long lasting computations are given. To host the project on your local computer, 7 Gb of memory is needed: 2.5 Gb for the dependencies and 3 Gb for the data. You will be able to recover those 7 Gb by deleting the project folder at the end of this tutorial.
 
 
 ## Install packages
-If you use the docker image created for this tutorial, you only need to activate the environment like that:
+If you use the docker image for __DockerHub__ created for this tutorial, you only need to activate the environment like that:
 ```bash
 source env_container/bin/activate
 ```
 
-Otherwise, please type those six lines of code in your terminal being at the top directory: (Expected time 6 min)
+Otherwise, if you use the cloned repository from __GitHub__, please type those six lines of code in your terminal being at the top directory: (Expected time 6 min)
 ```bash
 python3 -m venv env_tutorial
 source env_tutorial/bin/activate
@@ -134,8 +138,9 @@ Outputs:
 <br/>
 
 #### YOU CAN TRY BY YOUR SELF, AS IT MIGHT TAKE SOME TIME, WE PROVIDE THE OUTPUTS OF PANCREAS CONTRAST
-If you are using the docker image made for this repository, you will have all weights included in the image.
-If you have cloned the repository, in order to keep the size of the repository small, we only pushed the weights for the outer fold 0.
+If you are using the docker image for __DockerHub__ made for this repository, you will have all weights included in the image.
+
+If you have cloned the repository from __GitHub__, in order to keep the size of the repository small, we only pushed the weights for the outer fold 0.
 - MI03A_Predictions_generate: Generates the predictions from all models (Expected time 6 min 30 sec for each outer fold).
 
 Command line:
