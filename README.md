@@ -5,6 +5,8 @@ This pipeline generates the images-based predictors, then merges them and ensemb
 
 **In order not to disclose any personal information from the participants of UK Biobank, all the data accessible here is fake. You should not expect to get any interesting results from the outputs.**
 
+If any step is unclear, or if you have any question about the project, feel free to leave a comment [here](https://github.com/Deep-Learning-and-Aging/Main-pipeline-and-Images-based-models-pipeline/discussions).
+
 ## Project architecture
 Throught this tutorial you will use two directories: 
 
