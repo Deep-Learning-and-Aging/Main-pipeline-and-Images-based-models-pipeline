@@ -19,7 +19,7 @@ if not os.path.exists("data/Abdomen/Pancreas/Contrast"):
 if not os.path.exists("data/Abdomen/Pancreas/Raw"):
     os.makedirs("data/Abdomen/Pancreas/Raw")
 
-list_images = np.load("data/Abdomen/list_image_names.npy")
+list_images = np.load("data/Abdomen/list_image_names.npy", allow_pickle=True)
 for image_file in tqdm(list_images):
     random_image = np.random.randint(0, 256, size=(288, 364, 3), dtype='uint8')          
     Image.fromarray(random_image).save(image_file)
