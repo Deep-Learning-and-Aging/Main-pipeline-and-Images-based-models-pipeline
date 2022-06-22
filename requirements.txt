@@ -23,7 +23,7 @@ matplotlib==3.3.3
 matplotlib-venn==0.11.5
 more-itertools==7.2.0
 multiprocess==0.70.11.1
-numpy==1.18.5
+numpy==1.22.0
 nvgpu==0.7.0
 nvidia-ml-py==375.53.1
 opencv-python==4.1.1.26
